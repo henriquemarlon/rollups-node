@@ -389,18 +389,6 @@ func getFeatureDisableMachineHashCheck() bool {
 	return val
 }
 
-func getFeatureHostMode() bool {
-	s, ok := os.LookupEnv("CARTESI_FEATURE_HOST_MODE")
-	if !ok {
-		s = "false"
-	}
-	val, err := toBool(s)
-	if err != nil {
-		panic(fmt.Sprintf("failed to parse CARTESI_FEATURE_HOST_MODE: %v", err))
-	}
-	return val
-}
-
 func getFeatureReaderModeEnabled() bool {
 	s, ok := os.LookupEnv("CARTESI_FEATURE_READER_MODE_ENABLED")
 	if !ok {

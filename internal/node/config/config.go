@@ -23,8 +23,7 @@ type NodeConfig struct {
 	BlockchainFinalityOffset                 int
 	BlockchainBlockTimeout                   int
 	ContractsApplicationAddress              string
-	ContractsHistoryAddress                  string
-	ContractsAuthorityAddress                string
+	ContractsIConsensusAddress               string
 	ContractsInputBoxAddress                 string
 	ContractsInputBoxDeploymentBlockNumber   int64
 	SnapshotDir                              string
@@ -82,8 +81,7 @@ func FromEnv() NodeConfig {
 	config.BlockchainFinalityOffset = getBlockchainFinalityOffset()
 	config.BlockchainBlockTimeout = getBlockchainBlockTimeout()
 	config.ContractsApplicationAddress = getContractsApplicationAddress()
-	config.ContractsHistoryAddress = getContractsHistoryAddress()
-	config.ContractsAuthorityAddress = getContractsAuthorityAddress()
+	config.ContractsIConsensusAddress = getContractsIconsensusAddress()
 	config.ContractsInputBoxAddress = getContractsInputBoxAddress()
 	config.ContractsInputBoxDeploymentBlockNumber = getContractsInputBoxDeploymentBlockNumber()
 	config.SnapshotDir = getSnapshotDir()

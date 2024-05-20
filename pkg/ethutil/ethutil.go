@@ -211,23 +211,17 @@ func SetNextDevnetBlockTimestamp(
 	return client.CallContext(ctx, nil, "evm_setNextBlockTimestamp", timestamp)
 }
 
-// Mine blocks.
-// Assumes the HTTP provider is anvil as the `rpc_modules` method cannot be
-// be relied upon to discover what modules are supported and decide what mine
-// method to use
-func MineBlocks(
+// Mines a new block
+func MineNewBlock(
 	ctx context.Context,
 	blockchainHttpEndpoint string,
-	numBlocks uint64,
-	blockInterval uint64,
 ) (uint64, error) {
 	client, err := rpc.DialContext(ctx, blockchainHttpEndpoint)
 	if err != nil {
 		return 0, err
 	}
 	defer client.Close()
-
-	err = client.CallContext(ctx, nil, "anvil_mine", numBlocks, blockInterval)
+	err = client.CallContext(ctx, nil, "evm_mine")
 	if err != nil {
 		return 0, err
 	}

@@ -84,22 +84,11 @@ func (s *EthUtilSuite) TestAddInput() {
 	s.Require().Equal(payload, inputArgs["payload"])
 }
 
-func (s *EthUtilSuite) TestMineOneBlock() {
-	s.mineBlocks(1)
-}
-
-func (s *EthUtilSuite) TestMineAHundredBlocks() {
-	s.mineBlocks(100)
-}
-
-func (s *EthUtilSuite) mineBlocks(numBlocks uint64) {
-	lastBlockNumber, err := s.client.BlockNumber(s.ctx)
+func (s *EthUtilSuite) TestMineNewBlock() {
+	blockNumber, err := MineNewBlock(s.ctx, s.endpoint)
 	s.Require().Nil(err)
-	expectedBlockNumber := lastBlockNumber + numBlocks
+	s.Require().Equal(uint64(22), blockNumber)
 
-	blockNumber, err := MineBlocks(s.ctx, s.endpoint, numBlocks, 1)
-	s.Require().Nil(err)
-	s.Require().Equal(expectedBlockNumber, blockNumber)
 }
 
 // Log the output of the given container

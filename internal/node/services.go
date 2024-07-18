@@ -8,7 +8,9 @@ import (
 	"log/slog"
 	"os"
 
+	evmreaderservice "github.com/cartesi/rollups-node/internal/evmreader/service"
 	"github.com/cartesi/rollups-node/internal/node/config"
+	"github.com/cartesi/rollups-node/internal/repository"
 	"github.com/cartesi/rollups-node/internal/services"
 )
 
@@ -112,7 +114,11 @@ func newRedis(c config.NodeConfig, workDir string) services.CommandService {
 	return s
 }
 
-func newSupervisorService(c config.NodeConfig, workDir string) services.SupervisorService {
+func newSupervisorService(
+	c config.NodeConfig,
+	workDir string,
+	database *repository.Database,
+) services.SupervisorService {
 	var s []services.Service
 
 	if !c.ExperimentalSunodoValidatorEnabled {
@@ -127,6 +133,7 @@ func newSupervisorService(c config.NodeConfig, workDir string) services.Supervis
 
 	s = append(s, newHttpService(c))
 	s = append(s, newPostgraphileService(c, workDir))
+	s = append(s, newEvmReaderService(c, database))
 
 	supervisor := services.SupervisorService{
 		Name:     "rollups-node",
@@ -166,4 +173,14 @@ func newPostgraphileService(c config.NodeConfig, workDir string) services.Comman
 	s.Env = append(s.Env, os.Environ()...)
 	s.WorkDir = workDir
 	return s
+}
+
+func newEvmReaderService(c config.NodeConfig, database *repository.Database) services.Service {
+	return evmreaderservice.NewEvmReaderService(
+		c.BlockchainHttpEndpoint.Value,
+		c.BlockchainWsEndpoint.Value,
+		database,
+		c.EvmReaderRetryPolicyMaxRetries,
+		c.EvmReaderRetryPolicyMaxDelay,
+	)
 }

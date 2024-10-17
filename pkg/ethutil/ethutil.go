@@ -238,7 +238,7 @@ func GetTemplateHash(
 ) (string, error) {
 	client, err := ethclient.DialContext(ctx, ethereumProvider)
 	if err != nil {
-		return "", fmt.Errorf("get template hash failed to connect: %w", err)
+		return "", fmt.Errorf("get template hash failed to create ethclient: %w", err)
 	}
 	cartesiApplication, err := iapplication.NewIApplicationCaller(
 		applicationAddress,

@@ -226,29 +226,6 @@ HTTP port for the node.
 The node will also use the 20 ports after this one for internal services."""
 
 #
-# Experimental
-#
-
-[experimental.CARTESI_EXPERIMENTAL_SUNODO_VALIDATOR_ENABLED]
-default = "false"
-go-type = "bool"
-description = """
-When enabled, the node does not start Redis.
-It must be configured with an external Redis endpoint."""
-
-[experimental.CARTESI_EXPERIMENTAL_SUNODO_VALIDATOR_REDIS_ENDPOINT]
-go-type = "string"
-description = """
-External Redis endpoint for the node when running in the experimental sunodo validator mode."""
-
-[experimental.CARTESI_EXPERIMENTAL_SERVER_MANAGER_LOG_BYPASS_ENABLED]
-default = "false"
-go-type = "bool"
-description = """
-When enabled, prints server-manager output to stdout and stderr directly.
-All other log configurations are ignored."""
-
-#
 # Temporary
 #
 

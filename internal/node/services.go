@@ -11,6 +11,7 @@ import (
 	advancerservice "github.com/cartesi/rollups-node/internal/advancer/service"
 	claimerservice "github.com/cartesi/rollups-node/internal/claimer"
 	"github.com/cartesi/rollups-node/internal/config"
+	espressoreaderservice "github.com/cartesi/rollups-node/internal/espressoreader/service"
 	evmreaderservice "github.com/cartesi/rollups-node/internal/evmreader/service"
 	"github.com/cartesi/rollups-node/internal/repository"
 	"github.com/cartesi/rollups-node/internal/services"
@@ -40,7 +41,8 @@ func newSupervisorService(
 	serveMux.Handle("/healthz", http.HandlerFunc(healthcheckHandler))
 
 	s = append(s, newClaimerService(c, database))
-	s = append(s, newEvmReaderService(c, database))
+	// s = append(s, newEvmReaderService(c, database))
+	s = append(s, NewEspressoReaderService(c, database))
 	s = append(s, newAdvancerService(c, database, serveMux))
 	s = append(s, newValidatorService(c, database))
 	s = append(s, newHttpService(c, serveMux))
@@ -66,6 +68,22 @@ func newEvmReaderService(c config.NodeConfig, database *repository.Database) ser
 		c.BlockchainHttpEndpoint.Value,
 		c.BlockchainWsEndpoint.Value,
 		database,
+		c.EvmReaderRetryPolicyMaxRetries,
+		c.EvmReaderRetryPolicyMaxDelay,
+	)
+}
+
+func NewEspressoReaderService(
+	c config.NodeConfig,
+	database *repository.Database,
+) services.Service {
+	return espressoreaderservice.NewEspressoReaderService(
+		c.BlockchainHttpEndpoint.Value,
+		c.BlockchainHttpEndpoint.Value,
+		database,
+		c.EspressoBaseUrl,
+		c.EspressoStartingBlock,
+		c.EspressoNamespace,
 		c.EvmReaderRetryPolicyMaxRetries,
 		c.EvmReaderRetryPolicyMaxDelay,
 	)

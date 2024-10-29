@@ -239,6 +239,16 @@ description = """
 Espresso namespace."""
 
 #
+# Sequencer
+#
+
+[sequencer.MAIN_SEQUENCER]
+default = "espresso"
+go-type = "string"
+description = """
+Main sequencer."""
+
+#
 # Temporary
 #
 

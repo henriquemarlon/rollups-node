@@ -89,6 +89,7 @@ func NewEspressoReaderService(
 		c.EspressoNamespace,
 		c.EvmReaderRetryPolicyMaxRetries,
 		c.EvmReaderRetryPolicyMaxDelay,
+		c.BlockchainID,
 	)
 }
 

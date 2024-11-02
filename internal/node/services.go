@@ -90,6 +90,7 @@ func NewEspressoReaderService(
 		c.EvmReaderRetryPolicyMaxRetries,
 		c.EvmReaderRetryPolicyMaxDelay,
 		c.BlockchainID,
+		uint64(c.ContractsInputBoxDeploymentBlockNumber),
 	)
 }
 

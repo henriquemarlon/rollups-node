@@ -21,7 +21,6 @@ type NodeConfig struct {
 	BlockchainHttpEndpoint                 Redacted[string]
 	BlockchainWsEndpoint                   Redacted[string]
 	LegacyBlockchainEnabled                bool
-	BlockchainFinalityOffset               int
 	EvmReaderDefaultBlock                  DefaultBlock
 	EvmReaderRetryPolicyMaxRetries         uint64
 	EvmReaderRetryPolicyMaxDelay           Duration
@@ -32,7 +31,7 @@ type NodeConfig struct {
 	PostgresEndpoint                       Redacted[string]
 	HttpAddress                            string
 	HttpPort                               int
-	FeatureClaimerEnabled                  bool
+	FeatureClaimSubmissionEnabled          bool
 	FeatureMachineHashCheckEnabled         bool
 	Auth                                   Auth
 	AdvancerPollingInterval                Duration
@@ -80,7 +79,6 @@ func FromEnv() NodeConfig {
 	config.BlockchainHttpEndpoint = Redacted[string]{GetBlockchainHttpEndpoint()}
 	config.BlockchainWsEndpoint = Redacted[string]{GetBlockchainWsEndpoint()}
 	config.LegacyBlockchainEnabled = GetLegacyBlockchainEnabled()
-	config.BlockchainFinalityOffset = GetBlockchainFinalityOffset()
 	config.EvmReaderDefaultBlock = GetEvmReaderDefaultBlock()
 	config.EvmReaderRetryPolicyMaxRetries = GetEvmReaderRetryPolicyMaxRetries()
 	config.EvmReaderRetryPolicyMaxDelay = GetEvmReaderRetryPolicyMaxDelay()
@@ -91,10 +89,10 @@ func FromEnv() NodeConfig {
 	config.PostgresEndpoint = Redacted[string]{GetPostgresEndpoint()}
 	config.HttpAddress = GetHttpAddress()
 	config.HttpPort = GetHttpPort()
-	config.FeatureClaimerEnabled = GetFeatureClaimerEnabled()
+	config.FeatureClaimSubmissionEnabled = GetFeatureClaimSubmissionEnabled()
 	config.FeatureMachineHashCheckEnabled = GetFeatureMachineHashCheckEnabled()
-	if config.FeatureClaimerEnabled {
-		config.Auth = authFromEnv()
+	if config.FeatureClaimSubmissionEnabled {
+		config.Auth = AuthFromEnv()
 	}
 	config.AdvancerPollingInterval = GetAdvancerPollingInterval()
 	config.ValidatorPollingInterval = GetValidatorPollingInterval()
@@ -104,7 +102,7 @@ func FromEnv() NodeConfig {
 	return config
 }
 
-func authFromEnv() Auth {
+func AuthFromEnv() Auth {
 	switch GetAuthKind() {
 	case AuthKindPrivateKeyVar:
 		return AuthPrivateKey{

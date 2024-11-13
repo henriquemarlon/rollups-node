@@ -32,18 +32,14 @@ func getPort(c config.NodeConfig, offset portOffset) int {
 
 func newSupervisorService(
 	c config.NodeConfig,
-	workDir string,
 	database *repository.Database,
 ) *services.SupervisorService {
 	var s []services.Service
 
-	if c.FeatureClaimerEnabled {
-		s = append(s, newClaimerService(c, database))
-	}
-
 	serveMux := http.NewServeMux()
 	serveMux.Handle("/healthz", http.HandlerFunc(healthcheckHandler))
 
+	s = append(s, newClaimerService(c, database))
 	s = append(s, newEvmReaderService(c, database))
 	s = append(s, newAdvancerService(c, database, serveMux))
 	s = append(s, newValidatorService(c, database))
@@ -99,6 +95,7 @@ func newClaimerService(c config.NodeConfig, database *repository.Database) servi
 		DBConn:                 database,
 		PostgresEndpoint:       c.PostgresEndpoint,
 		BlockchainHttpEndpoint: c.BlockchainHttpEndpoint,
+		EnableSubmission:       c.FeatureClaimSubmissionEnabled,
 		CreateInfo: service.CreateInfo{
 			Name:         "claimer",
 			PollInterval: c.ClaimerPollingInterval,

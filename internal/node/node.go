@@ -15,7 +15,6 @@ import (
 func Setup(
 	ctx context.Context,
 	c config.NodeConfig,
-	workDir string,
 	database *repository.Database,
 ) (services.Service, error) {
 	// checks
@@ -25,5 +24,5 @@ func Setup(
 	}
 
 	// create service
-	return newSupervisorService(c, workDir, database), nil
+	return newSupervisorService(c, database), nil
 }

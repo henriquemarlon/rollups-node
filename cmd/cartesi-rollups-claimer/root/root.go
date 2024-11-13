@@ -26,6 +26,7 @@ var (
 			TelemetryAddress:     ":8081",
 			Impl:                 &claimerService,
 		},
+		EnableSubmission: true,
 	}
 )
 
@@ -38,7 +39,6 @@ var Cmd = &cobra.Command{
 
 func init() {
 	c := config.FromEnv()
-	createInfo.Auth = c.Auth
 	createInfo.BlockchainHttpEndpoint = c.BlockchainHttpEndpoint
 	createInfo.PostgresEndpoint = c.PostgresEndpoint
 	createInfo.PollInterval = c.ClaimerPollingInterval
@@ -48,6 +48,10 @@ func init() {
 		slog.LevelWarn:  "warn",
 		slog.LevelError: "error",
 	}[c.LogLevel]
+	createInfo.EnableSubmission = c.FeatureClaimSubmissionEnabled
+	if createInfo.EnableSubmission {
+		createInfo.Auth = c.Auth
+	}
 
 	Cmd.Flags().StringVar(&createInfo.TelemetryAddress,
 		"telemetry-address", createInfo.TelemetryAddress,
@@ -60,7 +64,10 @@ func init() {
 		"poll interval")
 	Cmd.Flags().StringVar(&createInfo.LogLevel,
 		"log-level", createInfo.LogLevel,
-		"log level: debug, info, warn, error.")
+		"log level: debug, info, warn or error")
+	Cmd.Flags().BoolVar(&createInfo.EnableSubmission,
+		"claim-submission", createInfo.EnableSubmission,
+		"enable or disable claim submission (reader mode)")
 }
 
 func run(cmd *cobra.Command, args []string) {

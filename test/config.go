@@ -48,7 +48,6 @@ func NewLocalNodeConfig(localPostgresEndpoint string, localBlockchainHttpEndpoin
 	nodeConfig.BlockchainWsEndpoint =
 		config.Redacted[string]{Value: localBlockchainWsEndpoint}
 	nodeConfig.LegacyBlockchainEnabled = false
-	nodeConfig.BlockchainFinalityOffset = LocalFinalityOffset
 	nodeConfig.BlockchainBlockTimeout = LocalBlockTimeout
 
 	//Contracts
@@ -60,7 +59,7 @@ func NewLocalNodeConfig(localPostgresEndpoint string, localBlockchainHttpEndpoin
 	nodeConfig.HttpPort = LocalHttpPort
 
 	//Features
-	nodeConfig.FeatureClaimerEnabled = true
+	nodeConfig.FeatureClaimSubmissionEnabled = true
 	nodeConfig.FeatureMachineHashCheckEnabled = true
 
 	//Auth

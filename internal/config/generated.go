@@ -324,14 +324,14 @@ func GetContractsInputBoxDeploymentBlockNumber() int64 {
 	return val
 }
 
-func GetFeatureClaimerEnabled() bool {
-	s, ok := os.LookupEnv("CARTESI_FEATURE_CLAIMER_ENABLED")
+func GetFeatureClaimSubmissionEnabled() bool {
+	s, ok := os.LookupEnv("CARTESI_FEATURE_CLAIM_SUBMISSION_ENABLED")
 	if !ok {
 		s = "true"
 	}
 	val, err := toBool(s)
 	if err != nil {
-		panic(fmt.Sprintf("failed to parse CARTESI_FEATURE_CLAIMER_ENABLED: %v", err))
+		panic(fmt.Sprintf("failed to parse CARTESI_FEATURE_CLAIM_SUBMISSION_ENABLED: %v", err))
 	}
 	return val
 }

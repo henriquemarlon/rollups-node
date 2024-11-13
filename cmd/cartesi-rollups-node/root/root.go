@@ -30,7 +30,14 @@ var (
 		Long:  "Runs the Cartesi Rollups Node as a single process",
 		RunE:  run,
 	}
+	enableClaimSubmission bool
 )
+
+func init() {
+	Cmd.Flags().BoolVar(&enableClaimSubmission,
+		"claim-submission", true,
+		"enable or disable claim submission (reader mode)")
+}
 
 func run(cmd *cobra.Command, args []string) error {
 	startTime := time.Now()
@@ -38,27 +45,33 @@ func run(cmd *cobra.Command, args []string) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	config := config.FromEnv()
+	cfg := config.FromEnv()
+	if cmd.Flags().Lookup("claim-submission").Changed {
+		cfg.FeatureClaimSubmissionEnabled = enableClaimSubmission
+		if enableClaimSubmission && cfg.Auth == nil {
+			cfg.Auth = config.AuthFromEnv()
+		}
+	}
 
 	// setup log
-	startup.ConfigLogs(config.LogLevel, config.LogPrettyEnabled)
-	slog.Info("Starting the Cartesi Rollups Node", "version", buildVersion, "config", config)
+	startup.ConfigLogs(cfg.LogLevel, cfg.LogPrettyEnabled)
+	slog.Info("Starting the Cartesi Rollups Node", "version", buildVersion, "config", cfg)
 
-	database, err := repository.Connect(ctx, config.PostgresEndpoint.Value)
+	database, err := repository.Connect(ctx, cfg.PostgresEndpoint.Value)
 	if err != nil {
 		slog.Error("Node couldn't connect to the database", "error", err)
 		os.Exit(1)
 	}
 	defer database.Close()
 
-	_, err = startup.SetupNodePersistentConfig(ctx, database, config)
+	_, err = startup.SetupNodePersistentConfig(ctx, database, cfg)
 	if err != nil {
 		slog.Error("Node exited with an error", "error", err)
 		os.Exit(1)
 	}
 
 	// create the node supervisor
-	supervisor, err := node.Setup(ctx, config, "", database)
+	supervisor, err := node.Setup(ctx, cfg, database)
 	if err != nil {
 		slog.Error("Node exited with an error", "error", err)
 		os.Exit(1)

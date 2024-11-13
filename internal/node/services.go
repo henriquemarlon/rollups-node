@@ -32,18 +32,14 @@ func getPort(c config.NodeConfig, offset portOffset) int {
 
 func newSupervisorService(
 	c config.NodeConfig,
-	workDir string,
 	database *repository.Database,
 ) *services.SupervisorService {
 	var s []services.Service
 
-	if c.FeatureClaimerEnabled {
-		s = append(s, newClaimerService(c, database))
-	}
-
 	serveMux := http.NewServeMux()
 	serveMux.Handle("/healthz", http.HandlerFunc(healthcheckHandler))
 
+	s = append(s, newClaimerService(c, database))
 	s = append(s, newEvmReaderService(c, database))
 	s = append(s, newAdvancerService(c, database, serveMux))
 	s = append(s, newValidatorService(c, database))
@@ -95,19 +91,20 @@ func newValidatorService(c config.NodeConfig, database *repository.Database) ser
 func newClaimerService(c config.NodeConfig, database *repository.Database) services.Service {
 	claimerService := claimerservice.Service{}
 	createInfo := claimerservice.CreateInfo{
-		Auth: c.Auth,
-		DBConn: database,
-		PostgresEndpoint: c.PostgresEndpoint,
+		Auth:                   c.Auth,
+		DBConn:                 database,
+		PostgresEndpoint:       c.PostgresEndpoint,
 		BlockchainHttpEndpoint: c.BlockchainHttpEndpoint,
+		EnableSubmission:       c.FeatureClaimSubmissionEnabled,
 		CreateInfo: service.CreateInfo{
-			Name:                 "claimer",
-			PollInterval:         c.ClaimerPollingInterval,
-			Impl:                 &claimerService,
-			ProcOwner: true, // TODO: Remove this after updating supervisor
+			Name:         "claimer",
+			PollInterval: c.ClaimerPollingInterval,
+			Impl:         &claimerService,
+			ProcOwner:    true, // TODO: Remove this after updating supervisor
 			LogLevel: map[slog.Level]string{ // reverse it to string
 				slog.LevelDebug: "debug",
-				slog.LevelInfo: "info",
-				slog.LevelWarn: "warn",
+				slog.LevelInfo:  "info",
+				slog.LevelWarn:  "warn",
 				slog.LevelError: "error",
 			}[c.LogLevel],
 		},

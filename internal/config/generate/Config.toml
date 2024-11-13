@@ -19,11 +19,11 @@ If set to true, the node will add colors to its log output."""
 # Features
 #
 
-[features.CARTESI_FEATURE_CLAIMER_ENABLED]
+[features.CARTESI_FEATURE_CLAIM_SUBMISSION_ENABLED]
 default = "true"
 go-type = "bool"
 description = """
-If set to false, the node will not make claims."""
+If set to false, the node will not submit claims (reader mode)."""
 
 [features.CARTESI_FEATURE_MACHINE_HASH_CHECK_ENABLED]
 default = "true"
@@ -91,13 +91,6 @@ go-type = "bool"
 description = """
 If set to true the node will send transactions using the legacy gas fee model
 (instead of EIP-1559)."""
-
-[blockchain.CARTESI_BLOCKCHAIN_FINALITY_OFFSET]
-default = "10"
-go-type = "int"
-description = """
-The node assumes that blocks offsetted by N from the current block have reached finality
-(N is the read depth)."""
 
 [blockchain.CARTESI_EVM_READER_DEFAULT_BLOCK]
 default = "finalized"

@@ -24,7 +24,7 @@ var (
 	ENoAuth = fmt.Errorf("error: unimplemented authentication method")
 )
 
-func CreateSignerFromAuth(
+func CreateTxOptsFromAuth(
 	auth config.Auth,
 	ctx context.Context,
 	client *ethclient.Client,

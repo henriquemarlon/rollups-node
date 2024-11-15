@@ -12,7 +12,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-const DefaultServiceTimeout = 5 * time.Second
+const DefaultServiceTimeout = 60 * time.Second
 
 var (
 	ServiceTimeoutError    = errors.New("timed out waiting for service to be ready")

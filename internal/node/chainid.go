@@ -11,7 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-const defaultTimeout = 3 * time.Second
+const defaultTimeout = 45 * time.Second
 
 // Checks if the chain id from the configuration matches the chain id reported
 // by the Ethereum node. If they don't, it returns an error.

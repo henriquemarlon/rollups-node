@@ -4,10 +4,7 @@
 package root
 
 import (
-	"log/slog"
-
 	"github.com/cartesi/rollups-node/internal/claimer"
-	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/pkg/service"
 	"github.com/spf13/cobra"
 )
@@ -20,10 +17,11 @@ var (
 	createInfo     = claimer.CreateInfo{
 		CreateInfo: service.CreateInfo{
 			Name:                 "claimer",
+			LogLevel:             "info",
 			ProcOwner:            true,
 			EnableSignalHandling: true,
 			TelemetryCreate:      true,
-			TelemetryAddress:     ":8081",
+			TelemetryAddress:     ":10003",
 			Impl:                 &claimerService,
 		},
 		EnableSubmission: true,
@@ -38,21 +36,7 @@ var Cmd = &cobra.Command{
 }
 
 func init() {
-	c := config.FromEnv()
-	createInfo.BlockchainHttpEndpoint = c.BlockchainHttpEndpoint
-	createInfo.PostgresEndpoint = c.PostgresEndpoint
-	createInfo.PollInterval = c.ClaimerPollingInterval
-	createInfo.LogLevel = map[slog.Level]string{
-		slog.LevelDebug: "debug",
-		slog.LevelInfo:  "info",
-		slog.LevelWarn:  "warn",
-		slog.LevelError: "error",
-	}[c.LogLevel]
-	createInfo.EnableSubmission = c.FeatureClaimSubmissionEnabled
-	if createInfo.EnableSubmission {
-		createInfo.Auth = c.Auth
-	}
-
+	createInfo.LoadEnv()
 	Cmd.Flags().StringVar(&createInfo.TelemetryAddress,
 		"telemetry-address", createInfo.TelemetryAddress,
 		"health check and metrics address and port")

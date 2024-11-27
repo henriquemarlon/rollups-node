@@ -23,6 +23,9 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
+// app address => sender address => nonce
+var nonceCache map[common.Address]map[common.Address]uint64
+
 // Service to manage InputReader lifecycle
 type EspressoReaderService struct {
 	blockchainHttpEndpoint  string
@@ -124,6 +127,8 @@ func (s *EspressoReaderService) setupEvmReader(ctx context.Context, database *re
 }
 
 func (s *EspressoReaderService) setupNonceHttpServer() {
+	nonceCache = make(map[common.Address]map[common.Address]uint64)
+
 	http.HandleFunc("/nonce", s.requestNonce)
 	http.HandleFunc("/submit", s.submit)
 
@@ -162,8 +167,17 @@ func (s *EspressoReaderService) requestNonce(w http.ResponseWriter, r *http.Requ
 	senderAddress := common.HexToAddress(nonceRequest.MsgSender)
 	applicationAddress := common.HexToAddress(nonceRequest.AppContract)
 
-	ctx := r.Context()
-	nonce := s.process(ctx, senderAddress, applicationAddress)
+	var nonce uint64
+	if nonceCache[applicationAddress] == nil {
+		nonceCache[applicationAddress] = make(map[common.Address]uint64)
+	}
+	if nonceCache[applicationAddress][senderAddress] == 0 {
+		ctx := r.Context()
+		nonce = s.queryNonceFromDb(ctx, senderAddress, applicationAddress)
+		nonceCache[applicationAddress][senderAddress] = nonce
+	} else {
+		nonce = nonceCache[applicationAddress][senderAddress]
+	}
 
 	slog.Debug("got nonce request", "senderAddress", senderAddress, "applicationAddress", applicationAddress)
 
@@ -181,7 +195,7 @@ func (s *EspressoReaderService) requestNonce(w http.ResponseWriter, r *http.Requ
 	}
 }
 
-func (s *EspressoReaderService) process(
+func (s *EspressoReaderService) queryNonceFromDb(
 	ctx context.Context,
 	senderAddress common.Address,
 	applicationAddress common.Address) uint64 {
@@ -222,7 +236,11 @@ func (s *EspressoReaderService) submit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, _, sigHash, err := espressoreader.ExtractSigAndData(string(tx.Payload))
+	msgSender, typedData, sigHash, err := espressoreader.ExtractSigAndData(string(tx.Payload))
+	if err != nil {
+		slog.Error("transaction not correctly formatted", "error", err)
+		return
+	}
 	submitResponse := SubmitResponse{Id: sigHash}
 
 	err = json.NewEncoder(w).Encode(submitResponse)
@@ -231,5 +249,26 @@ func (s *EspressoReaderService) submit(w http.ResponseWriter, r *http.Request) {
 			"service", "espresso submit endpoint",
 			"err", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// update nonce cache
+	appAddressStr := typedData.Message["app"].(string)
+	appAddress := common.HexToAddress(appAddressStr)
+	if nonceCache[appAddress] == nil {
+		slog.Error("Should query nonce before submit")
+		return
+	}
+	nonceInRequest := uint64(typedData.Message["nonce"].(float64))
+	if nonceCache[appAddress][msgSender] == 0 {
+		ctx := r.Context()
+		nonceInDb := s.queryNonceFromDb(ctx, msgSender, appAddress)
+		if nonceInRequest != nonceInDb {
+			slog.Error("Nonce in request is incorrect")
+			return
+		}
+		nonceCache[appAddress][msgSender] = nonceInDb + 1
+	} else {
+		nonceCache[appAddress][msgSender]++
 	}
 }

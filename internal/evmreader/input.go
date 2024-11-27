@@ -91,7 +91,7 @@ func (r *EvmReader) ReadAndStoreInputs(
 	for _, app := range apps {
 
 		// Get App EpochLength
-		err := r.addAppEpochLengthIntoCache(app)
+		err := r.AddAppEpochLengthIntoCache(app)
 		if err != nil {
 			slog.Error("evmreader: Error adding epoch length into cache",
 				"app", app.ContractAddress,
@@ -251,9 +251,9 @@ func (r *EvmReader) ReadAndStoreInputs(
 	return nil
 }
 
-// addAppEpochLengthIntoCache checks the epoch length cache and read epoch length from IConsensus
+// AddAppEpochLengthIntoCache checks the epoch length cache and read epoch length from IConsensus
 // contract and add it to the cache if needed
-func (r *EvmReader) addAppEpochLengthIntoCache(app application) error {
+func (r *EvmReader) AddAppEpochLengthIntoCache(app application) error {
 
 	epochLength, ok := r.epochLengthCache[app.ContractAddress]
 	if !ok {

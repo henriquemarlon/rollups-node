@@ -101,7 +101,7 @@ func (e *EspressoReader) Run(ctx context.Context, ready chan<- struct{}) error {
 							var l1FinalizedTimestamp uint64
 							lastProcessedL1Block, l1FinalizedTimestamp = e.readL1(ctx, app, currentBlockHeight, lastProcessedL1Block)
 							//** read espresso **//
-							e.readEspresso(ctx, app.Application.ContractAddress, currentBlockHeight, lastProcessedL1Block, l1FinalizedTimestamp)
+							e.readEspresso(ctx, app, currentBlockHeight, lastProcessedL1Block, l1FinalizedTimestamp)
 
 							// update lastProcessedEspressoBlock in db
 							err = e.repository.UpdateLastProcessedEspressoBlock(ctx, currentBlockHeight, app.Application.ContractAddress)
@@ -154,7 +154,7 @@ func (e *EspressoReader) bootstrap(ctx context.Context, app evmreader.TypeExport
 						currentEspressoBlock := batchStartingBlock + uint64(index)
 						slog.Debug("found namespace contained in", "block", currentEspressoBlock)
 						l1FinalizedHeight, l1FinalizedTimestamp = e.readL1(ctx, app, currentEspressoBlock, l1FinalizedHeight)
-						e.readEspresso(ctx, app.Application.ContractAddress, currentEspressoBlock, l1FinalizedHeight, l1FinalizedTimestamp)
+						e.readEspresso(ctx, app, currentEspressoBlock, l1FinalizedHeight, l1FinalizedTimestamp)
 					}
 				}
 			}
@@ -183,7 +183,8 @@ func (e *EspressoReader) readL1(ctx context.Context, app evmreader.TypeExportApp
 	return l1FinalizedLatestHeight, l1FinalizedTimestamp
 }
 
-func (e *EspressoReader) readEspresso(ctx context.Context, app common.Address, currentBlockHeight uint64, l1FinalizedLatestHeight uint64, l1FinalizedTimestamp uint64) {
+func (e *EspressoReader) readEspresso(ctx context.Context, appEvmType evmreader.TypeExportApplication, currentBlockHeight uint64, l1FinalizedLatestHeight uint64, l1FinalizedTimestamp uint64) {
+	app := appEvmType.Application.ContractAddress
 	transactions, err := e.client.FetchTransactionsInBlock(ctx, currentBlockHeight, e.namespace)
 	if err != nil {
 		slog.Error("failed fetching espresso tx", "error", err)
@@ -261,8 +262,12 @@ func (e *EspressoReader) readEspresso(ctx context.Context, app common.Address, c
 		// get epoch length and last open epoch
 		epochLength := e.evmReader.GetEpochLengthCache(appAddress)
 		if epochLength == 0 {
-			slog.Error("could not obtain epoch length")
-			continue
+			err = e.evmReader.AddAppEpochLengthIntoCache(appEvmType)
+			epochLength = e.evmReader.GetEpochLengthCache(appAddress)
+			if err != nil || epochLength == 0 {
+				slog.Error("could not obtain epoch length")
+				continue
+			}
 		}
 		currentEpoch, err := e.repository.GetEpoch(ctx,
 			epochLength, appAddress)
@@ -362,8 +367,7 @@ func (e *EspressoReader) getL1FinalizedHeight(ctx context.Context, espressoBlock
 			l1FinalizedNumber := gjson.Get(espressoHeader, "fields.l1_finalized.number").Uint()
 			l1FinalizedTimestampStr := gjson.Get(espressoHeader, "fields.l1_finalized.timestamp").Str
 			if len(l1FinalizedTimestampStr) < 2 {
-				slog.Error("error fetching espresso header l1_finalized.timestamp", "at height", espressoBlockHeight, "header", espressoHeader)
-				slog.Error("retry fetching")
+				slog.Debug("Espresso header not ready. Retry fetching", "height", espressoBlockHeight)
 				var delay time.Duration = 3000
 				time.Sleep(delay * time.Millisecond)
 				continue

@@ -17,9 +17,7 @@ import (
 
 var ErrAdvancerRepository = errors.New("advancer repository error")
 
-type MachineRepository struct{ *Database }
-
-func (repo *MachineRepository) GetMachineConfigurations(
+func (repo *Database) GetMachineConfigurations(
 	ctx context.Context,
 ) ([]*MachineConfig, error) {
 	// Query string to fetch application and execution parameters for "running" applications
@@ -95,7 +93,7 @@ func (repo *MachineRepository) GetMachineConfigurations(
 	return machineConfigs, nil
 }
 
-func (repo *MachineRepository) GetProcessedInputs(
+func (repo *Database) GetProcessedInputs(
 	ctx context.Context,
 	app Address,
 	index uint64,
@@ -132,7 +130,7 @@ func (repo *MachineRepository) GetProcessedInputs(
 	return res, nil
 }
 
-func (repo *MachineRepository) GetUnprocessedInputs(
+func (repo *Database) GetUnprocessedInputs(
 	ctx context.Context,
 	apps []Address,
 ) (map[Address][]*Input, error) {
@@ -171,7 +169,7 @@ func (repo *MachineRepository) GetUnprocessedInputs(
 	return result, nil
 }
 
-func (repo *MachineRepository) StoreAdvanceResult(
+func (repo *Database) StoreAdvanceResult(
 	ctx context.Context,
 	input *Input,
 	res *nodemachine.AdvanceResult,
@@ -215,7 +213,7 @@ func (repo *MachineRepository) StoreAdvanceResult(
 	return nil
 }
 
-func (repo *MachineRepository) UpdateEpochs(ctx context.Context, app Address) error {
+func (repo *Database) UpdateClosedEpochs(ctx context.Context, app Address) error {
 	query := `
         UPDATE epoch
         SET    status = 'PROCESSED_ALL_INPUTS'
@@ -242,7 +240,7 @@ func (repo *MachineRepository) UpdateEpochs(ctx context.Context, app Address) er
 
 // ------------------------------------------------------------------------------------------------
 
-func (_ *MachineRepository) getNextIndex(
+func (_ *Database) getNextIndex(
 	ctx context.Context,
 	tx pgx.Tx,
 	tableName string,
@@ -263,7 +261,7 @@ func (_ *MachineRepository) getNextIndex(
 	return nextIndex, nil
 }
 
-func (_ *MachineRepository) insert(
+func (_ *Database) insert(
 	ctx context.Context,
 	tx pgx.Tx,
 	tableName string,
@@ -298,7 +296,7 @@ func (_ *MachineRepository) insert(
 	return nil
 }
 
-func (_ *MachineRepository) updateInput(
+func (_ *Database) updateInput(
 	ctx context.Context,
 	tx pgx.Tx,
 	inputId uint64,

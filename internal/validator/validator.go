@@ -11,10 +11,70 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/internal/merkle"
 	. "github.com/cartesi/rollups-node/internal/model"
+	"github.com/cartesi/rollups-node/internal/repository"
+	"github.com/cartesi/rollups-node/pkg/service"
 	"github.com/ethereum/go-ethereum/crypto"
 )
+
+type Service struct {
+	service.Service
+	repository ValidatorRepository
+}
+
+type CreateInfo struct {
+	service.CreateInfo
+	PostgresEndpoint config.Redacted[string]
+	Repository       ValidatorRepository
+	PollingInterval  time.Duration
+}
+
+func (c *CreateInfo) LoadEnv() {
+	c.PostgresEndpoint.Value = config.GetPostgresEndpoint()
+	c.PollInterval = config.GetValidatorPollingInterval()
+	c.LogLevel = service.LogLevel(config.GetLogLevel())
+}
+
+func Create(ci CreateInfo, s *Service) error {
+	var err error
+
+	err = service.Create(&ci.CreateInfo, &s.Service)
+	if err != nil {
+		return err
+	}
+
+	if ci.Repository == nil {
+		ci.Repository, err = repository.Connect(s.Context, ci.PostgresEndpoint.Value)
+		if err != nil {
+			return err
+		}
+	}
+	s.repository = ci.Repository
+	return nil
+}
+
+func (s *Service) Alive() bool     { return true }
+func (s *Service) Ready() bool     { return true }
+func (s *Service) Reload() []error { return nil }
+func (s *Service) Tick() []error {
+	if err := s.Run(s.Context); err != nil {
+		return []error{err}
+	}
+	return []error{}
+}
+func (s *Service) Stop(b bool) []error {
+	return nil
+}
+
+func (s *Service) Start(context context.Context, ready chan<- struct{}) error {
+	ready <- struct{}{}
+	return s.Serve()
+}
+func (v *Service) String() string {
+	return v.Name
+}
 
 // The maximum height for the Merkle tree of all outputs produced
 // by an application
@@ -58,29 +118,11 @@ type ValidatorRepository interface {
 	) error
 }
 
-// Validator creates epoch claims and rollups outputs proofs for all running
-// applications.
-type Validator struct {
-	repository              ValidatorRepository
-	inputBoxDeploymentBlock uint64
-}
-
-func NewValidator(
-	repo ValidatorRepository,
-	inputBoxDeploymentBlock uint64,
-) *Validator {
-	return &Validator{repo, inputBoxDeploymentBlock}
-}
-
-func (v *Validator) String() string {
-	return "validator"
-}
-
 // Run executes the Validator main logic of producing claims and/or proofs
 // for processed epochs of all running applications. It is meant to be executed
 // inside a loop. If an error occurs while processing any epoch, it halts and
 // returns the error.
-func (v *Validator) Run(ctx context.Context) error {
+func (v *Service) Run(ctx context.Context) error {
 	apps, err := v.repository.GetAllRunningApplications(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get running applications. %w", err)
@@ -96,7 +138,7 @@ func (v *Validator) Run(ctx context.Context) error {
 
 // validateApplication calculates, validates and stores the claim and/or proofs
 // for each processed epoch of the application.
-func (v *Validator) validateApplication(ctx context.Context, app Application) error {
+func (v *Service) validateApplication(ctx context.Context, app Application) error {
 	slog.Debug("validator: starting validation", "application", app.ContractAddress)
 	processedEpochs, err := v.repository.GetProcessedEpochs(ctx, app.ContractAddress)
 	if err != nil {
@@ -179,7 +221,7 @@ func (v *Validator) validateApplication(ctx context.Context, app Application) er
 // the claim and the epoch outputs updated with their hash and proofs. In case
 // the epoch has no outputs, there are no proofs and it returns the pristine
 // claim for the first epoch or the previous epoch claim otherwise.
-func (v *Validator) createClaimAndProofs(
+func (v *Service) createClaimAndProofs(
 	ctx context.Context,
 	epoch Epoch,
 ) (*Hash, []Output, error) {
@@ -226,7 +268,7 @@ func (v *Validator) createClaimAndProofs(
 			previousOutputs, err = v.repository.GetOutputsProducedInBlockRange(
 				ctx,
 				epoch.AppAddress,
-				v.inputBoxDeploymentBlock,
+				0, // Current implementation requires all outputs
 				previousEpoch.LastBlock,
 			)
 			if err != nil {
@@ -275,44 +317,4 @@ func (v *Validator) createClaimAndProofs(
 	}
 	// if there are no outputs and there is a previous epoch, return its claim
 	return previousEpoch.ClaimHash, nil, nil
-}
-
-// ValidatorService extends the Validator utility by executing it with a polling
-// strategy. It implements the `services.Service` interface.
-type ValidatorService struct {
-	validator       *Validator
-	pollingInterval time.Duration
-}
-
-func NewValidatorService(
-	repo ValidatorRepository,
-	inputBoxDeploymentBlock uint64,
-	pollingInterval time.Duration,
-) *ValidatorService {
-	service := &ValidatorService{pollingInterval: pollingInterval}
-	service.validator = NewValidator(repo, inputBoxDeploymentBlock)
-	return service
-}
-
-func (s *ValidatorService) String() string {
-	return "validator"
-}
-
-func (s *ValidatorService) Start(ctx context.Context, ready chan<- struct{}) error {
-	ready <- struct{}{}
-
-	ticker := time.NewTicker(s.pollingInterval)
-	defer ticker.Stop()
-
-	for {
-		if err := s.validator.Run(ctx); err != nil {
-			return err
-		}
-
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-ticker.C:
-		}
-	}
 }

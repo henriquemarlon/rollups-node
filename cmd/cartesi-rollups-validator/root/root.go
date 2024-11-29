@@ -4,112 +4,53 @@
 package root
 
 import (
-	"context"
-	"log/slog"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
-
-	"github.com/cartesi/rollups-node/internal/config"
-	"github.com/cartesi/rollups-node/internal/repository"
-	"github.com/cartesi/rollups-node/internal/services/startup"
 	"github.com/cartesi/rollups-node/internal/validator"
+	"github.com/cartesi/rollups-node/pkg/service"
 	"github.com/spf13/cobra"
 )
 
 const CMD_NAME = "validator"
 
 var (
-	buildVersion = "devel"
-	Cmd          = &cobra.Command{
-		Use:   CMD_NAME,
-		Short: "Runs Validator",
-		Long:  "Runs Validator in standalone mode",
-		Run:   run,
+	buildVersion     = "devel"
+	validatorService = validator.Service{}
+	createInfo       = validator.CreateInfo{
+		CreateInfo: service.CreateInfo{
+			Name:                 "validator",
+			ProcOwner:            true,
+			EnableSignalHandling: true,
+			TelemetryCreate:      true,
+			TelemetryAddress:     ":10002",
+			Impl:                 &validatorService,
+		},
 	}
-	inputBoxDeploymentBlockNumber int64
-	pollingInterval               int64
-	postgresEndpoint              string
-	verbose                       bool
 )
 
+var Cmd = &cobra.Command{
+	Use:   createInfo.Name,
+	Short: "Runs Validator",
+	Long:  "Runs Validator in standalone mode",
+	Run:   run,
+}
+
 func init() {
-	Cmd.Flags().Int64VarP(&inputBoxDeploymentBlockNumber,
-		"inputbox-block-number",
-		"n",
-		-1,
-		"Input Box deployment block number",
-	)
-	Cmd.Flags().Int64VarP(
-		&pollingInterval,
-		"polling-interval",
-		"",
-		-1,
-		"the amount of seconds to wait before trying to finish epochs for all applications",
-	)
-	Cmd.Flags().StringVarP(&postgresEndpoint, "postgres-endpoint", "p", "", "Postgres endpoint")
-	Cmd.Flags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose logging")
+	createInfo.LoadEnv()
+	Cmd.Flags().StringVar(&createInfo.TelemetryAddress,
+		"telemetry-address", createInfo.TelemetryAddress,
+		"health check and metrics address and port")
+	Cmd.Flags().DurationVar(&createInfo.PollInterval,
+		"poll-interval", createInfo.PollInterval,
+		"poll interval")
+	Cmd.Flags().Var(&createInfo.LogLevel,
+		"log-level",
+		"log level: debug, info, warn or error")
+	Cmd.Flags().StringVar(&createInfo.PostgresEndpoint.Value,
+		"postgres-endpoint", createInfo.PostgresEndpoint.Value,
+		"Postgres endpoint")
 }
 
 func run(cmd *cobra.Command, args []string) {
-	startTime := time.Now()
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
-	c := config.FromEnv()
-
-	// Override configs
-	if inputBoxDeploymentBlockNumber >= 0 {
-		c.ContractsInputBoxDeploymentBlockNumber = inputBoxDeploymentBlockNumber
-	}
-	if pollingInterval > 0 {
-		c.ValidatorPollingInterval = time.Duration(pollingInterval) * time.Second
-	}
-	if verbose {
-		c.LogLevel = slog.LevelDebug
-	}
-	if postgresEndpoint != "" {
-		c.PostgresEndpoint = config.Redacted[string]{Value: postgresEndpoint}
-	}
-
-	startup.ConfigLogs(c.LogLevel, c.LogPrettyEnabled)
-
-	slog.Info("Starting the Cartesi Rollups Node Validator", "version", buildVersion, "config", c)
-
-	database, err := repository.Connect(ctx, c.PostgresEndpoint.Value)
-	if err != nil {
-		slog.Error("failed to connect to the database", "error", err)
-		os.Exit(1)
-	}
-	defer database.Close()
-
-	_, err = startup.SetupNodePersistentConfig(ctx, database, c)
-	if err != nil {
-		slog.Error("configuration error", "error", err)
-		os.Exit(1)
-	}
-
-	service := validator.NewValidatorService(
-		database,
-		uint64(c.ContractsInputBoxDeploymentBlockNumber),
-		c.ValidatorPollingInterval,
-	)
-
-	ready := make(chan struct{}, 1)
-	go func() {
-		select {
-		case <-ready:
-			duration := time.Since(startTime)
-			slog.Info("validator is ready", "after", duration)
-		case <-ctx.Done():
-		}
-	}()
-
-	// start service
-	if err := service.Start(ctx, ready); err != nil {
-		slog.Error("validator exited with an error", "error", err)
-		os.Exit(1)
-	}
+	cobra.CheckErr(validator.Create(createInfo, &validatorService))
+	validatorService.CreateDefaultHandlers("/" + validatorService.Name)
+	cobra.CheckErr(validatorService.Serve())
 }

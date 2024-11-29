@@ -45,26 +45,6 @@ func (s *InspectSuite) SetupTest() {
 	s.ServiceAddr = fmt.Sprintf("127.0.0.1:%v", s.ServicePort)
 }
 
-func (s *InspectSuite) TestNew() {
-	s.Run("Ok", func() {
-		require := s.Require()
-		machines := newMockMachines()
-		machines.Map[randomAddress()] = &MockMachine{}
-		inspect, err := New(machines)
-		require.NotNil(inspect)
-		require.Nil(err)
-	})
-
-	s.Run("InvalidMachines", func() {
-		require := s.Require()
-		var machines Machines = nil
-		inspect, err := New(machines)
-		require.Nil(inspect)
-		require.Error(err)
-		require.Equal(ErrInvalidMachines, err)
-	})
-}
-
 func (s *InspectSuite) TestGetOk() {
 	inspect, app, payload := s.setup()
 

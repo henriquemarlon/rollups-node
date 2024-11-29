@@ -1,13 +1,12 @@
 // (c) Cartesi and individual authors (see AUTHORS)
 // SPDX-License-Identifier: Apache-2.0 (see LICENSE)
 
-package retrypolicy
+package evmreader
 
 import (
 	"math/big"
 	"time"
 
-	"github.com/cartesi/rollups-node/internal/evmreader"
 	"github.com/cartesi/rollups-node/internal/services/retry"
 	"github.com/cartesi/rollups-node/pkg/contracts/iinputbox"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -15,13 +14,13 @@ import (
 )
 
 type InputSourceWithRetryPolicyDelegator struct {
-	delegate   evmreader.InputSource
+	delegate   InputSource
 	maxRetries uint64
 	delay      time.Duration
 }
 
 func NewInputSourceWithRetryPolicy(
-	delegate evmreader.InputSource,
+	delegate InputSource,
 	maxRetries uint64,
 	delay time.Duration,
 ) *InputSourceWithRetryPolicyDelegator {

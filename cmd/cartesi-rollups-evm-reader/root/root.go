@@ -4,17 +4,8 @@
 package root
 
 import (
-	"context"
-	"log/slog"
-	"os"
-	"os/signal"
-	"syscall"
-	"time"
-
-	"github.com/cartesi/rollups-node/internal/config"
-	"github.com/cartesi/rollups-node/internal/evmreader/service"
-	"github.com/cartesi/rollups-node/internal/repository"
-	"github.com/cartesi/rollups-node/internal/services/startup"
+	"github.com/cartesi/rollups-node/internal/evmreader"
+	"github.com/cartesi/rollups-node/pkg/service"
 
 	"github.com/spf13/cobra"
 )
@@ -22,143 +13,73 @@ import (
 var (
 	// Should be overridden during the final release build with ldflags
 	// to contain the actual version number
-	buildVersion = "devel"
-)
-
-const (
-	CMD_NAME = "evm-reader"
+	buildVersion  = "devel"
+	readerService = evmreader.Service{}
+	createInfo    = evmreader.CreateInfo{
+		CreateInfo: service.CreateInfo{
+			Name:                 "evm-reader",
+			ProcOwner:            true,
+			EnableSignalHandling: true,
+			TelemetryCreate:      true,
+			TelemetryAddress:     ":10000",
+			Impl:                 &readerService,
+		},
+		DefaultBlockString: "safe",
+	}
 )
 
 var Cmd = &cobra.Command{
-	Use:   CMD_NAME,
-	Short: "Runs EVM Reader",
-	Long:  `Runs EVM Reader in standalone mode`,
+	Use:   createInfo.Name,
+	Short: "Runs " + createInfo.Name,
+	Long:  "Runs " + createInfo.Name + " in standalone mode",
 	Run:   run,
 }
-var (
-	defaultBlock                  string
-	postgresEndpoint              string
-	blockchainHttpEndpoint        string
-	blockchainWsEndpoint          string
-	inputBoxAddress               string
-	inputBoxDeploymentBlockNumber uint64
-	verbose                       bool
-)
 
 func init() {
+	createInfo.LoadEnv()
 
-	Cmd.Flags().StringVarP(&defaultBlock,
-		"default-block",
-		"d",
-		"",
+	Cmd.Flags().StringVarP(&createInfo.DefaultBlockString,
+		"default-block", "d", createInfo.DefaultBlockString,
 		`Default block to be used when fetching new blocks.
 		One of 'latest', 'safe', 'pending', 'finalized'`)
 
-	Cmd.Flags().StringVarP(&postgresEndpoint,
+	Cmd.Flags().StringVarP(&createInfo.PostgresEndpoint.Value,
 		"postgres-endpoint",
 		"p",
-		"",
+		createInfo.PostgresEndpoint.Value,
 		"Postgres endpoint")
 
-	Cmd.Flags().StringVarP(&blockchainHttpEndpoint,
+	Cmd.Flags().StringVarP(&createInfo.BlockchainHttpEndpoint.Value,
 		"blockchain-http-endpoint",
 		"b",
-		"",
+		createInfo.BlockchainHttpEndpoint.Value,
 		"Blockchain HTTP Endpoint")
 
-	Cmd.Flags().StringVarP(&blockchainWsEndpoint,
+	Cmd.Flags().StringVarP(&createInfo.BlockchainWsEndpoint.Value,
 		"blockchain-ws-endpoint",
 		"w",
-		"",
+		createInfo.BlockchainWsEndpoint.Value,
 		"Blockchain WS Endpoint")
 
-	Cmd.Flags().StringVarP(&inputBoxAddress,
-		"inputbox-address",
-		"i",
-		"",
-		"Input Box contract address")
+//	Cmd.Flags().StringVarP(&inputBoxAddress,
+//		"inputbox-address",
+//		"i",
+//		"",
+//		"Input Box contract address")
 
-	Cmd.Flags().Uint64VarP(&inputBoxDeploymentBlockNumber,
+	Cmd.Flags().Uint64VarP(&createInfo.InputBoxDeploymentBlock,
 		"inputbox-block-number",
 		"n",
 		0,
 		"Input Box deployment block number")
-
-	Cmd.Flags().BoolVarP(&verbose,
-		"verbose",
-		"v",
-		false,
-		"enable verbose logging")
+	Cmd.Flags().Var(&createInfo.LogLevel,
+		"log-level",
+		"log level: debug, info, warn or error")
 }
 
 func run(cmd *cobra.Command, args []string) {
-	startTime := time.Now()
-
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
-	c := config.FromEnv()
-
-	// Override configs
-	if verbose {
-		c.LogLevel = slog.LevelDebug
-	}
-	if postgresEndpoint != "" {
-		c.PostgresEndpoint = config.Redacted[string]{Value: postgresEndpoint}
-	}
-	if blockchainHttpEndpoint != "" {
-		c.BlockchainHttpEndpoint = config.Redacted[string]{Value: blockchainHttpEndpoint}
-	}
-	if blockchainWsEndpoint != "" {
-		c.BlockchainWsEndpoint = config.Redacted[string]{Value: blockchainWsEndpoint}
-	}
-	if defaultBlock != "" {
-		evmReaderDefaultBlock, err := config.ToDefaultBlockFromString(defaultBlock)
-		cobra.CheckErr(err)
-		c.EvmReaderDefaultBlock = evmReaderDefaultBlock
-	}
-
-	// setup log
-	startup.ConfigLogs(c.LogLevel, c.LogPrettyEnabled)
-
-	slog.Info("Starting the Cartesi Rollups Node EVM Reader", "version", buildVersion, "config", c)
-
-	database, err := repository.Connect(ctx, c.PostgresEndpoint.Value)
-	if err != nil {
-		slog.Error("EVM Reader couldn't connect to the database", "error", err)
-		os.Exit(1)
-	}
-	defer database.Close()
-
-	_, err = startup.SetupNodePersistentConfig(ctx, database, c)
-	if err != nil {
-		slog.Error("EVM Reader couldn't connect to the database", "error", err)
-		os.Exit(1)
-	}
-
-	// create EVM Reader Service
-	service := service.NewEvmReaderService(
-		c.BlockchainHttpEndpoint.Value,
-		c.BlockchainWsEndpoint.Value,
-		database,
-		c.EvmReaderRetryPolicyMaxRetries,
-		c.EvmReaderRetryPolicyMaxDelay,
-	)
-
-	// logs startup time
 	ready := make(chan struct{}, 1)
-	go func() {
-		select {
-		case <-ready:
-			duration := time.Since(startTime)
-			slog.Info("EVM Reader is ready", "after", duration)
-		case <-ctx.Done():
-		}
-	}()
-
-	// start service
-	if err := service.Start(ctx, ready); err != nil {
-		slog.Error("EVM Reader exited with an error", "error", err)
-		os.Exit(1)
-	}
+	cobra.CheckErr(evmreader.Create(&createInfo, &readerService))
+	readerService.CreateDefaultHandlers("/" + readerService.Name)
+	cobra.CheckErr(readerService.Start(nil, ready))
 }

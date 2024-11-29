@@ -1,26 +1,25 @@
 // (c) Cartesi and individual authors (see AUTHORS)
 // SPDX-License-Identifier: Apache-2.0 (see LICENSE)
 
-package retrypolicy
+package evmreader
 
 import (
 	"context"
 	"time"
 
-	"github.com/cartesi/rollups-node/internal/evmreader"
 	"github.com/cartesi/rollups-node/internal/services/retry"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
 type EthWsClientRetryPolicyDelegator struct {
-	delegate          evmreader.EthWsClient
+	delegate          EthWsClient
 	maxRetries        uint64
 	delayBetweenCalls time.Duration
 }
 
 func NewEthWsClientWithRetryPolicy(
-	delegate evmreader.EthWsClient,
+	delegate EthWsClient,
 	maxRetries uint64,
 	delayBetweenCalls time.Duration,
 ) *EthWsClientRetryPolicyDelegator {

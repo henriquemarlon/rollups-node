@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cartesi/rollups-node/internal/model"
 	. "github.com/cartesi/rollups-node/internal/model"
 	appcontract "github.com/cartesi/rollups-node/pkg/contracts/iapplication"
 	"github.com/cartesi/rollups-node/pkg/contracts/iconsensus"
@@ -590,11 +591,12 @@ func (m *MockRepository) GetAllRunningApplications(
 	return args.Get(0).([]Application), args.Error(1)
 }
 
-func (m *MockRepository) GetNodeConfig(
+func (m *MockRepository) SelectEvmReaderConfig(
 	ctx context.Context,
-) (*NodePersistentConfig, error) {
-	args := m.Called(ctx)
-	return args.Get(0).(*NodePersistentConfig), args.Error(1)
+	out *model.EvmReaderPersistentConfig,
+) error {
+	args := m.Called(ctx, out)
+	return args.Error(0)
 }
 
 func (m *MockRepository) GetEpoch(

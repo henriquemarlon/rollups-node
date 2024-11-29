@@ -17,7 +17,6 @@ var (
 	createInfo     = claimer.CreateInfo{
 		CreateInfo: service.CreateInfo{
 			Name:                 "claimer",
-			LogLevel:             "info",
 			ProcOwner:            true,
 			EnableSignalHandling: true,
 			TelemetryCreate:      true,
@@ -46,8 +45,8 @@ func init() {
 	Cmd.Flags().DurationVar(&createInfo.PollInterval,
 		"poll-interval", createInfo.PollInterval,
 		"poll interval")
-	Cmd.Flags().StringVar(&createInfo.LogLevel,
-		"log-level", createInfo.LogLevel,
+	Cmd.Flags().Var(&createInfo.LogLevel,
+		"log-level",
 		"log level: debug, info, warn or error")
 	Cmd.Flags().BoolVar(&createInfo.EnableSubmission,
 		"claim-submission", createInfo.EnableSubmission,

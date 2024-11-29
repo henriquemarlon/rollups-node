@@ -56,7 +56,7 @@ const (
 	EpochStatusClaimRejected      EpochStatus = "CLAIM_REJECTED"
 )
 
-type NodePersistentConfig struct {
+type EvmReaderPersistentConfig struct {
 	DefaultBlock            DefaultBlock
 	InputBoxDeploymentBlock uint64
 	InputBoxAddress         Address

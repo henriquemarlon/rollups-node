@@ -14,7 +14,6 @@ import (
 	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/internal/node"
 	"github.com/cartesi/rollups-node/internal/repository"
-	"github.com/cartesi/rollups-node/internal/services/startup"
 	"github.com/spf13/cobra"
 )
 
@@ -53,22 +52,12 @@ func run(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// setup log
-	startup.ConfigLogs(cfg.LogLevel, cfg.LogPrettyEnabled)
-	slog.Info("Starting the Cartesi Rollups Node", "version", buildVersion, "config", cfg)
-
 	database, err := repository.Connect(ctx, cfg.PostgresEndpoint.Value)
 	if err != nil {
 		slog.Error("Node couldn't connect to the database", "error", err)
 		os.Exit(1)
 	}
 	defer database.Close()
-
-	_, err = startup.SetupNodePersistentConfig(ctx, database, cfg)
-	if err != nil {
-		slog.Error("Node exited with an error", "error", err)
-		os.Exit(1)
-	}
 
 	// create the node supervisor
 	supervisor, err := node.Setup(ctx, cfg, database)

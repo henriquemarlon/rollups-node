@@ -10,6 +10,7 @@ import (
 
 	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 var (
@@ -449,3 +450,52 @@ func (pg *Database) UpdateOutputExecutionTransaction(
 
 	return nil
 }
+
+func (pg *Database) SelectEvmReaderConfig(
+	ctx context.Context,
+	c *EvmReaderPersistentConfig,
+) error {
+	query := `
+	SELECT
+		default_block,
+		input_box_deployment_block,
+		input_box_address,
+		chain_id
+	FROM
+		node_config`
+
+	return pg.db.QueryRow(ctx, query).Scan(
+		&c.DefaultBlock,
+		&c.InputBoxDeploymentBlock,
+		&c.InputBoxAddress,
+		&c.ChainId,
+	)
+}
+
+func (pg *Database) InsertEvmReaderConfig(
+	ctx context.Context,
+	c *EvmReaderPersistentConfig,
+) (pgconn.CommandTag, error) {
+	query := `
+	INSERT INTO node_config
+		(default_block,
+		input_box_deployment_block,
+		input_box_address,
+		chain_id)
+	SELECT
+		@defaultBlock,
+		@deploymentBlock,
+		@inputBoxAddress,
+		@chainId
+	WHERE NOT EXISTS (SELECT * FROM node_config)`
+
+	args := pgx.NamedArgs{
+		"defaultBlock":    c.DefaultBlock,
+		"deploymentBlock": c.InputBoxDeploymentBlock,
+		"inputBoxAddress": c.InputBoxAddress,
+		"chainId":         c.ChainId,
+	}
+
+	return pg.db.Exec(ctx, query, args)
+}
+

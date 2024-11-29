@@ -23,14 +23,16 @@ func TestValidatorSuite(t *testing.T) {
 }
 
 var (
-	validator   *Validator
-	repository  *MockRepository
+	validator   *Service
+	repo        *Mockrepo
 	dummyEpochs []Epoch
 )
 
 func (s *ValidatorSuite) SetupSubTest() {
-	repository = newMockRepository()
-	validator = NewValidator(repository, 0)
+	repo = newMockrepo()
+	validator = &Service{
+		repository: repo,
+	}
 	dummyEpochs = []Epoch{
 		{Index: 0, FirstBlock: 0, LastBlock: 9},
 		{Index: 1, FirstBlock: 10, LastBlock: 19},
@@ -40,7 +42,7 @@ func (s *ValidatorSuite) SetupSubTest() {
 }
 
 func (s *ValidatorSuite) TearDownSubTest() {
-	repository = nil
+	repo = nil
 	validator = nil
 }
 
@@ -53,24 +55,24 @@ func (s *ValidatorSuite) TestItFailsWhenClaimDoesNotMatchMachineOutputsHash() {
 		epochs := []Epoch{dummyEpochs[0]}
 		epochs[0].AppAddress = app.ContractAddress
 		mismatchedHash := randomHash()
-		repository.On(
+		repo.On(
 			"GetProcessedEpochs", mock.Anything, epochs[0].AppAddress,
 		).Return(epochs, nil)
-		repository.On(
+		repo.On(
 			"GetLastInputOutputsHash",
 			mock.Anything, epochs[0].Index, epochs[0].AppAddress,
 		).Return(&mismatchedHash, nil)
-		repository.On(
+		repo.On(
 			"GetOutputsProducedInBlockRange",
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		).Return(nil, nil)
-		repository.On("GetPreviousEpoch", mock.Anything, mock.Anything).Return(nil, nil)
+		repo.On("GetPreviousEpoch", mock.Anything, mock.Anything).Return(nil, nil)
 
 		err := validator.validateApplication(ctx, app)
 		s.NotNil(err)
 		s.ErrorContains(err, "claim does not match")
 
-		repository.AssertExpectations(s.T())
+		repo.AssertExpectations(s.T())
 	})
 
 	// fails on the second epoch, do not process the third
@@ -88,24 +90,24 @@ func (s *ValidatorSuite) TestItFailsWhenClaimDoesNotMatchMachineOutputsHash() {
 		epochs[0].ClaimHash = &epoch0Claim
 		mismatchedHash := randomHash()
 
-		repository.On(
+		repo.On(
 			"GetProcessedEpochs", mock.Anything, app.ContractAddress,
 		).Return(epochs, nil).Once()
-		repository.On(
+		repo.On(
 			"GetOutputsProducedInBlockRange",
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		).Return(nil, nil)
-		repository.On("GetPreviousEpoch", mock.Anything, epochs[0]).Return(nil, nil)
-		repository.On(
+		repo.On("GetPreviousEpoch", mock.Anything, epochs[0]).Return(nil, nil)
+		repo.On(
 			"GetLastInputOutputsHash",
 			mock.Anything, epochs[0].Index, epochs[0].AppAddress,
 		).Return(epochs[0].ClaimHash, nil)
-		repository.On(
+		repo.On(
 			"GetLastInputOutputsHash",
 			mock.Anything, epochs[1].Index, epochs[1].AppAddress,
 		).Return(&mismatchedHash, nil)
-		repository.On("GetPreviousEpoch", mock.Anything, epochs[1]).Return(epochs[0], nil)
-		repository.On(
+		repo.On("GetPreviousEpoch", mock.Anything, epochs[1]).Return(epochs[0], nil)
+		repo.On(
 			"SetEpochClaimAndInsertProofsTransaction",
 			mock.Anything, mock.Anything, mock.Anything,
 		).Return(nil).Once()
@@ -113,7 +115,7 @@ func (s *ValidatorSuite) TestItFailsWhenClaimDoesNotMatchMachineOutputsHash() {
 		err = validator.validateApplication(ctx, app)
 		s.NotNil(err)
 		s.ErrorContains(err, "claim does not match")
-		repository.AssertExpectations(s.T())
+		repo.AssertExpectations(s.T())
 	})
 
 	// validates first app, fails on the first epoch of the second
@@ -138,37 +140,37 @@ func (s *ValidatorSuite) TestItFailsWhenClaimDoesNotMatchMachineOutputsHash() {
 		epochsApp1[0].ClaimHash = &epoch0Claim
 		mismatchedHash := randomHash()
 
-		repository.On("GetAllRunningApplications", mock.Anything).Return(applications, nil)
-		repository.On(
+		repo.On("GetAllRunningApplications", mock.Anything).Return(applications, nil)
+		repo.On(
 			"GetProcessedEpochs", mock.Anything, applications[0].ContractAddress,
 		).Return(epochsApp1, nil)
-		repository.On(
+		repo.On(
 			"GetOutputsProducedInBlockRange",
 			mock.Anything, applications[0].ContractAddress, mock.Anything, mock.Anything,
 		).Return(nil, nil)
-		repository.On("GetPreviousEpoch", mock.Anything, epochsApp1[0]).Return(nil, nil)
-		repository.On("GetPreviousEpoch", mock.Anything, epochsApp1[1]).Return(epochsApp1[0], nil)
-		repository.On(
+		repo.On("GetPreviousEpoch", mock.Anything, epochsApp1[0]).Return(nil, nil)
+		repo.On("GetPreviousEpoch", mock.Anything, epochsApp1[1]).Return(epochsApp1[0], nil)
+		repo.On(
 			"GetLastInputOutputsHash",
 			mock.Anything, epochsApp1[0].Index, epochsApp1[0].AppAddress,
 		).Return(epochsApp1[0].ClaimHash, nil)
-		repository.On(
+		repo.On(
 			"GetLastInputOutputsHash",
 			mock.Anything, epochsApp1[1].Index, epochsApp1[1].AppAddress,
 		).Return(epochsApp1[0].ClaimHash, nil)
-		repository.On(
+		repo.On(
 			"SetEpochClaimAndInsertProofsTransaction",
 			mock.Anything, mock.Anything, mock.Anything,
 		).Return(nil).Twice()
-		repository.On(
+		repo.On(
 			"GetProcessedEpochs", mock.Anything, applications[1].ContractAddress,
 		).Return(epochsApp2, nil)
-		repository.On(
+		repo.On(
 			"GetOutputsProducedInBlockRange",
 			mock.Anything, applications[1].ContractAddress, mock.Anything, mock.Anything,
 		).Return(nil, nil)
-		repository.On("GetPreviousEpoch", mock.Anything, epochsApp2[0]).Return(nil, nil)
-		repository.On(
+		repo.On("GetPreviousEpoch", mock.Anything, epochsApp2[0]).Return(nil, nil)
+		repo.On(
 			"GetLastInputOutputsHash",
 			mock.Anything, epochsApp2[0].Index, epochsApp2[0].AppAddress,
 		).Return(&mismatchedHash, nil)
@@ -176,7 +178,7 @@ func (s *ValidatorSuite) TestItFailsWhenClaimDoesNotMatchMachineOutputsHash() {
 		err = validator.Run(ctx)
 		s.NotNil(err)
 		s.ErrorContains(err, "claim does not match")
-		repository.AssertExpectations(s.T())
+		repo.AssertExpectations(s.T())
 	})
 }
 
@@ -198,15 +200,15 @@ func randomHash() Hash {
 	return Hash(hash)
 }
 
-type MockRepository struct {
+type Mockrepo struct {
 	mock.Mock
 }
 
-func newMockRepository() *MockRepository {
-	return new(MockRepository)
+func newMockrepo() *Mockrepo {
+	return new(Mockrepo)
 }
 
-func (m *MockRepository) GetAllRunningApplications(ctx context.Context) ([]Application, error) {
+func (m *Mockrepo) GetAllRunningApplications(ctx context.Context) ([]Application, error) {
 	args := m.Called(ctx)
 
 	apps, ok := args.Get(0).([]Application)
@@ -216,7 +218,7 @@ func (m *MockRepository) GetAllRunningApplications(ctx context.Context) ([]Appli
 	return nil, args.Error(1)
 }
 
-func (m *MockRepository) GetOutputsProducedInBlockRange(
+func (m *Mockrepo) GetOutputsProducedInBlockRange(
 	ctx context.Context,
 	application Address,
 	firstBlock, lastBlock uint64,
@@ -229,7 +231,7 @@ func (m *MockRepository) GetOutputsProducedInBlockRange(
 	return nil, args.Error(1)
 }
 
-func (m *MockRepository) GetProcessedEpochs(
+func (m *Mockrepo) GetProcessedEpochs(
 	ctx context.Context,
 	application Address,
 ) ([]Epoch, error) {
@@ -241,7 +243,7 @@ func (m *MockRepository) GetProcessedEpochs(
 	return nil, args.Error(1)
 }
 
-func (m *MockRepository) GetLastInputOutputsHash(
+func (m *Mockrepo) GetLastInputOutputsHash(
 	ctx context.Context,
 	epochIndex uint64,
 	appAddress Address,
@@ -254,7 +256,7 @@ func (m *MockRepository) GetLastInputOutputsHash(
 	return nil, args.Error(1)
 }
 
-func (m *MockRepository) GetPreviousEpoch(
+func (m *Mockrepo) GetPreviousEpoch(
 	ctx context.Context,
 	currentEpoch Epoch,
 ) (*Epoch, error) {
@@ -266,7 +268,7 @@ func (m *MockRepository) GetPreviousEpoch(
 	return nil, args.Error(1)
 }
 
-func (m *MockRepository) SetEpochClaimAndInsertProofsTransaction(
+func (m *Mockrepo) SetEpochClaimAndInsertProofsTransaction(
 	ctx context.Context,
 	epoch Epoch,
 	outputs []Output,

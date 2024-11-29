@@ -46,16 +46,7 @@ func (s *RepositorySuite) TearDownSuite() {
 }
 
 func (s *RepositorySuite) SetupDatabase() {
-	config := NodePersistentConfig{
-		DefaultBlock:            DefaultBlockStatusFinalized,
-		InputBoxDeploymentBlock: 1,
-		InputBoxAddress:         common.HexToAddress("deadbeef"),
-		ChainId:                 1,
-	}
-
-	err := s.database.InsertNodeConfig(s.ctx, &config)
-	s.Require().Nil(err)
-
+	var err error
 	app := Application{
 		ContractAddress:    common.HexToAddress("deadbeef"),
 		IConsensusAddress:  common.HexToAddress("ffffff"),

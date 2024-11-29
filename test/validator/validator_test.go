@@ -12,6 +12,7 @@ import (
 	"github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/repository"
 	"github.com/cartesi/rollups-node/internal/validator"
+	"github.com/cartesi/rollups-node/pkg/service"
 	"github.com/cartesi/rollups-node/test/tooling/db"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -24,7 +25,7 @@ type ValidatorRepositoryIntegrationSuite struct {
 	suite.Suite
 	ctx              context.Context
 	cancel           context.CancelFunc
-	validator        *validator.Validator
+	validator        validator.Service
 	database         *repository.Database
 	postgresEndpoint string
 }
@@ -50,15 +51,20 @@ func (s *ValidatorRepositoryIntegrationSuite) SetupSubTest() {
 	s.database, err = repository.Connect(s.ctx, s.postgresEndpoint)
 	s.Require().Nil(err)
 
-	s.validator = validator.NewValidator(s.database, 0)
-
 	err = db.SetupTestPostgres(s.postgresEndpoint)
 	s.Require().Nil(err)
+
+	c := validator.CreateInfo{
+		CreateInfo: service.CreateInfo{
+			Name: "validator",
+			Impl: &s.validator,
+		},
+		Repository: s.database,
+	}
+	s.Require().Nil(validator.Create(c, &s.validator))
 }
 
 func (s *ValidatorRepositoryIntegrationSuite) TearDownSubTest() {
-	s.validator = nil
-
 	s.database.Close()
 }
 

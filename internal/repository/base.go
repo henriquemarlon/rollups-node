@@ -89,38 +89,6 @@ func (pg *Database) Close() {
 	}
 }
 
-func (pg *Database) InsertNodeConfig(
-	ctx context.Context,
-	config *NodePersistentConfig,
-) error {
-	query := `
-	INSERT INTO node_config
-		(default_block,
-		input_box_deployment_block,
-		input_box_address,
-		chain_id)
-	SELECT
-		@defaultBlock,
-		@deploymentBlock,
-		@inputBoxAddress,
-		@chainId
-	WHERE NOT EXISTS (SELECT * FROM node_config)`
-
-	args := pgx.NamedArgs{
-		"defaultBlock":    config.DefaultBlock,
-		"deploymentBlock": config.InputBoxDeploymentBlock,
-		"inputBoxAddress": config.InputBoxAddress,
-		"chainId":         config.ChainId,
-	}
-
-	_, err := pg.db.Exec(ctx, query, args)
-	if err != nil {
-		return fmt.Errorf("%w: %w", ErrInsertRow, err)
-	}
-
-	return nil
-}
-
 func (pg *Database) InsertApplication(
 	ctx context.Context,
 	app *Application,
@@ -380,45 +348,6 @@ func (pg *Database) InsertSnapshot(
 	}
 
 	return id, nil
-}
-
-func (pg *Database) GetNodeConfig(
-	ctx context.Context,
-) (*NodePersistentConfig, error) {
-	var (
-		defaultBlock    DefaultBlock
-		deploymentBlock uint64
-		inputBoxAddress Address
-		chainId         uint64
-	)
-
-	query := `
-	SELECT
-		default_block,
-		input_box_deployment_block,
-		input_box_address,
-		chain_id
-	FROM
-		node_config`
-
-	err := pg.db.QueryRow(ctx, query).Scan(
-		&defaultBlock,
-		&deploymentBlock,
-		&inputBoxAddress,
-		&chainId,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("GetNodeConfig QueryRow failed: %w\n", err)
-	}
-
-	config := NodePersistentConfig{
-		DefaultBlock:            defaultBlock,
-		InputBoxDeploymentBlock: deploymentBlock,
-		InputBoxAddress:         inputBoxAddress,
-		ChainId:                 chainId,
-	}
-
-	return &config, nil
 }
 
 func (pg *Database) GetApplication(

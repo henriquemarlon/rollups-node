@@ -37,10 +37,8 @@ func TestMachineRepository(t *testing.T) {
 		require.Nil(err)
 		require.Len(apps, 3)
 
-		repository := &MachineRepository{Database: database}
-
 		// only running apps
-		res, err := repository.GetMachineConfigurations(ctx)
+		res, err := database.GetMachineConfigurations(ctx)
 		require.Nil(err)
 		require.Len(res, 2)
 
@@ -92,24 +90,23 @@ func TestMachineRepository(t *testing.T) {
 
 		app, _, _, err := populate1(database)
 		require.Nil(err)
-		repository := &MachineRepository{Database: database}
 
-		err = repository.UpdateEpochs(ctx, app.ContractAddress)
+		err = database.UpdateClosedEpochs(ctx, app.ContractAddress)
 		require.Nil(err)
 
-		epoch0, err := repository.GetEpoch(ctx, 0, app.ContractAddress)
+		epoch0, err := database.GetEpoch(ctx, 0, app.ContractAddress)
 		require.Nil(err)
 		require.NotNil(epoch0)
 
-		epoch1, err := repository.GetEpoch(ctx, 1, app.ContractAddress)
+		epoch1, err := database.GetEpoch(ctx, 1, app.ContractAddress)
 		require.Nil(err)
 		require.NotNil(epoch1)
 
-		epoch2, err := repository.GetEpoch(ctx, 2, app.ContractAddress)
+		epoch2, err := database.GetEpoch(ctx, 2, app.ContractAddress)
 		require.Nil(err)
 		require.NotNil(epoch2)
 
-		epoch3, err := repository.GetEpoch(ctx, 3, app.ContractAddress)
+		epoch3, err := database.GetEpoch(ctx, 3, app.ContractAddress)
 		require.Nil(err)
 		require.NotNil(epoch3)
 

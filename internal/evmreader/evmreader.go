@@ -9,16 +9,158 @@ import (
 	"fmt"
 	"log/slog"
 	"math/big"
+	"time"
 
+	"github.com/cartesi/rollups-node/internal/config"
+	"github.com/cartesi/rollups-node/internal/model"
 	. "github.com/cartesi/rollups-node/internal/model"
+	"github.com/cartesi/rollups-node/internal/repository"
 	appcontract "github.com/cartesi/rollups-node/pkg/contracts/iapplication"
 	"github.com/cartesi/rollups-node/pkg/contracts/iconsensus"
 	"github.com/cartesi/rollups-node/pkg/contracts/iinputbox"
+	"github.com/cartesi/rollups-node/pkg/service"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/jackc/pgx/v5"
 )
+
+type CreateInfo struct {
+	service.CreateInfo
+
+	model.EvmReaderPersistentConfig
+
+	DefaultBlockString     string
+	PostgresEndpoint       config.Redacted[string]
+	BlockchainHttpEndpoint config.Redacted[string]
+	BlockchainWsEndpoint   config.Redacted[string]
+	Database               *repository.Database
+	MaxRetries             uint64
+	MaxDelay               time.Duration
+}
+
+type Service struct {
+	service.Service
+	reader EvmReader
+}
+
+func (c *CreateInfo) LoadEnv() {
+	c.BlockchainHttpEndpoint.Value = config.GetBlockchainHttpEndpoint()
+	c.BlockchainWsEndpoint.Value = config.GetBlockchainWsEndpoint()
+	c.MaxDelay = config.GetEvmReaderRetryPolicyMaxDelay()
+	c.MaxRetries = config.GetEvmReaderRetryPolicyMaxRetries()
+	c.PostgresEndpoint.Value = config.GetPostgresEndpoint()
+
+	// persistent
+	c.DefaultBlock = config.GetEvmReaderDefaultBlock()
+	c.InputBoxDeploymentBlock = uint64(config.GetContractsInputBoxDeploymentBlockNumber())
+	c.InputBoxAddress = common.HexToAddress(config.GetContractsInputBoxAddress())
+	c.ChainId = config.GetBlockchainId()
+}
+
+func Create(c *CreateInfo, s *Service) error {
+	var err error
+
+	err = service.Create(&c.CreateInfo, &s.Service)
+	if err != nil {
+		return err
+	}
+
+	c.DefaultBlock, err = config.ToDefaultBlockFromString(c.DefaultBlockString)
+	if err != nil {
+		return err
+	}
+
+	client, err := ethclient.DialContext(s.Context, c.BlockchainHttpEndpoint.Value)
+	if err != nil {
+		return err
+	}
+
+	wsClient, err := ethclient.DialContext(s.Context, c.BlockchainWsEndpoint.Value)
+	if err != nil {
+		return err
+	}
+
+	if c.Database == nil {
+		c.Database, err = repository.Connect(s.Context, c.PostgresEndpoint.Value)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = s.SetupPersistentConfig(s.Context, c.Database, &c.EvmReaderPersistentConfig)
+	if err != nil {
+		return err
+	}
+
+	inputSource, err := NewInputSourceAdapter(c.InputBoxAddress, client)
+	if err != nil {
+		return err
+	}
+
+	contractFactory := NewEvmReaderContractFactory(client, c.MaxRetries, c.MaxDelay)
+
+	s.reader = NewEvmReader(
+		NewEhtClientWithRetryPolicy(client, c.MaxRetries, c.MaxDelay),
+		NewEthWsClientWithRetryPolicy(wsClient, c.MaxRetries, c.MaxDelay),
+		NewInputSourceWithRetryPolicy(inputSource, c.MaxRetries, c.MaxDelay),
+		c.Database,
+		c.InputBoxDeploymentBlock,
+		c.DefaultBlock,
+		contractFactory,
+	)
+	return nil
+}
+
+func (s *Service) Alive() bool {
+	return true
+}
+
+func (s *Service) Ready() bool {
+	return true
+}
+
+func (s *Service) Reload() []error {
+	return nil
+}
+
+func (s *Service) Stop(bool) []error {
+	return nil
+}
+
+func (s *Service) Tick() []error {
+	return []error{}
+}
+
+func (s *Service) Start(context context.Context, ready chan<- struct{}) error {
+	go s.reader.Run(s.Context, ready)
+	return s.Serve()
+}
+func (s *Service) String() string {
+	return s.Name
+}
+
+func (me *Service) SetupPersistentConfig(
+	ctx      context.Context,
+	database *repository.Database,
+	c        *model.EvmReaderPersistentConfig,
+) error {
+	err := database.SelectEvmReaderConfig(ctx, c)
+	if err == pgx.ErrNoRows {
+		_, err = database.InsertEvmReaderConfig(ctx, c)
+		if err != nil {
+			return err
+		}
+	} else if err == nil {
+		me.Logger.Info("Node was already configured. Using previous persistent config", "config", c)
+	} else {
+		me.Logger.Error("Could not retrieve persistent config from Database. %w", "error", err)
+	}
+	return err
+}
 
 // Interface for Input reading
 type InputSource interface {
@@ -36,7 +178,7 @@ type EvmReaderRepository interface {
 	) (epochIndexIdMap map[uint64]uint64, epochIndexInputIdsMap map[uint64][]uint64, err error)
 
 	GetAllRunningApplications(ctx context.Context) ([]Application, error)
-	GetNodeConfig(ctx context.Context) (*NodePersistentConfig, error)
+	SelectEvmReaderConfig(context.Context, *model.EvmReaderPersistentConfig) error
 	GetEpoch(ctx context.Context, indexKey uint64, appAddressKey Address) (*Epoch, error)
 	GetPreviousEpochsWithOpenClaims(
 		ctx context.Context,

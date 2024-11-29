@@ -81,7 +81,7 @@ type ServiceImpl interface {
 type CreateInfo struct {
 	Name                 string
 	Impl                 ServiceImpl
-	LogLevel             string
+	LogLevel             LogLevel
 	ProcOwner            bool
 	ServeMux             *http.ServeMux
 	Context              context.Context
@@ -135,18 +135,7 @@ func Create(ci *CreateInfo, s *Service) error {
 	}
 
 	// log
-	var LogLevel slog.Level
 	if s.Logger == nil {
-		LogLevel = map[string]slog.Level{
-			"debug": slog.LevelDebug,
-			"info":  slog.LevelInfo,
-			"warn":  slog.LevelWarn,
-			"error": slog.LevelError,
-		}[ci.LogLevel]
-
-		if ci.LogLevel == "" {
-			LogLevel = slog.LevelDebug
-		}
 		// opts := &tint.Options{
 		// 	Level:     LogLevel,
 		// 	AddSource: LogLevel == slog.LevelDebug,
@@ -198,7 +187,7 @@ func Create(ci *CreateInfo, s *Service) error {
 					s.Logger.Warn("Create:Created a new ServeMux",
 						"service", s.Name,
 						"ProcOwner", ci.ProcOwner,
-						"LogLevel", LogLevel)
+						"LogLevel", ci.LogLevel)
 				}
 				ci.ServeMux = http.NewServeMux()
 			}
@@ -216,13 +205,13 @@ func Create(ci *CreateInfo, s *Service) error {
 	if ci.ProcOwner {
 		s.Logger.Info("Create",
 			"service", s.Name,
-			"LogLevel", LogLevel,
+			"LogLevel", ci.LogLevel,
 			"pid", os.Getpid())
 	} else {
 		s.Running.Store(true)
 		s.Logger.Info("Create",
 			"service", s.Name,
-			"LogLevel", LogLevel)
+			"LogLevel", ci.LogLevel)
 	}
 	return nil
 }

@@ -8,12 +8,18 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/cartesi/rollups-node/internal/advancer/machines"
+	"github.com/cartesi/rollups-node/internal/config"
+
+	"github.com/cartesi/rollups-node/internal/inspect"
 	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/nodemachine"
-	"github.com/cartesi/rollups-node/internal/services/poller"
+	"github.com/cartesi/rollups-node/internal/repository"
+	"github.com/cartesi/rollups-node/pkg/rollupsmachine/cartesimachine"
+	"github.com/cartesi/rollups-node/pkg/service"
 )
 
 var (
@@ -24,13 +30,31 @@ var (
 	ErrNoInputs = errors.New("no inputs")
 )
 
-type Advancer struct {
-	machines   Machines
-	repository Repository
+type IAdvancerRepository interface {
+	// Only needs Id, Index, and RawData fields from the retrieved Inputs.
+	GetUnprocessedInputs(_ context.Context, apps []Address) (map[Address][]*Input, error)
+	StoreAdvanceResult(context.Context, *Input, *nodemachine.AdvanceResult) error
+	UpdateClosedEpochs(_ context.Context, app Address) error
 }
 
-// New instantiates a new Advancer.
-func New(machines Machines, repository Repository) (*Advancer, error) {
+type IAdvancerMachines interface {
+	GetAdvanceMachine(app Address) (machines.AdvanceMachine, bool)
+	UpdateMachines(ctx context.Context) error
+	Apps() []Address
+}
+
+type Advancer struct {
+	repository IAdvancerRepository
+	machines   IAdvancerMachines
+}
+
+type Service struct {
+	service.Service
+	Advancer
+	inspector  *inspect.Inspector
+}
+
+func New(machines IAdvancerMachines, repository IAdvancerRepository) (*Advancer, error) {
 	if machines == nil {
 		return nil, ErrInvalidMachines
 	}
@@ -40,9 +64,80 @@ func New(machines Machines, repository Repository) (*Advancer, error) {
 	return &Advancer{machines: machines, repository: repository}, nil
 }
 
-// Poller instantiates a new poller.Poller using the Advancer.
-func (advancer *Advancer) Poller(pollingInterval time.Duration) (*poller.Poller, error) {
-	return poller.New("advancer", advancer, pollingInterval)
+type CreateInfo struct {
+	service.CreateInfo
+	AdvancerPollingInterval time.Duration
+	PostgresEndpoint        config.Redacted[string]
+	PostgresSslMode         bool
+	Repository              *repository.Database
+	HttpAddress             string
+	HttpPort                int
+	MachineServerVerbosity  config.Redacted[cartesimachine.ServerVerbosity]
+	Machines                *machines.Machines
+}
+
+func (c *CreateInfo) LoadEnv() {
+	c.PostgresEndpoint.Value = config.GetPostgresEndpoint()
+	c.PollInterval = config.GetAdvancerPollingInterval()
+	c.HttpAddress = config.GetHttpAddress()
+	c.HttpPort = config.GetHttpPort()
+	c.MachineServerVerbosity.Value =
+		cartesimachine.ServerVerbosity(config.GetMachineServerVerbosity())
+	c.LogLevel = service.LogLevel(config.GetLogLevel())
+}
+
+func Create(c *CreateInfo, s *Service) error {
+	err := service.Create(&c.CreateInfo, &s.Service)
+	if err != nil {
+		return err
+	}
+
+	if c.Repository == nil {
+		c.Repository, err = repository.Connect(s.Context, c.PostgresEndpoint.Value)
+		if err != nil {
+			return err
+		}
+	}
+	s.repository = c.Repository
+
+	if c.Machines == nil {
+		c.Machines, err = machines.Load(s.Context, c.Repository, c.MachineServerVerbosity.Value)
+		if err != nil {
+			return err
+		}
+	}
+	s.machines = c.Machines
+
+	if s.Service.ServeMux == nil {
+		if c.CreateInfo.ServeMux == nil {
+			c.ServeMux = http.NewServeMux()
+		}
+	}
+	s.Service.ServeMux.Handle("/inspect/{dapp}", http.Handler(s.inspector))
+	s.Service.ServeMux.Handle("/inspect/{dapp}/{payload}", http.Handler(s.inspector))
+
+	return nil
+}
+
+func (s *Service) Alive() bool     { return true }
+func (s *Service) Ready() bool     { return true }
+func (s *Service) Reload() []error { return nil }
+func (s *Service) Tick() []error {
+	if err := s.Step(s.Context); err != nil {
+		return []error{err}
+	}
+	return []error{}
+}
+func (s *Service) Stop(b bool) []error {
+	return nil
+}
+
+func (s *Service) Start(context context.Context, ready chan<- struct{}) error {
+	ready <- struct{}{}
+	return s.Serve()
+}
+func (v *Service) String() string {
+	return v.Name
 }
 
 // Step steps the Advancer for one processing cycle.
@@ -76,7 +171,7 @@ func (advancer *Advancer) Step(ctx context.Context) error {
 
 	// Updates the status of the epochs.
 	for _, app := range apps {
-		err := advancer.repository.UpdateEpochs(ctx, app)
+		err := advancer.repository.UpdateClosedEpochs(ctx, app)
 		if err != nil {
 			return err
 		}
@@ -118,23 +213,3 @@ func (advancer *Advancer) process(ctx context.Context, app Address, inputs []*In
 	return nil
 }
 
-// ------------------------------------------------------------------------------------------------
-
-type Repository interface {
-	// Only needs Id, Index, and RawData fields from the retrieved Inputs.
-	GetUnprocessedInputs(_ context.Context, apps []Address) (map[Address][]*Input, error)
-
-	StoreAdvanceResult(context.Context, *Input, *nodemachine.AdvanceResult) error
-
-	UpdateEpochs(_ context.Context, app Address) error
-}
-
-type Machines interface {
-	GetAdvanceMachine(app Address) (machines.AdvanceMachine, bool)
-	UpdateMachines(ctx context.Context) error
-	Apps() []Address
-}
-
-type Machine interface {
-	Advance(_ context.Context, input []byte, index uint64) (*nodemachine.AdvanceResult, error)
-}

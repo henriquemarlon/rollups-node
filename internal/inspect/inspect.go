@@ -26,7 +26,7 @@ var (
 )
 
 type Inspector struct {
-	machines Machines
+	IInspectMachines
 }
 
 type ReportResponse struct {
@@ -38,15 +38,6 @@ type InspectResponse struct {
 	Exception       string           `json:"exception"`
 	Reports         []ReportResponse `json:"reports"`
 	ProcessedInputs uint64           `json:"processed_input_count"`
-}
-
-// New instantiates a new Inspector.
-func New(machines Machines) (*Inspector, error) {
-	if machines == nil {
-		return nil, ErrInvalidMachines
-	}
-
-	return &Inspector{machines: machines}, nil
 }
 
 func (inspect *Inspector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -146,7 +137,7 @@ func (inspect *Inspector) process(
 	app Address,
 	query []byte) (*nodemachine.InspectResult, error) {
 	// Asserts that the app has an associated machine.
-	machine, exists := inspect.machines.GetInspectMachine(app)
+	machine, exists := inspect.GetInspectMachine(app)
 	if !exists {
 		return nil, fmt.Errorf("%w %s", ErrNoApp, app.String())
 	}
@@ -161,10 +152,10 @@ func (inspect *Inspector) process(
 
 // ------------------------------------------------------------------------------------------------
 
-type Machines interface {
+type IInspectMachines interface {
 	GetInspectMachine(app Address) (machines.InspectMachine, bool)
 }
 
-type Machine interface {
+type IInspectMachine interface {
 	Inspect(_ context.Context, query []byte) (*nodemachine.InspectResult, error)
 }

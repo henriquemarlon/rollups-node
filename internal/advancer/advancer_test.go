@@ -30,7 +30,7 @@ func (s *AdvancerSuite) TestNew() {
 		require := s.Require()
 		machines := newMockMachines()
 		machines.Map[randomAddress()] = &MockMachine{}
-		var repository Repository = &MockRepository{}
+		var repository IAdvancerRepository = &MockRepository{}
 		advancer, err := New(machines, repository)
 		require.NotNil(advancer)
 		require.Nil(err)
@@ -38,8 +38,8 @@ func (s *AdvancerSuite) TestNew() {
 
 	s.Run("InvalidMachines", func() {
 		require := s.Require()
-		var machines Machines = nil
-		var repository Repository = &MockRepository{}
+		var machines IAdvancerMachines = nil
+		var repository IAdvancerRepository = &MockRepository{}
 		advancer, err := New(machines, repository)
 		require.Nil(advancer)
 		require.Error(err)
@@ -50,7 +50,7 @@ func (s *AdvancerSuite) TestNew() {
 		require := s.Require()
 		machines := newMockMachines()
 		machines.Map[randomAddress()] = &MockMachine{}
-		var repository Repository = nil
+		var repository IAdvancerRepository = nil
 		advancer, err := New(machines, repository)
 		require.Nil(advancer)
 		require.Error(err)
@@ -105,12 +105,15 @@ func (s *AdvancerSuite) TestRun() {
 }
 
 func (s *AdvancerSuite) TestProcess() {
-	setup := func() (Machines, *MockRepository, *Advancer, Address) {
+	setup := func() (IAdvancerMachines, *MockRepository, *Advancer, Address) {
 		app := randomAddress()
 		machines := newMockMachines()
 		machines.Map[app] = &MockMachine{}
 		repository := &MockRepository{}
-		advancer := &Advancer{machines, repository}
+		advancer := &Advancer{
+			machines: machines,
+			repository: repository,
+		}
 		return machines, repository, advancer, app
 	}
 
@@ -261,7 +264,7 @@ func (mock *MockRepository) StoreAdvanceResult(
 	return mock.StoreAdvanceError
 }
 
-func (mock *MockRepository) UpdateEpochs(_ context.Context, _ Address) error {
+func (mock *MockRepository) UpdateClosedEpochs(_ context.Context, _ Address) error {
 	return mock.UpdateEpochsError
 }
 

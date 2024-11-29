@@ -5,16 +5,15 @@ package node
 
 import (
 	"fmt"
-	"log/slog"
 	"net/http"
 
-	advancerservice "github.com/cartesi/rollups-node/internal/advancer/service"
+	advancerservice "github.com/cartesi/rollups-node/internal/advancer"
 	claimerservice "github.com/cartesi/rollups-node/internal/claimer"
 	"github.com/cartesi/rollups-node/internal/config"
-	evmreaderservice "github.com/cartesi/rollups-node/internal/evmreader/service"
+	readerservice "github.com/cartesi/rollups-node/internal/evmreader"
 	"github.com/cartesi/rollups-node/internal/repository"
 	"github.com/cartesi/rollups-node/internal/services"
-	"github.com/cartesi/rollups-node/internal/validator"
+	validatorservice "github.com/cartesi/rollups-node/internal/validator"
 	"github.com/cartesi/rollups-node/pkg/service"
 )
 
@@ -62,30 +61,69 @@ func newHttpService(c config.NodeConfig, serveMux *http.ServeMux) services.Servi
 }
 
 func newEvmReaderService(c config.NodeConfig, database *repository.Database) services.Service {
-	return evmreaderservice.NewEvmReaderService(
-		c.BlockchainHttpEndpoint.Value,
-		c.BlockchainWsEndpoint.Value,
-		database,
-		c.EvmReaderRetryPolicyMaxRetries,
-		c.EvmReaderRetryPolicyMaxDelay,
-	)
+	readerService := readerservice.Service{}
+	createInfo := readerservice.CreateInfo{
+		CreateInfo: service.CreateInfo{
+			Name:      "reader",
+			Impl:      &readerService,
+			ProcOwner: true, // TODO: Remove this after updating supervisor
+			LogLevel:  service.LogLevel(c.LogLevel),
+		},
+		Database: database,
+	}
+
+	err := readerservice.Create(&createInfo, &readerService)
+	if err != nil {
+		readerService.Logger.Error("Fatal",
+			"service", readerService.Name,
+			"error", err)
+	}
+	return &readerService
 }
 
 func newAdvancerService(c config.NodeConfig, database *repository.Database, serveMux *http.ServeMux) services.Service {
-	return advancerservice.NewAdvancerService(
-		database,
-		serveMux,
-		c.AdvancerPollingInterval,
-		c.MachineServerVerbosity,
-	)
+	advancerService := advancerservice.Service{}
+	createInfo := advancerservice.CreateInfo{
+		CreateInfo: service.CreateInfo{
+			Name:         "advancer",
+			PollInterval: c.AdvancerPollingInterval,
+			Impl:         &advancerService,
+			ProcOwner:    true, // TODO: Remove this after updating supervisor
+			LogLevel:     service.LogLevel(c.LogLevel),
+			ServeMux: serveMux,
+		},
+		Repository: database,
+	}
+
+	err := advancerservice.Create(&createInfo, &advancerService)
+	if err != nil {
+		advancerService.Logger.Error("Fatal",
+			"service", advancerService.Name,
+			"error", err)
+	}
+	return &advancerService
 }
 
 func newValidatorService(c config.NodeConfig, database *repository.Database) services.Service {
-	return validator.NewValidatorService(
-		database,
-		uint64(c.ContractsInputBoxDeploymentBlockNumber),
-		c.ValidatorPollingInterval,
-	)
+	validatorService := validatorservice.Service{}
+	createInfo := validatorservice.CreateInfo{
+		CreateInfo: service.CreateInfo{
+			Name:         "validator",
+			PollInterval: c.ValidatorPollingInterval,
+			Impl:         &validatorService,
+			ProcOwner:    true, // TODO: Remove this after updating supervisor
+			LogLevel:     service.LogLevel(c.LogLevel),
+		},
+		Repository: database,
+	}
+
+	err := validatorservice.Create(createInfo, &validatorService)
+	if err != nil {
+		validatorService.Logger.Error("Fatal",
+			"service", validatorService.Name,
+			"error", err)
+	}
+	return &validatorService
 }
 
 func newClaimerService(c config.NodeConfig, database *repository.Database) services.Service {
@@ -101,12 +139,7 @@ func newClaimerService(c config.NodeConfig, database *repository.Database) servi
 			PollInterval: c.ClaimerPollingInterval,
 			Impl:         &claimerService,
 			ProcOwner:    true, // TODO: Remove this after updating supervisor
-			LogLevel: map[slog.Level]string{ // reverse it to string
-				slog.LevelDebug: "debug",
-				slog.LevelInfo:  "info",
-				slog.LevelWarn:  "warn",
-				slog.LevelError: "error",
-			}[c.LogLevel],
+			LogLevel:     service.LogLevel(c.LogLevel),
 		},
 	}
 

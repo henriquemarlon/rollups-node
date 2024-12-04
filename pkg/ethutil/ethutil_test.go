@@ -5,6 +5,7 @@ package ethutil
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"sync"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/pkg/addresses"
 	"github.com/cartesi/rollups-node/pkg/contracts/inputs"
+	"github.com/cartesi/rollups-node/pkg/service"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/stretchr/testify/suite"
@@ -51,7 +53,8 @@ func (s *EthUtilSuite) SetupTest() {
 	s.book, err = addresses.GetBookFromFile("../../deployment.json") // FIXME
 	s.Require().Nil(err)
 
-	s.machineDir, err = snapshot.CreateDefaultMachineSnapshot()
+	logger := service.NewLogger(slog.LevelDebug, true)
+	s.machineDir, err = snapshot.CreateDefaultMachineSnapshot(logger)
 	s.Require().Nil(err)
 
 	templateHash, err := snapshot.ReadHash(s.machineDir)

@@ -63,6 +63,8 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/lmittmann/tint"
 )
 
 var (
@@ -77,11 +79,22 @@ type ServiceImpl interface {
 	Stop(bool) []error
 }
 
+type IService interface {
+	Alive() bool
+	Ready() bool
+	Reload() []error
+	Tick() []error
+	Stop(bool) []error
+	Serve() error
+	String() string
+}
+
 // CreateInfo stores initialization data for the Create function
 type CreateInfo struct {
 	Name                 string
 	Impl                 ServiceImpl
 	LogLevel             LogLevel
+	LogPretty            bool
 	ProcOwner            bool
 	ServeMux             *http.ServeMux
 	Context              context.Context
@@ -110,61 +123,41 @@ type Service struct {
 
 // Create a service by:
 //   - using values from s if non zero,
-//   - using values from ci,
+//   - using values from c,
 //   - using default values when applicable
-func Create(ci *CreateInfo, s *Service) error {
-	if ci == nil {
+func Create(c *CreateInfo, s *Service) error {
+	if c == nil || c.Impl == nil || c.Impl == s || s == nil {
 		return ErrInvalid
 	}
 
-	if s == nil {
-		return ErrInvalid
-	}
-
-	// running
 	s.Running.Store(false)
-
-	// name
-	if s.Name == "" {
-		s.Name = ci.Name
-	}
-
-	// impl
-	if s.Impl == nil {
-		s.Impl = ci.Impl
-	}
+	s.Name = c.Name
+	s.Impl = c.Impl
 
 	// log
 	if s.Logger == nil {
-		// opts := &tint.Options{
-		// 	Level:     LogLevel,
-		// 	AddSource: LogLevel == slog.LevelDebug,
-		// 	// RFC3339 with milliseconds and without timezone
-		// 	TimeFormat: "2006-01-02T15:04:05.000",
-		// }
-		// handler := tint.NewHandler(os.Stdout, opts)
-		// s.Logger = slog.New(handler)
-		s.Logger = slog.Default()
+		s.Logger = NewLogger(slog.Level(c.LogLevel), c.LogPretty)
+		s.Logger = s.Logger.With("service", s.Name)
 	}
 
 	// context and cancelation
 	if s.Context == nil {
-		if ci.Context == nil {
-			ci.Context = context.Background()
+		if c.Context == nil {
+			c.Context = context.Background()
 		}
-		s.Context = ci.Context
+		s.Context = c.Context
 	}
 	if s.Cancel == nil {
-		s.Context, s.Cancel = context.WithCancel(ci.Context)
+		s.Context, s.Cancel = context.WithCancel(c.Context)
 	}
 
-	if ci.ProcOwner {
+	if c.ProcOwner {
 		// ticker
 		if s.Ticker == nil {
-			if ci.PollInterval == 0 {
-				ci.PollInterval = 1000 * time.Millisecond
+			if c.PollInterval == 0 {
+				c.PollInterval = 60 * time.Second
 			}
-			s.PollInterval = ci.PollInterval
+			s.PollInterval = c.PollInterval
 			s.Ticker = time.NewTicker(s.PollInterval)
 		}
 
@@ -180,38 +173,35 @@ func Create(ci *CreateInfo, s *Service) error {
 	}
 
 	// telemetry
-	if ci.TelemetryCreate {
+	if c.TelemetryCreate {
 		if s.ServeMux == nil {
-			if ci.ServeMux == nil {
-				if !ci.ProcOwner {
+			if c.ServeMux == nil {
+				if !c.ProcOwner {
 					s.Logger.Warn("Create:Created a new ServeMux",
-						"service", s.Name,
-						"ProcOwner", ci.ProcOwner,
-						"LogLevel", ci.LogLevel)
+						"ProcOwner", c.ProcOwner,
+						"LogLevel", c.LogLevel)
 				}
-				ci.ServeMux = http.NewServeMux()
+				c.ServeMux = http.NewServeMux()
 			}
-			s.ServeMux = ci.ServeMux
+			s.ServeMux = c.ServeMux
 		}
-		if ci.TelemetryAddress == "" {
-			ci.TelemetryAddress = ":8080"
+		if c.TelemetryAddress == "" {
+			c.TelemetryAddress = ":8080"
 		}
 		s.HTTPServer, s.HTTPServerFunc = s.CreateDefaultTelemetry(
-			ci.TelemetryAddress, 3, 5*time.Second, s.ServeMux)
+			c.TelemetryAddress, 3, 5*time.Second, s.ServeMux)
 		go s.HTTPServerFunc()
 	}
 
 	// ProcOwner will be ready on the call to Serve
-	if ci.ProcOwner {
+	if c.ProcOwner {
 		s.Logger.Info("Create",
-			"service", s.Name,
-			"LogLevel", ci.LogLevel,
+			"LogLevel", c.LogLevel,
 			"pid", os.Getpid())
 	} else {
 		s.Running.Store(true)
 		s.Logger.Info("Create",
-			"service", s.Name,
-			"LogLevel", ci.LogLevel)
+			"LogLevel", c.LogLevel)
 	}
 	return nil
 }
@@ -231,12 +221,10 @@ func (s *Service) Reload() []error {
 
 	if len(errs) > 0 {
 		s.Logger.Error("Reload",
-			"service", s.Name,
 			"duration", elapsed,
 			"error", errs)
 	} else {
 		s.Logger.Info("Reload",
-			"service", s.Name,
 			"duration", elapsed)
 	}
 	return errs
@@ -249,12 +237,10 @@ func (s *Service) Tick() []error {
 
 	if len(errs) > 0 {
 		s.Logger.Error("Tick",
-			"service", s.Name,
 			"duration", elapsed,
 			"error", errs)
 	} else {
 		s.Logger.Debug("Tick",
-			"service", s.Name,
 			"duration", elapsed)
 	}
 	return errs
@@ -271,13 +257,11 @@ func (s *Service) Stop(force bool) []error {
 	s.Running.Store(false)
 	if len(errs) > 0 {
 		s.Logger.Error("Stop",
-			"service", s.Name,
 			"force", force,
 			"duration", elapsed,
 			"error", errs)
 	} else {
 		s.Logger.Info("Stop",
-			"service", s.Name,
 			"force", force,
 			"duration", elapsed)
 	}
@@ -302,6 +286,43 @@ func (s *Service) Serve() error {
 	return nil
 }
 
+func (s *Service) String() string {
+	return s.Name
+}
+
+func NewLogger(level slog.Level, pretty bool) *slog.Logger {
+	logger := &slog.Logger{}
+	if pretty {
+		opts := &tint.Options{
+			Level:     level,
+			AddSource: level == slog.LevelDebug,
+			// RFC3339 with milliseconds and without timezone
+			TimeFormat: "2006-01-02T15:04:05.000",
+			NoColor:    !pretty,
+		}
+		handler := tint.NewHandler(os.Stdout, opts)
+		logger = slog.New(handler)
+	} else {
+		logger = slog.Default()
+	}
+	return logger
+}
+
+func WithTimeout(limit time.Duration, fn func() error) error {
+	ch := make(chan error)
+	deadline := time.After(limit)
+	go func() {
+		ch <- fn()
+	}()
+
+	select {
+	case err := <-ch:
+		return err
+	case <-deadline:
+		return fmt.Errorf("Time limit exceded")
+	}
+}
+
 // Telemetry
 func (s *Service) CreateDefaultHandlers(prefix string) {
 	s.ServeMux.Handle(prefix+"/readyz", http.HandlerFunc(s.ReadyHandler))
@@ -315,8 +336,9 @@ func (s *Service) CreateDefaultTelemetry(
 	mux *http.ServeMux,
 ) (*http.Server, func() error) {
 	server := &http.Server{
-		Addr:    addr,
-		Handler: mux,
+		Addr:     addr,
+		Handler:  mux,
+		ErrorLog: slog.NewLogLogger(s.Logger.Handler(), slog.LevelError),
 	}
 	return server, func() error {
 		s.Logger.Info("Telemetry", "service", s.Name, "addr", addr)
@@ -327,7 +349,6 @@ func (s *Service) CreateDefaultTelemetry(
 				return nil
 			default:
 				s.Logger.Error("http",
-					"service", s.Name,
 					"error", err,
 					"try", retry+1,
 					"maxRetries", maxRetries,

@@ -27,6 +27,7 @@ var (
 
 type Inspector struct {
 	IInspectMachines
+	Logger *slog.Logger
 }
 
 type ReportResponse struct {
@@ -51,7 +52,7 @@ func (inspect *Inspector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if r.PathValue("dapp") == "" {
-		slog.Info("inspect: Bad request",
+		inspect.Logger.Info("Bad request",
 			"err", "Missing application address")
 		http.Error(w, "Missing application address", http.StatusBadRequest)
 		return
@@ -61,21 +62,21 @@ func (inspect *Inspector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
 		payload, err = io.ReadAll(r.Body)
 		if err != nil {
-			slog.Info("inspect: Bad request",
+			inspect.Logger.Info("Bad request",
 				"err", err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 	} else {
 		if r.PathValue("payload") == "" {
-			slog.Info("inspect: Bad request",
+			inspect.Logger.Info("Bad request",
 				"err", "Missing payload")
 			http.Error(w, "Missing payload", http.StatusBadRequest)
 			return
 		}
 		decodedValue, err := url.PathUnescape(r.PathValue("payload"))
 		if err != nil {
-			slog.Error("inspect: Internal server error",
+			inspect.Logger.Error("Internal server error",
 				"err", err)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -83,15 +84,15 @@ func (inspect *Inspector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		payload = []byte(decodedValue)
 	}
 
-	slog.Info("inspect: Got new inspect request", "application", dapp.String())
+	inspect.Logger.Info("Got new inspect request", "application", dapp.String())
 	result, err := inspect.process(r.Context(), dapp, payload)
 	if err != nil {
 		if errors.Is(err, ErrNoApp) {
-			slog.Error("inspect: Application not found", "address", dapp, "err", err)
+			inspect.Logger.Error("Application not found", "address", dapp, "err", err)
 			http.Error(w, "Application not found", http.StatusNotFound)
 			return
 		}
-		slog.Error("inspect: Internal server error", "err", err)
+		inspect.Logger.Error("Internal server error", "err", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -121,12 +122,12 @@ func (inspect *Inspector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(response)
 	if err != nil {
-		slog.Error("inspect: Internal server error",
+		inspect.Logger.Error("Internal server error",
 			"err", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	slog.Info("inspect: Request executed",
+	inspect.Logger.Info("Request executed",
 		"status", status,
 		"application", dapp.String())
 }

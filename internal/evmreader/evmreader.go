@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"math/big"
 	"time"
 
@@ -30,21 +29,29 @@ import (
 
 type CreateInfo struct {
 	service.CreateInfo
-
 	model.EvmReaderPersistentConfig
 
-	DefaultBlockString     string
 	PostgresEndpoint       config.Redacted[string]
 	BlockchainHttpEndpoint config.Redacted[string]
 	BlockchainWsEndpoint   config.Redacted[string]
 	Database               *repository.Database
 	MaxRetries             uint64
 	MaxDelay               time.Duration
+	MaxStartupTime         time.Duration
 }
 
 type Service struct {
 	service.Service
-	reader EvmReader
+
+	client                  EthClient
+	wsClient                EthWsClient
+	inputSource             InputSource
+	repository              EvmReaderRepository
+	contractFactory         ContractFactory
+	inputBoxDeploymentBlock uint64
+	defaultBlock            DefaultBlock
+	epochLengthCache        map[Address]uint64
+	hasEnabledApps          bool
 }
 
 func (c *CreateInfo) LoadEnv() {
@@ -53,6 +60,9 @@ func (c *CreateInfo) LoadEnv() {
 	c.MaxDelay = config.GetEvmReaderRetryPolicyMaxDelay()
 	c.MaxRetries = config.GetEvmReaderRetryPolicyMaxRetries()
 	c.PostgresEndpoint.Value = config.GetPostgresEndpoint()
+	c.LogLevel = service.LogLevel(config.GetLogLevel())
+	c.LogPretty = config.GetLogPrettyEnabled()
+	c.MaxStartupTime = config.GetMaxStartupTime()
 
 	// persistent
 	c.DefaultBlock = config.GetEvmReaderDefaultBlock()
@@ -69,50 +79,47 @@ func Create(c *CreateInfo, s *Service) error {
 		return err
 	}
 
-	c.DefaultBlock, err = config.ToDefaultBlockFromString(c.DefaultBlockString)
-	if err != nil {
-		return err
-	}
-
-	client, err := ethclient.DialContext(s.Context, c.BlockchainHttpEndpoint.Value)
-	if err != nil {
-		return err
-	}
-
-	wsClient, err := ethclient.DialContext(s.Context, c.BlockchainWsEndpoint.Value)
-	if err != nil {
-		return err
-	}
-
-	if c.Database == nil {
-		c.Database, err = repository.Connect(s.Context, c.PostgresEndpoint.Value)
+	return service.WithTimeout(c.MaxStartupTime, func() error {
+		client, err := ethclient.DialContext(s.Context, c.BlockchainHttpEndpoint.Value)
 		if err != nil {
 			return err
 		}
-	}
 
-	err = s.SetupPersistentConfig(s.Context, c.Database, &c.EvmReaderPersistentConfig)
-	if err != nil {
-		return err
-	}
+		wsClient, err := ethclient.DialContext(s.Context, c.BlockchainWsEndpoint.Value)
+		if err != nil {
+			return err
+		}
 
-	inputSource, err := NewInputSourceAdapter(c.InputBoxAddress, client)
-	if err != nil {
-		return err
-	}
+		if c.Database == nil {
+			c.Database, err = repository.Connect(s.Context, c.PostgresEndpoint.Value, s.Logger)
+			if err != nil {
+				return err
+			}
+		}
 
-	contractFactory := NewEvmReaderContractFactory(client, c.MaxRetries, c.MaxDelay)
+		err = s.SetupPersistentConfig(s.Context, c.Database, &c.EvmReaderPersistentConfig)
+		if err != nil {
+			return err
+		}
 
-	s.reader = NewEvmReader(
-		NewEhtClientWithRetryPolicy(client, c.MaxRetries, c.MaxDelay),
-		NewEthWsClientWithRetryPolicy(wsClient, c.MaxRetries, c.MaxDelay),
-		NewInputSourceWithRetryPolicy(inputSource, c.MaxRetries, c.MaxDelay),
-		c.Database,
-		c.InputBoxDeploymentBlock,
-		c.DefaultBlock,
-		contractFactory,
-	)
-	return nil
+		inputSource, err := NewInputSourceAdapter(common.Address(c.InputBoxAddress), client)
+		if err != nil {
+			return err
+		}
+
+		contractFactory := NewEvmReaderContractFactory(client, c.MaxRetries, c.MaxDelay)
+
+		s.client = NewEhtClientWithRetryPolicy(client, c.MaxRetries, c.MaxDelay, s.Logger)
+		s.wsClient = NewEthWsClientWithRetryPolicy(wsClient, c.MaxRetries, c.MaxDelay, s.Logger)
+		s.inputSource = NewInputSourceWithRetryPolicy(inputSource, c.MaxRetries, c.MaxDelay, s.Logger)
+		s.repository = c.Database
+		s.inputBoxDeploymentBlock = c.InputBoxDeploymentBlock
+		s.defaultBlock = c.DefaultBlock
+		s.contractFactory = contractFactory
+		s.hasEnabledApps = true
+
+		return nil
+	})
 }
 
 func (s *Service) Alive() bool {
@@ -135,18 +142,20 @@ func (s *Service) Tick() []error {
 	return []error{}
 }
 
-func (s *Service) Start(context context.Context, ready chan<- struct{}) error {
-	go s.reader.Run(s.Context, ready)
-	return s.Serve()
+func (s *Service) Serve() error {
+	ready := make(chan struct{}, 1)
+	go s.Run(s.Context, ready)
+	return s.Service.Serve()
 }
+
 func (s *Service) String() string {
 	return s.Name
 }
 
 func (me *Service) SetupPersistentConfig(
-	ctx      context.Context,
+	ctx context.Context,
 	database *repository.Database,
-	c        *model.EvmReaderPersistentConfig,
+	c *model.EvmReaderPersistentConfig,
 ) error {
 	err := database.SelectEvmReaderConfig(ctx, c)
 	if err == pgx.ErrNoRows {
@@ -155,7 +164,7 @@ func (me *Service) SetupPersistentConfig(
 			return err
 		}
 	} else if err == nil {
-		me.Logger.Info("Node was already configured. Using previous persistent config", "config", c)
+		me.Logger.Warn("Node was already configured. Using previous persistent config", "config", c)
 	} else {
 		me.Logger.Error("Could not retrieve persistent config from Database. %w", "error", err)
 	}
@@ -245,48 +254,7 @@ type application struct {
 	consensusContract   ConsensusContract
 }
 
-// EvmReader reads Input Added, Claim Submitted and
-// Output Executed events from the blockchain
-type EvmReader struct {
-	client                  EthClient
-	wsClient                EthWsClient
-	inputSource             InputSource
-	repository              EvmReaderRepository
-	contractFactory         ContractFactory
-	inputBoxDeploymentBlock uint64
-	defaultBlock            DefaultBlock
-	epochLengthCache        map[Address]uint64
-	hasEnabledApps          bool
-}
-
-func (r *EvmReader) String() string {
-	return "evmreader"
-}
-
-// Creates a new EvmReader
-func NewEvmReader(
-	client EthClient,
-	wsClient EthWsClient,
-	inputSource InputSource,
-	repository EvmReaderRepository,
-	inputBoxDeploymentBlock uint64,
-	defaultBlock DefaultBlock,
-	contractFactory ContractFactory,
-) EvmReader {
-	return EvmReader{
-		client:                  client,
-		wsClient:                wsClient,
-		inputSource:             inputSource,
-		repository:              repository,
-		inputBoxDeploymentBlock: inputBoxDeploymentBlock,
-		defaultBlock:            defaultBlock,
-		contractFactory:         contractFactory,
-		hasEnabledApps:          true,
-	}
-}
-
-func (r *EvmReader) Run(ctx context.Context, ready chan<- struct{}) error {
-
+func (r *Service) Run(ctx context.Context, ready chan struct{}) error {
 	// Initialize epochLength cache
 	r.epochLengthCache = make(map[Address]uint64)
 
@@ -297,20 +265,20 @@ func (r *EvmReader) Run(ctx context.Context, ready chan<- struct{}) error {
 		if _, ok := err.(*SubscriptionError); !ok {
 			return err
 		}
-		slog.Error(err.Error())
-		slog.Info("evmreader: Restarting subscription")
+		r.Logger.Error(err.Error())
+		r.Logger.Info("Restarting subscription")
 	}
 }
 
 // watchForNewBlocks watches for new blocks and reads new inputs based on the
 // default block configuration, which have not been processed yet.
-func (r *EvmReader) watchForNewBlocks(ctx context.Context, ready chan<- struct{}) error {
+func (r *Service) watchForNewBlocks(ctx context.Context, ready chan<- struct{}) error {
 	headers := make(chan *types.Header)
 	sub, err := r.wsClient.SubscribeNewHead(ctx, headers)
 	if err != nil {
 		return fmt.Errorf("could not start subscription: %v", err)
 	}
-	slog.Info("evmreader: Subscribed to new block events")
+	r.Logger.Info("Subscribed to new block events")
 	ready <- struct{}{}
 	defer sub.Unsubscribe()
 
@@ -323,13 +291,13 @@ func (r *EvmReader) watchForNewBlocks(ctx context.Context, ready chan<- struct{}
 		case header := <-headers:
 
 			// Every time a new block arrives
-			slog.Debug("evmreader: New block header received", "blockNumber", header.Number, "blockHash", header.Hash())
+			r.Logger.Debug("New block header received", "blockNumber", header.Number, "blockHash", header.Hash())
 
-			slog.Debug("evmreader: Retrieving enabled applications")
+			r.Logger.Debug("Retrieving enabled applications")
 			// Get All Applications
 			runningApps, err := r.repository.GetAllRunningApplications(ctx)
 			if err != nil {
-				slog.Error("evmreader: Error retrieving running applications",
+				r.Logger.Error("Error retrieving running applications",
 					"error",
 					err,
 				)
@@ -338,13 +306,13 @@ func (r *EvmReader) watchForNewBlocks(ctx context.Context, ready chan<- struct{}
 
 			if len(runningApps) == 0 {
 				if r.hasEnabledApps {
-					slog.Info("evmreader: No registered applications enabled")
+					r.Logger.Info("No registered applications enabled")
 				}
 				r.hasEnabledApps = false
 				continue
 			}
 			if !r.hasEnabledApps {
-				slog.Info("evmreader: Found enabled applications")
+				r.Logger.Info("Found enabled applications")
 			}
 			r.hasEnabledApps = true
 
@@ -353,7 +321,7 @@ func (r *EvmReader) watchForNewBlocks(ctx context.Context, ready chan<- struct{}
 			for _, app := range runningApps {
 				applicationContract, consensusContract, err := r.getAppContracts(app)
 				if err != nil {
-					slog.Error("evmreader: Error retrieving application contracts", "app", app, "error", err)
+					r.Logger.Error("Error retrieving application contracts", "app", app, "error", err)
 					continue
 				}
 				apps = append(apps, application{Application: app,
@@ -362,7 +330,7 @@ func (r *EvmReader) watchForNewBlocks(ctx context.Context, ready chan<- struct{}
 			}
 
 			if len(apps) == 0 {
-				slog.Info("evmreader: No correctly configured applications running")
+				r.Logger.Info("No correctly configured applications running")
 				continue
 			}
 
@@ -373,14 +341,14 @@ func (r *EvmReader) watchForNewBlocks(ctx context.Context, ready chan<- struct{}
 					r.defaultBlock,
 				)
 				if err != nil {
-					slog.Error("evmreader: Error fetching most recent block",
+					r.Logger.Error("Error fetching most recent block",
 						"default block", r.defaultBlock,
 						"error", err)
 					continue
 				}
 				blockNumber = mostRecentHeader.Number.Uint64()
 
-				slog.Debug(fmt.Sprintf("evmreader: Using block %d and not %d because of commitment policy: %s",
+				r.Logger.Debug(fmt.Sprintf("Using block %d and not %d because of commitment policy: %s",
 					mostRecentHeader.Number.Uint64(), header.Number.Uint64(), r.defaultBlock))
 			}
 
@@ -396,7 +364,7 @@ func (r *EvmReader) watchForNewBlocks(ctx context.Context, ready chan<- struct{}
 
 // fetchMostRecentHeader fetches the most recent header up till the
 // given default block
-func (r *EvmReader) fetchMostRecentHeader(
+func (r *Service) fetchMostRecentHeader(
 	ctx context.Context,
 	defaultBlock DefaultBlock,
 ) (*types.Header, error) {
@@ -431,7 +399,7 @@ func (r *EvmReader) fetchMostRecentHeader(
 
 // getAppContracts retrieves the ApplicationContract and ConsensusContract for a given Application.
 // Also validates if IConsensus configuration matches the blockchain registered one
-func (r *EvmReader) getAppContracts(app Application,
+func (r *Service) getAppContracts(app Application,
 ) (ApplicationContract, ConsensusContract, error) {
 	applicationContract, err := r.contractFactory.NewApplication(app.ContractAddress)
 	if err != nil {

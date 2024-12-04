@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 
 	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/jackc/pgx/v5"
@@ -184,7 +183,7 @@ func (pg *Database) GetLastInputOutputsHash(
 	err = pg.db.QueryRow(ctx, query, args).Scan(&outputHash)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			slog.Warn(
+			pg.Logger.Warn(
 				"no inputs",
 				"service", "repository",
 				"epoch", epoch.Index,

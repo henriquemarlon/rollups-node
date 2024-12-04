@@ -3,8 +3,10 @@
 package evmreader
 
 import (
+	"log/slog"
 	"time"
 
+	"github.com/cartesi/rollups-node/pkg/service"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
@@ -43,7 +45,8 @@ func (f *EvmReaderContractFactory) NewApplication(
 		return nil, err
 	}
 
-	return NewApplicationWithRetryPolicy(applicationContract, f.maxRetries, f.maxDelay), nil
+	logger := service.NewLogger(slog.LevelDebug, true)
+	return NewApplicationWithRetryPolicy(applicationContract, f.maxRetries, f.maxDelay, logger), nil
 
 }
 
@@ -51,6 +54,7 @@ func (f *EvmReaderContractFactory) NewIConsensus(
 	address common.Address,
 ) (ConsensusContract, error) {
 
+	logger := service.NewLogger(slog.LevelDebug, true)
 	delegator, ok := f.iConsensusCache[address]
 	if !ok {
 		// Building a contract does not fail due to network errors.
@@ -60,7 +64,7 @@ func (f *EvmReaderContractFactory) NewIConsensus(
 			return nil, err
 		}
 
-		delegator = NewConsensusWithRetryPolicy(consensus, f.maxRetries, f.maxDelay)
+		delegator = NewConsensusWithRetryPolicy(consensus, f.maxRetries, f.maxDelay, logger)
 
 		f.iConsensusCache[address] = delegator
 	}

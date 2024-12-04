@@ -7,6 +7,7 @@ import (
 )
 
 type LogLevel slog.Level
+
 func (me LogLevel) String() string {
 	return slog.Level(me).String()
 }
@@ -25,5 +26,5 @@ func (me *LogLevel) Set(s string) error {
 	}
 }
 func (me *LogLevel) Type() string {
-	return "service.LogLevel"
+	return "LogLevel"
 }

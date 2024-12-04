@@ -4,6 +4,7 @@
 package evmreader
 
 import (
+	"log/slog"
 	"time"
 
 	"github.com/cartesi/rollups-node/internal/services/retry"
@@ -16,17 +17,20 @@ type ApplicationRetryPolicyDelegator struct {
 	delegate          ApplicationContract
 	maxRetries        uint64
 	delayBetweenCalls time.Duration
+	logger            *slog.Logger
 }
 
 func NewApplicationWithRetryPolicy(
 	delegate ApplicationContract,
 	maxRetries uint64,
 	delayBetweenCalls time.Duration,
+	logger            *slog.Logger,
 ) *ApplicationRetryPolicyDelegator {
 	return &ApplicationRetryPolicyDelegator{
 		delegate:          delegate,
 		maxRetries:        maxRetries,
 		delayBetweenCalls: delayBetweenCalls,
+		logger: logger,
 	}
 }
 
@@ -34,6 +38,7 @@ func (d *ApplicationRetryPolicyDelegator) GetConsensus(opts *bind.CallOpts,
 ) (common.Address, error) {
 	return retry.CallFunctionWithRetryPolicy(d.delegate.GetConsensus,
 		opts,
+		d.logger,
 		d.maxRetries,
 		d.delayBetweenCalls,
 		"Application::GetConsensus",
@@ -45,6 +50,7 @@ func (d *ApplicationRetryPolicyDelegator) RetrieveOutputExecutionEvents(
 ) ([]*iapplication.IApplicationOutputExecuted, error) {
 	return retry.CallFunctionWithRetryPolicy(d.delegate.RetrieveOutputExecutionEvents,
 		opts,
+		d.logger,
 		d.maxRetries,
 		d.delayBetweenCalls,
 		"Application::RetrieveOutputExecutionEvents",

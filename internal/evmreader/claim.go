@@ -6,7 +6,6 @@ package evmreader
 import (
 	"cmp"
 	"context"
-	"log/slog"
 
 	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/pkg/contracts/iconsensus"
@@ -14,13 +13,13 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-func (r *EvmReader) checkForClaimStatus(
+func (r *Service) checkForClaimStatus(
 	ctx context.Context,
 	apps []application,
 	mostRecentBlockNumber uint64,
 ) {
 
-	slog.Debug("evmreader: Checking for new Claim Acceptance Events")
+	r.Logger.Debug("Checking for new Claim Acceptance Events")
 
 	// Classify them by lastClaimCheck block
 	appsIndexedByLastCheck := indexApps(keyByLastClaimCheck, apps)
@@ -37,7 +36,7 @@ func (r *EvmReader) checkForClaimStatus(
 
 		if mostRecentBlockNumber > lastClaimCheck {
 
-			slog.Debug("evmreader: Checking claim acceptance for applications",
+			r.Logger.Debug("Checking claim acceptance for applications",
 				"apps", appAddresses,
 				"last claim check block", lastClaimCheck,
 				"most recent block", mostRecentBlockNumber)
@@ -45,14 +44,14 @@ func (r *EvmReader) checkForClaimStatus(
 			r.readAndUpdateClaims(ctx, apps, lastClaimCheck, mostRecentBlockNumber)
 
 		} else if mostRecentBlockNumber < lastClaimCheck {
-			slog.Warn(
-				"evmreader: Not reading claim acceptance: most recent block is lower than the last processed one", //nolint:lll
+			r.Logger.Warn(
+				"Not reading claim acceptance: most recent block is lower than the last processed one", //nolint:lll
 				"apps", appAddresses,
 				"last claim check block", lastClaimCheck,
 				"most recent block", mostRecentBlockNumber,
 			)
 		} else {
-			slog.Warn("evmreader: Not reading claim acceptance: already checked the most recent blocks",
+			r.Logger.Warn("Not reading claim acceptance: already checked the most recent blocks",
 				"apps", appAddresses,
 				"last claim check block", lastClaimCheck,
 				"most recent block", mostRecentBlockNumber,
@@ -62,7 +61,7 @@ func (r *EvmReader) checkForClaimStatus(
 	}
 }
 
-func (r *EvmReader) readAndUpdateClaims(
+func (r *Service) readAndUpdateClaims(
 	ctx context.Context,
 	apps []application,
 	lastClaimCheck, mostRecentBlockNumber uint64,
@@ -90,7 +89,7 @@ func (r *EvmReader) readAndUpdateClaims(
 		appClaimAcceptanceEventMap, err := r.readClaimsAcceptance(
 			ctx, consensusContract, appAddresses, lastClaimCheck+1, mostRecentBlockNumber)
 		if err != nil {
-			slog.Error("evmreader: Error reading claim acceptance status",
+			r.Logger.Error("Error reading claim acceptance status",
 				"apps", apps,
 				"IConsensus", iConsensusAddress,
 				"start", lastClaimCheck,
@@ -110,14 +109,14 @@ func (r *EvmReader) readAndUpdateClaims(
 				previousEpochs, err := r.repository.GetPreviousEpochsWithOpenClaims(
 					ctx, app, claimAcceptance.LastProcessedBlockNumber.Uint64())
 				if err != nil {
-					slog.Error("evmreader: Error retrieving previous submitted claims",
+					r.Logger.Error("Error retrieving previous submitted claims",
 						"app", app,
 						"block", claimAcceptance.LastProcessedBlockNumber.Uint64(),
 						"error", err)
 					continue APP_LOOP
 				}
 				if len(previousEpochs) > 0 {
-					slog.Error("evmreader: Application got 'not accepted' claims. It is in an invalid state",
+					r.Logger.Error("Application got 'not accepted' claims. It is in an invalid state",
 						"claim last block", claimAcceptance.LastProcessedBlockNumber,
 						"app", app)
 					continue APP_LOOP
@@ -130,7 +129,7 @@ func (r *EvmReader) readAndUpdateClaims(
 						claimAcceptance.LastProcessedBlockNumber.Uint64()),
 					app)
 				if err != nil {
-					slog.Error("evmreader: Error retrieving Epoch",
+					r.Logger.Error("Error retrieving Epoch",
 						"app", app,
 						"block", claimAcceptance.LastProcessedBlockNumber.Uint64(),
 						"error", err)
@@ -139,16 +138,16 @@ func (r *EvmReader) readAndUpdateClaims(
 
 				// Check Epoch
 				if epoch == nil {
-					slog.Error(
-						"evmreader: Found claim acceptance event for an unknown epoch. Application is in an invalid state", //nolint:lll
+					r.Logger.Error(
+						"Found claim acceptance event for an unknown epoch. Application is in an invalid state", //nolint:lll
 						"app", app,
 						"claim last block", claimAcceptance.LastProcessedBlockNumber,
 						"hash", claimAcceptance.Claim)
 					continue APP_LOOP
 				}
 				if epoch.ClaimHash == nil {
-					slog.Warn(
-						"evmreader: Found claim acceptance event, but claim hasn't been calculated yet",
+					r.Logger.Warn(
+						"Found claim acceptance event, but claim hasn't been calculated yet",
 						"app", app,
 						"lastBlock", claimAcceptance.LastProcessedBlockNumber,
 					)
@@ -156,7 +155,7 @@ func (r *EvmReader) readAndUpdateClaims(
 				}
 				if claimAcceptance.Claim != *epoch.ClaimHash ||
 					claimAcceptance.LastProcessedBlockNumber.Uint64() != epoch.LastBlock {
-					slog.Error("evmreader: Accepted Claim does not match actual Claim. Application is in an invalid state", //nolint:lll
+					r.Logger.Error("Accepted Claim does not match actual Claim. Application is in an invalid state", //nolint:lll
 						"app", app,
 						"lastBlock", epoch.LastBlock,
 						"hash", epoch.ClaimHash)
@@ -164,7 +163,7 @@ func (r *EvmReader) readAndUpdateClaims(
 					continue APP_LOOP
 				}
 				if epoch.Status == EpochStatusClaimAccepted {
-					slog.Debug("evmreader: Claim already accepted. Skipping",
+					r.Logger.Debug("Claim already accepted. Skipping",
 						"app", app,
 						"block", claimAcceptance.LastProcessedBlockNumber.Uint64(),
 						"claimStatus", epoch.Status,
@@ -174,7 +173,7 @@ func (r *EvmReader) readAndUpdateClaims(
 				if epoch.Status != EpochStatusClaimSubmitted {
 					// this happens when running on latest. EvmReader can see the event before
 					// the claim is marked as submitted by the claimer.
-					slog.Debug("evmreader: Claim status is not submitted. Skipping for now",
+					r.Logger.Debug("Claim status is not submitted. Skipping for now",
 						"app", app,
 						"block", claimAcceptance.LastProcessedBlockNumber.Uint64(),
 						"claimStatus", epoch.Status,
@@ -183,7 +182,7 @@ func (r *EvmReader) readAndUpdateClaims(
 				}
 
 				// Update Epoch claim status
-				slog.Info("evmreader: Claim Accepted",
+				r.Logger.Info("Claim Accepted",
 					"app", app,
 					"lastBlock", epoch.LastBlock,
 					"hash", epoch.ClaimHash,
@@ -195,7 +194,7 @@ func (r *EvmReader) readAndUpdateClaims(
 				err = r.repository.UpdateEpochs(
 					ctx, app, []*Epoch{epoch}, claimAcceptance.Raw.BlockNumber)
 				if err != nil {
-					slog.Error("evmreader: Error storing claims", "app", app, "error", err)
+					r.Logger.Error("Error storing claims", "app", app, "error", err)
 					continue
 				}
 			}
@@ -204,7 +203,7 @@ func (r *EvmReader) readAndUpdateClaims(
 	}
 }
 
-func (r *EvmReader) readClaimsAcceptance(
+func (r *Service) readClaimsAcceptance(
 	ctx context.Context,
 	consensusContract ConsensusContract,
 	appAddresses []common.Address,

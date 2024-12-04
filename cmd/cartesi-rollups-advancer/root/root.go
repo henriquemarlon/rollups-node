@@ -4,6 +4,8 @@
 package root
 
 import (
+	"time"
+
 	"github.com/cartesi/rollups-node/internal/advancer"
 	"github.com/cartesi/rollups-node/pkg/service"
 	"github.com/spf13/cobra"
@@ -21,6 +23,7 @@ var (
 			TelemetryAddress:     ":10001",
 			Impl:                 &advancerService,
 		},
+		MaxStartupTime: 10 * time.Second,
 	}
 )
 
@@ -36,6 +39,12 @@ func init() {
 	Cmd.Flags().Var(&createInfo.LogLevel,
 		"log-level",
 		"log level: debug, info, warn or error")
+	Cmd.Flags().BoolVar(&createInfo.LogPretty,
+		"log-color", createInfo.LogPretty,
+		"tint the logs (colored output)")
+	Cmd.Flags().DurationVar(&createInfo.MaxStartupTime,
+		"max-startup-time", createInfo.MaxStartupTime,
+		"maximum startup time in seconds")
 }
 
 func run(cmd *cobra.Command, args []string) {

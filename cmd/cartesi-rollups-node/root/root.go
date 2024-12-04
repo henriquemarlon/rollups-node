@@ -4,84 +4,56 @@
 package root
 
 import (
-	"context"
-	"log/slog"
-	"os"
-	"os/signal"
-	"syscall"
 	"time"
 
-	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/internal/node"
-	"github.com/cartesi/rollups-node/internal/repository"
+	"github.com/cartesi/rollups-node/pkg/service"
 	"github.com/spf13/cobra"
 )
-
-const CMD_NAME = "node"
 
 var (
 	// Should be overridden during the final release build with ldflags
 	// to contain the actual version number
 	buildVersion = "devel"
-	Cmd          = &cobra.Command{
-		Use:   CMD_NAME,
-		Short: "Runs the Cartesi Rollups Node",
-		Long:  "Runs the Cartesi Rollups Node as a single process",
-		RunE:  run,
+	nodeService  = node.Service{}
+	createInfo   = node.CreateInfo{
+		CreateInfo: service.CreateInfo{
+			Name:                 "cartesi-rollups-node",
+			ProcOwner:            true,
+			EnableSignalHandling: true,
+			TelemetryCreate:      true,
+			TelemetryAddress:     ":10001",
+			Impl:                 &nodeService,
+		},
+		MaxStartupTime: 10 * time.Second,
 	}
-	enableClaimSubmission bool
 )
 
-func init() {
-	Cmd.Flags().BoolVar(&enableClaimSubmission,
-		"claim-submission", true,
-		"enable or disable claim submission (reader mode)")
+var Cmd = &cobra.Command{
+	Use:   createInfo.Name,
+	Short: "Runs " + createInfo.Name,
+	Long:  "Runs " + createInfo.Name + " as a single process",
+	Run:   run,
 }
 
-func run(cmd *cobra.Command, args []string) error {
-	startTime := time.Now()
+func init() {
+	createInfo.LoadEnv()
+	Cmd.Flags().BoolVar(&createInfo.EnableClaimSubmission,
+		"claim-submission", createInfo.EnableClaimSubmission,
+		"enable or disable claim submission (reader mode)")
+	Cmd.Flags().Var(&createInfo.LogLevel,
+		"log-level",
+		"log level: debug, info, warn or error")
+	Cmd.Flags().BoolVar(&createInfo.LogPretty,
+		"log-color", createInfo.LogPretty,
+		"tint the logs (colored output)")
+	Cmd.Flags().DurationVar(&createInfo.MaxStartupTime,
+		"max-startup-time", createInfo.MaxStartupTime,
+		"maximum startup time in seconds")
+}
 
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
-	cfg := config.FromEnv()
-	if cmd.Flags().Lookup("claim-submission").Changed {
-		cfg.FeatureClaimSubmissionEnabled = enableClaimSubmission
-		if enableClaimSubmission && cfg.Auth == nil {
-			cfg.Auth = config.AuthFromEnv()
-		}
-	}
-
-	database, err := repository.Connect(ctx, cfg.PostgresEndpoint.Value)
-	if err != nil {
-		slog.Error("Node couldn't connect to the database", "error", err)
-		os.Exit(1)
-	}
-	defer database.Close()
-
-	// create the node supervisor
-	supervisor, err := node.Setup(ctx, cfg, database)
-	if err != nil {
-		slog.Error("Node exited with an error", "error", err)
-		os.Exit(1)
-	}
-
-	// logs startup time
-	ready := make(chan struct{}, 1)
-	go func() {
-		select {
-		case <-ready:
-			duration := time.Since(startTime)
-			slog.Info("Node is ready", "after", duration)
-		case <-ctx.Done():
-		}
-	}()
-
-	// start supervisor
-	if err := supervisor.Start(ctx, ready); err != nil {
-		slog.Error("Node exited with an error", "error", err)
-		os.Exit(1)
-	}
-
-	return err
+func run(cmd *cobra.Command, args []string) {
+	cobra.CheckErr(node.Create(&createInfo, &nodeService))
+	nodeService.CreateDefaultHandlers("")
+	cobra.CheckErr(nodeService.Serve())
 }

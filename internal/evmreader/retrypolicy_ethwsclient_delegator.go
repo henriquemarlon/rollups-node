@@ -5,6 +5,7 @@ package evmreader
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/cartesi/rollups-node/internal/services/retry"
@@ -16,17 +17,20 @@ type EthWsClientRetryPolicyDelegator struct {
 	delegate          EthWsClient
 	maxRetries        uint64
 	delayBetweenCalls time.Duration
+	logger            *slog.Logger
 }
 
 func NewEthWsClientWithRetryPolicy(
 	delegate EthWsClient,
 	maxRetries uint64,
 	delayBetweenCalls time.Duration,
+	logger *slog.Logger,
 ) *EthWsClientRetryPolicyDelegator {
 	return &EthWsClientRetryPolicyDelegator{
 		delegate:          delegate,
 		maxRetries:        maxRetries,
 		delayBetweenCalls: delayBetweenCalls,
+		logger: logger,
 	}
 }
 
@@ -46,6 +50,7 @@ func (d *EthWsClientRetryPolicyDelegator) SubscribeNewHead(
 			ctx: ctx,
 			ch:  ch,
 		},
+		d.logger,
 		d.maxRetries,
 		d.delayBetweenCalls,
 		"EthWSClient::SubscribeNewHead",

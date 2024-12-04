@@ -13,6 +13,7 @@ import (
 
 	"github.com/cartesi/rollups-node/internal/advancer/machines"
 	"github.com/cartesi/rollups-node/internal/config"
+	"github.com/cartesi/rollups-node/internal/services"
 
 	"github.com/cartesi/rollups-node/internal/inspect"
 	. "github.com/cartesi/rollups-node/internal/model"
@@ -43,25 +44,11 @@ type IAdvancerMachines interface {
 	Apps() []Address
 }
 
-type Advancer struct {
-	repository IAdvancerRepository
-	machines   IAdvancerMachines
-}
-
 type Service struct {
 	service.Service
-	Advancer
-	inspector  *inspect.Inspector
-}
-
-func New(machines IAdvancerMachines, repository IAdvancerRepository) (*Advancer, error) {
-	if machines == nil {
-		return nil, ErrInvalidMachines
-	}
-	if repository == nil {
-		return nil, ErrInvalidRepository
-	}
-	return &Advancer{machines: machines, repository: repository}, nil
+	repository IAdvancerRepository
+	machines   IAdvancerMachines
+	inspector  inspect.Inspector
 }
 
 type CreateInfo struct {
@@ -74,6 +61,7 @@ type CreateInfo struct {
 	HttpPort                int
 	MachineServerVerbosity  config.Redacted[cartesimachine.ServerVerbosity]
 	Machines                *machines.Machines
+	MaxStartupTime          time.Duration
 }
 
 func (c *CreateInfo) LoadEnv() {
@@ -84,6 +72,8 @@ func (c *CreateInfo) LoadEnv() {
 	c.MachineServerVerbosity.Value =
 		cartesimachine.ServerVerbosity(config.GetMachineServerVerbosity())
 	c.LogLevel = service.LogLevel(config.GetLogLevel())
+	c.LogPretty = config.GetLogPrettyEnabled()
+	c.MaxStartupTime = config.GetMaxStartupTime()
 }
 
 func Create(c *CreateInfo, s *Service) error {
@@ -92,31 +82,50 @@ func Create(c *CreateInfo, s *Service) error {
 		return err
 	}
 
-	if c.Repository == nil {
-		c.Repository, err = repository.Connect(s.Context, c.PostgresEndpoint.Value)
-		if err != nil {
-			return err
+	return service.WithTimeout(c.MaxStartupTime, func() error {
+		if s.repository == nil {
+			if c.Repository == nil {
+				c.Repository, err = repository.Connect(s.Context, c.PostgresEndpoint.Value, s.Logger)
+				if err != nil {
+					return err
+				}
+			}
+			s.repository = c.Repository
 		}
-	}
-	s.repository = c.Repository
 
-	if c.Machines == nil {
-		c.Machines, err = machines.Load(s.Context, c.Repository, c.MachineServerVerbosity.Value)
-		if err != nil {
-			return err
+		if s.machines == nil {
+			if c.Machines == nil {
+				c.Machines, err = machines.Load(s.Context,
+					c.Repository, c.MachineServerVerbosity.Value, s.Logger)
+				if err != nil {
+					return err
+				}
+			}
+			s.machines = c.Machines
 		}
-	}
-	s.machines = c.Machines
 
-	if s.Service.ServeMux == nil {
-		if c.CreateInfo.ServeMux == nil {
-			c.ServeMux = http.NewServeMux()
+		// allow partial construction for testing
+		if c.Machines != nil {
+			logger := service.NewLogger(slog.Level(c.LogLevel), c.LogPretty)
+			logger = logger.With("service", "inspect")
+			s.inspector = inspect.Inspector{
+				IInspectMachines: c.Machines,
+				Logger: logger,
+			}
+			if s.Service.ServeMux == nil {
+				if c.CreateInfo.ServeMux == nil {
+					c.ServeMux = http.NewServeMux()
+				}
+				s.ServeMux = c.ServeMux
+			}
+
+			s.ServeMux.Handle("/inspect/{dapp}",
+				services.CorsMiddleware(http.Handler(&s.inspector)))
+			s.ServeMux.Handle("/inspect/{dapp}/{payload}",
+				services.CorsMiddleware(http.Handler(&s.inspector)))
 		}
-	}
-	s.Service.ServeMux.Handle("/inspect/{dapp}", http.Handler(s.inspector))
-	s.Service.ServeMux.Handle("/inspect/{dapp}/{payload}", http.Handler(s.inspector))
-
-	return nil
+		return nil
+	})
 }
 
 func (s *Service) Alive() bool     { return true }
@@ -144,7 +153,7 @@ func (v *Service) String() string {
 // It gets unprocessed inputs from the repository,
 // runs them through the cartesi machine,
 // and updates the repository with the outputs.
-func (advancer *Advancer) Step(ctx context.Context) error {
+func (advancer *Service) Step(ctx context.Context) error {
 	// Dynamically updates the list of machines
 	err := advancer.machines.UpdateMachines(ctx)
 	if err != nil {
@@ -154,7 +163,7 @@ func (advancer *Advancer) Step(ctx context.Context) error {
 	apps := advancer.machines.Apps()
 
 	// Gets the unprocessed inputs (of all apps) from the repository.
-	slog.Debug("advancer: querying for unprocessed inputs")
+	advancer.Logger.Debug("querying for unprocessed inputs")
 	inputs, err := advancer.repository.GetUnprocessedInputs(ctx, apps)
 	if err != nil {
 		return err
@@ -162,7 +171,7 @@ func (advancer *Advancer) Step(ctx context.Context) error {
 
 	// Processes each set of inputs.
 	for app, inputs := range inputs {
-		slog.Debug(fmt.Sprintf("advancer: processing %d input(s) from %v", len(inputs), app))
+		advancer.Logger.Debug(fmt.Sprintf("processing %d input(s) from %v", len(inputs), app))
 		err := advancer.process(ctx, app, inputs)
 		if err != nil {
 			return err
@@ -181,7 +190,7 @@ func (advancer *Advancer) Step(ctx context.Context) error {
 }
 
 // process sequentially processes inputs from the the application.
-func (advancer *Advancer) process(ctx context.Context, app Address, inputs []*Input) error {
+func (advancer *Service) process(ctx context.Context, app Address, inputs []*Input) error {
 	// Asserts that the app has an associated machine.
 	machine, exists := advancer.machines.GetAdvanceMachine(app)
 	if !exists {
@@ -195,7 +204,7 @@ func (advancer *Advancer) process(ctx context.Context, app Address, inputs []*In
 
 	// FIXME if theres a change in epoch id call update epochs
 	for _, input := range inputs {
-		slog.Info("advancer: Processing input", "app", app, "id", input.Id, "index", input.Index)
+		advancer.Logger.Info("Processing input", "app", app, "id", input.Id, "index", input.Index)
 
 		// Sends the input to the cartesi machine.
 		res, err := machine.Advance(ctx, input.RawData, input.Index)
@@ -212,4 +221,3 @@ func (advancer *Advancer) process(ctx context.Context, app Address, inputs []*In
 
 	return nil
 }
-

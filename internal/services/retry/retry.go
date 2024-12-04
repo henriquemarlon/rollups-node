@@ -17,6 +17,7 @@ func CallFunctionWithRetryPolicy[
 ](
 	fn func(A) (R, error),
 	args A,
+	logger *slog.Logger,
 	maxRetries uint64,
 	maxDelay time.Duration,
 	infoLabel string,
@@ -28,7 +29,7 @@ func CallFunctionWithRetryPolicy[
 	for i := uint64(0); i <= maxRetries; i++ {
 
 		if i != 0 {
-			slog.Info("Retry Policy: Retrying...", "delay", maxDelay)
+			logger.Info("Retry Policy: Retrying...", "delay", maxDelay)
 			time.Sleep(maxDelay)
 		}
 
@@ -36,7 +37,7 @@ func CallFunctionWithRetryPolicy[
 		if lastErr == nil {
 			return lastValue, nil
 		}
-		slog.Info(
+		logger.Info(
 			"Retry Policy: Got error calling function",
 			"label",
 			infoLabel,

@@ -5,6 +5,7 @@ package validator
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -48,7 +49,7 @@ func (s *ValidatorRepositoryIntegrationSuite) SetupSuite() {
 
 func (s *ValidatorRepositoryIntegrationSuite) SetupSubTest() {
 	var err error
-	s.database, err = repository.Connect(s.ctx, s.postgresEndpoint)
+	s.database, err = repository.Connect(s.ctx, s.postgresEndpoint, service.NewLogger(slog.LevelDebug, true))
 	s.Require().Nil(err)
 
 	err = db.SetupTestPostgres(s.postgresEndpoint)
@@ -59,9 +60,10 @@ func (s *ValidatorRepositoryIntegrationSuite) SetupSubTest() {
 			Name: "validator",
 			Impl: &s.validator,
 		},
-		Repository: s.database,
+		Repository:     s.database,
+		MaxStartupTime: 1 * time.Second,
 	}
-	s.Require().Nil(validator.Create(c, &s.validator))
+	s.Require().Nil(validator.Create(&c, &s.validator))
 }
 
 func (s *ValidatorRepositoryIntegrationSuite) TearDownSubTest() {

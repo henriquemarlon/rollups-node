@@ -4,15 +4,6 @@
 // Package endtoendtests
 package endtoendtests
 
-import (
-	"log"
-	"log/slog"
-
-	"github.com/cartesi/rollups-node/internal/config"
-	"github.com/cartesi/rollups-node/pkg/addresses"
-	"github.com/cartesi/rollups-node/pkg/ethutil"
-)
-
 const (
 	LocalBlockchainID                  = 31337
 	LocalInputBoxDeploymentBlockNumber = 16
@@ -22,53 +13,3 @@ const (
 	LocalFinalityOffset                = 1
 	LocalEpochLength                   = 5
 )
-
-func NewLocalNodeConfig(localPostgresEndpoint string, localBlockchainHttpEndpoint string,
-	localBlockchainWsEndpoint string, snapshotDir string) config.NodeConfig {
-
-	var nodeConfig config.NodeConfig
-
-	book, err := addresses.GetBookFromFile("deployment.json")
-	if err != nil {
-		log.Fatalf("failed to load address book: %v", err)
-	}
-
-	//Log
-	nodeConfig.LogLevel = slog.LevelInfo
-	nodeConfig.LogPrettyEnabled = false
-
-	//Postgres
-	nodeConfig.PostgresEndpoint =
-		config.Redacted[string]{Value: localPostgresEndpoint}
-
-	//Blockchain
-	nodeConfig.BlockchainID = LocalBlockchainID
-	nodeConfig.BlockchainHttpEndpoint =
-		config.Redacted[string]{Value: localBlockchainHttpEndpoint}
-	nodeConfig.BlockchainWsEndpoint =
-		config.Redacted[string]{Value: localBlockchainWsEndpoint}
-	nodeConfig.LegacyBlockchainEnabled = false
-	nodeConfig.BlockchainBlockTimeout = LocalBlockTimeout
-
-	//Contracts
-	nodeConfig.ContractsInputBoxAddress = book.InputBox.Hex()
-	nodeConfig.ContractsInputBoxDeploymentBlockNumber = LocalInputBoxDeploymentBlockNumber
-
-	//HTTP endpoint
-	nodeConfig.HttpAddress = LocalHttpAddress
-	nodeConfig.HttpPort = LocalHttpPort
-
-	//Features
-	nodeConfig.FeatureClaimSubmissionEnabled = true
-	nodeConfig.FeatureMachineHashCheckEnabled = true
-
-	//Auth
-	nodeConfig.Auth = config.AuthMnemonic{
-		Mnemonic:     config.Redacted[string]{Value: ethutil.FoundryMnemonic},
-		AccountIndex: config.Redacted[int]{Value: 0},
-	}
-
-	nodeConfig.SnapshotDir = snapshotDir
-
-	return nodeConfig
-}

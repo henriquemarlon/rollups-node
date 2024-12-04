@@ -5,9 +5,12 @@ package repository
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 
 	. "github.com/cartesi/rollups-node/internal/model"
+	"github.com/cartesi/rollups-node/pkg/service"
+
 	// "github.com/cartesi/rollups-node/internal/repository"
 	"github.com/cartesi/rollups-node/test/tooling/db"
 	"github.com/ethereum/go-ethereum/common"
@@ -24,7 +27,7 @@ func setup(t *testing.T, ctx context.Context) (*require.Assertions, *Database, e
 	err = db.SetupTestPostgres(endpoint)
 	require.Nil(err)
 
-	database, err := Connect(ctx, endpoint)
+	database, err := Connect(ctx, endpoint, service.NewLogger(slog.LevelDebug, true))
 	require.Nil(err)
 	require.NotNil(database)
 
@@ -65,20 +68,20 @@ func TestClaimerRepository(t *testing.T) {
 
 		apps := []Application{
 			{
-				Id:                 0,
-				ContractAddress:    common.HexToAddress("0"),
-				Status:             ApplicationStatusRunning,
+				Id:              0,
+				ContractAddress: common.HexToAddress("0"),
+				Status:          ApplicationStatusRunning,
 			}, {
-				Id:                 1,
-				ContractAddress:    common.HexToAddress("1"),
-				Status:             ApplicationStatusRunning,
+				Id:              1,
+				ContractAddress: common.HexToAddress("1"),
+				Status:          ApplicationStatusRunning,
 			}, {
-				Id:                 2,
-				ContractAddress:    common.HexToAddress("2"),
-				Status:             ApplicationStatusRunning,
+				Id:              2,
+				ContractAddress: common.HexToAddress("2"),
+				Status:          ApplicationStatusRunning,
 			},
 		}
-		for _, app := range(apps) {
+		for _, app := range apps {
 			_, err = database.InsertApplication(ctx, &app)
 			require.Nil(err)
 		}
@@ -141,7 +144,7 @@ func TestClaimerRepository(t *testing.T) {
 				Status:          EpochStatusClaimComputed,
 			},
 		}
-		for _, epoch := range(epochs) {
+		for _, epoch := range epochs {
 			_, err = database.InsertEpoch(ctx, &epoch)
 			require.Nil(err)
 		}
@@ -165,20 +168,20 @@ func TestClaimerRepository(t *testing.T) {
 
 		apps := []Application{
 			{
-				Id:                 0,
-				ContractAddress:    common.HexToAddress("0"),
-				Status:             ApplicationStatusRunning,
+				Id:              0,
+				ContractAddress: common.HexToAddress("0"),
+				Status:          ApplicationStatusRunning,
 			}, {
-				Id:                 1,
-				ContractAddress:    common.HexToAddress("1"),
-				Status:             ApplicationStatusRunning,
+				Id:              1,
+				ContractAddress: common.HexToAddress("1"),
+				Status:          ApplicationStatusRunning,
 			}, {
-				Id:                 2,
-				ContractAddress:    common.HexToAddress("2"),
-				Status:             ApplicationStatusRunning,
+				Id:              2,
+				ContractAddress: common.HexToAddress("2"),
+				Status:          ApplicationStatusRunning,
 			},
 		}
-		for _, app := range(apps) {
+		for _, app := range apps {
 			_, err = database.InsertApplication(ctx, &app)
 			require.Nil(err)
 		}
@@ -241,7 +244,7 @@ func TestClaimerRepository(t *testing.T) {
 				Status:          EpochStatusClaimComputed,
 			},
 		}
-		for _, epoch := range(epochs) {
+		for _, epoch := range epochs {
 			_, err = database.InsertEpoch(ctx, &epoch)
 			require.Nil(err)
 		}

@@ -52,7 +52,7 @@ func (s *Service) selectClaimPairsPerApp() (
 	map[address]claimRow,
 	error,
 ) {
-	computed, accepted, err := s.DBConn.SelectClaimPairsPerApp(s.Context)
+	computed, accepted, err := s.Repository.SelectClaimPairsPerApp(s.Context)
 	if err != nil {
 		s.Logger.Error("selectClaimPairsPerApp:failed",
 			"service", s.Name,
@@ -71,7 +71,7 @@ func (s *Service) updateEpochWithSubmittedClaim(
 	claim *claimRow,
 	txHash hash,
 ) error {
-	err := s.DBConn.UpdateEpochWithSubmittedClaim(s.Context, claim.EpochID, txHash)
+	err := s.Repository.UpdateEpochWithSubmittedClaim(s.Context, claim.EpochID, txHash)
 	if err != nil {
 		s.Logger.Error("updateEpochWithSubmittedClaim:failed",
 			"service", s.Name,

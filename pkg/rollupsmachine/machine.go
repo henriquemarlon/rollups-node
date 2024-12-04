@@ -69,6 +69,7 @@ type rollupsMachine struct {
 	inner cartesimachine.CartesiMachine
 
 	inc, max Cycle
+	logger *slog.Logger
 }
 
 // New checks if the provided cartesimachine.CartesiMachine is in a valid state to receive
@@ -77,8 +78,14 @@ type rollupsMachine struct {
 func New(ctx context.Context,
 	inner cartesimachine.CartesiMachine,
 	inc, max Cycle,
+	logger *slog.Logger,
 ) (RollupsMachine, error) {
-	machine := &rollupsMachine{inner: inner, inc: inc, max: max}
+	machine := &rollupsMachine{
+		inner: inner,
+		inc: inc,
+		max: max,
+		logger: logger,
+	}
 
 	// Ensures that the machine is at a manual yield.
 	isAtManualYield, err := machine.inner.IsAtManualYield(ctx)
@@ -103,7 +110,12 @@ func (machine *rollupsMachine) Fork(ctx context.Context) (RollupsMachine, error)
 	if err != nil {
 		return nil, err
 	}
-	return &rollupsMachine{inner: inner, inc: machine.inc, max: machine.max}, nil
+	return &rollupsMachine{
+		inner: inner,
+		inc: machine.inc,
+		max: machine.max,
+		logger: machine.logger,
+	}, nil
 }
 
 func (machine *rollupsMachine) Hash(ctx context.Context) (Hash, error) {
@@ -242,7 +254,7 @@ func (machine *rollupsMachine) run(ctx context.Context) ([]Output, []Report, err
 	}
 
 	limitCycle := currentCycle + machine.max
-	slog.Debug("run",
+	machine.logger.Debug("run",
 		"startingCycle", currentCycle,
 		"limitCycle", limitCycle,
 		"leftover", limitCycle-currentCycle)
@@ -332,7 +344,7 @@ func (machine *rollupsMachine) step(ctx context.Context,
 		return nil, 0, err
 	}
 
-	slog.Debug("step",
+	machine.logger.Debug("step",
 		"startingCycle", startingCycle,
 		"increment", increment,
 		"currentCycle", currentCycle,

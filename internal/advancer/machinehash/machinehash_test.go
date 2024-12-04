@@ -5,6 +5,7 @@ package machinehash
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/pkg/addresses"
 	"github.com/cartesi/rollups-node/pkg/ethutil"
+	"github.com/cartesi/rollups-node/pkg/service"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/suite"
 )
@@ -40,7 +42,7 @@ func (s *ValidateMachineHashSuite) SetupTest() {
 	s.book, err = addresses.GetBookFromFile("../../../deployment.json") // FIXME
 	s.Require().Nil(err)
 
-	s.machineDir, err = snapshot.CreateDefaultMachineSnapshot()
+	s.machineDir, err = snapshot.CreateDefaultMachineSnapshot(service.NewLogger(slog.LevelDebug, true))
 	s.Require().Nil(err)
 
 	s.templateHash, err = snapshot.ReadHash(s.machineDir)

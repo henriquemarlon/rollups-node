@@ -12,24 +12,15 @@ import (
 	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/pkg/contracts/iconsensus"
 	"github.com/cartesi/rollups-node/pkg/contracts/iinputbox"
+	"github.com/cartesi/rollups-node/pkg/service"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/mock"
 )
 
 func (s *EvmReaderSuite) TestNoClaimsAcceptance() {
-
 	wsClient := FakeWSEhtClient{}
-
-	//New EVM Reader
-	evmReader := NewEvmReader(
-		s.client,
-		&wsClient,
-		s.inputBox,
-		s.repository,
-		0x10,
-		DefaultBlockStatusLatest,
-		s.contractFactory,
-	)
+	s.evmReader.wsClient = &wsClient
+	s.evmReader.inputBoxDeploymentBlock = 0x10
 
 	// Prepare repository
 	s.repository.Unset("GetAllRunningApplications")
@@ -115,7 +106,7 @@ func (s *EvmReaderSuite) TestNoClaimsAcceptance() {
 	errChannel := make(chan error, 1)
 
 	go func() {
-		errChannel <- evmReader.Run(s.ctx, ready)
+		errChannel <- s.evmReader.Run(s.ctx, ready)
 	}()
 
 	select {
@@ -154,15 +145,8 @@ func (s *EvmReaderSuite) TestReadClaimAcceptance() {
 
 	//New EVM Reader
 	wsClient := FakeWSEhtClient{}
-	evmReader := NewEvmReader(
-		s.client,
-		&wsClient,
-		s.inputBox,
-		s.repository,
-		0x00,
-		DefaultBlockStatusLatest,
-		contractFactory,
-	)
+	s.evmReader.wsClient = &wsClient
+	s.evmReader.contractFactory = contractFactory
 
 	// Prepare Claims Acceptance Events
 
@@ -266,7 +250,7 @@ func (s *EvmReaderSuite) TestReadClaimAcceptance() {
 	errChannel := make(chan error, 1)
 
 	go func() {
-		errChannel <- evmReader.Run(s.ctx, ready)
+		errChannel <- s.evmReader.Run(s.ctx, ready)
 	}()
 
 	select {
@@ -308,18 +292,13 @@ func (s *EvmReaderSuite) TestCheckClaimFails() {
 
 		//New EVM Reader
 		client := newMockEthClient()
-		wsClient := FakeWSEhtClient{}
 		inputBox := newMockInputBox()
 		repository := newMockRepository()
-		evmReader := NewEvmReader(
-			client,
-			&wsClient,
-			inputBox,
-			repository,
-			0x00,
-			DefaultBlockStatusLatest,
-			contractFactory,
-		)
+		wsClient := &FakeWSEhtClient{}
+		s.evmReader.client = client
+		s.evmReader.wsClient = wsClient
+		s.evmReader.inputSource = inputBox
+		s.evmReader.repository = repository
 
 		// Prepare Claims Acceptance Events
 
@@ -414,7 +393,7 @@ func (s *EvmReaderSuite) TestCheckClaimFails() {
 		errChannel := make(chan error, 1)
 
 		go func() {
-			errChannel <- evmReader.Run(ctx, ready)
+			errChannel <- s.evmReader.Run(ctx, ready)
 		}()
 
 		select {
@@ -458,15 +437,23 @@ func (s *EvmReaderSuite) TestCheckClaimFails() {
 		wsClient := FakeWSEhtClient{}
 		inputBox := newMockInputBox()
 		repository := newMockRepository()
-		evmReader := NewEvmReader(
-			client,
-			&wsClient,
-			inputBox,
-			repository,
-			0x00,
-			DefaultBlockStatusLatest,
-			contractFactory,
-		)
+		evmReader := Service{
+			client:                  client,
+			wsClient:                &wsClient,
+			inputSource:             inputBox,
+			repository:              repository,
+			inputBoxDeploymentBlock: 0x00,
+			defaultBlock:            DefaultBlockStatusLatest,
+			contractFactory:         contractFactory,
+			hasEnabledApps:          true,
+		}
+		Create(&CreateInfo{
+			MaxStartupTime: 5 * time.Second,
+			CreateInfo: service.CreateInfo{
+				Name: "evm-reader",
+				Impl: &evmReader,
+			},
+		}, &evmReader)
 
 		// Prepare Claims Acceptance Events
 
@@ -605,15 +592,10 @@ func (s *EvmReaderSuite) TestCheckClaimFails() {
 		wsClient := FakeWSEhtClient{}
 		inputBox := newMockInputBox()
 		repository := newMockRepository()
-		evmReader := NewEvmReader(
-			client,
-			&wsClient,
-			inputBox,
-			repository,
-			0x00,
-			DefaultBlockStatusLatest,
-			contractFactory,
-		)
+		s.evmReader.client = client
+		s.evmReader.wsClient = &wsClient
+		s.evmReader.inputSource = inputBox
+		s.evmReader.repository = repository
 
 		// Prepare Claims Acceptance Events
 
@@ -702,7 +684,7 @@ func (s *EvmReaderSuite) TestCheckClaimFails() {
 		errChannel := make(chan error, 1)
 
 		go func() {
-			errChannel <- evmReader.Run(ctx, ready)
+			errChannel <- s.evmReader.Run(ctx, ready)
 		}()
 
 		select {

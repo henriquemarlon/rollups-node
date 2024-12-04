@@ -7,9 +7,11 @@ import (
 	"context"
 	crand "crypto/rand"
 	"testing"
+	"time"
 
 	"github.com/cartesi/rollups-node/internal/merkle"
 	. "github.com/cartesi/rollups-node/internal/model"
+	"github.com/cartesi/rollups-node/pkg/service"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 )
@@ -30,9 +32,14 @@ var (
 
 func (s *ValidatorSuite) SetupSubTest() {
 	repo = newMockrepo()
-	validator = &Service{
-		repository: repo,
-	}
+	validator = &Service{}
+	s.Require().Nil(Create(&CreateInfo{
+		Repository:     repo,
+		MaxStartupTime: 5 * time.Second,
+		CreateInfo: service.CreateInfo{
+			Impl: validator,
+		},
+	}, validator))
 	dummyEpochs = []Epoch{
 		{Index: 0, FirstBlock: 0, LastBlock: 9},
 		{Index: 1, FirstBlock: 10, LastBlock: 19},

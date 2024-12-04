@@ -8,4 +8,3 @@ type machinesMock struct {
 	mock.Mock
 	Machines
 }
-

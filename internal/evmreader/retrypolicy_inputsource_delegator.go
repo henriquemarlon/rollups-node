@@ -4,6 +4,7 @@
 package evmreader
 
 import (
+	"log/slog"
 	"math/big"
 	"time"
 
@@ -17,17 +18,20 @@ type InputSourceWithRetryPolicyDelegator struct {
 	delegate   InputSource
 	maxRetries uint64
 	delay      time.Duration
+	logger     *slog.Logger
 }
 
 func NewInputSourceWithRetryPolicy(
 	delegate InputSource,
 	maxRetries uint64,
 	delay time.Duration,
+	logger     *slog.Logger,
 ) *InputSourceWithRetryPolicyDelegator {
 	return &InputSourceWithRetryPolicyDelegator{
 		delegate:   delegate,
 		maxRetries: maxRetries,
 		delay:      delay,
+		logger:     logger,
 	}
 }
 
@@ -48,6 +52,7 @@ func (d *InputSourceWithRetryPolicyDelegator) RetrieveInputs(
 			appContract: appContract,
 			index:       index,
 		},
+		d.logger,
 		d.maxRetries,
 		d.delay,
 		"InputSource::RetrieveInputs",

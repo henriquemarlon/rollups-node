@@ -35,7 +35,7 @@ const (
 // StartServer also redirects the server's stdout and stderr to the provided io.Writers.
 //
 // It returns the server's address.
-func StartServer(verbosity ServerVerbosity, port uint32, stdout, stderr io.Writer) (string, error) {
+func StartServer(logger *slog.Logger, verbosity ServerVerbosity, port uint32, stdout, stderr io.Writer) (string, error) {
 	// Configures the command's arguments.
 	args := []string{}
 	if verbosity.valid() {
@@ -58,7 +58,7 @@ func StartServer(verbosity ServerVerbosity, port uint32, stdout, stderr io.Write
 	cmd.Stderr = linewriter.New(interceptor)
 
 	// Starts the server.
-	slog.Info("running", "command", cmd.String())
+	logger.Info("running", "command", cmd.String())
 	if err := cmd.Start(); err != nil {
 		return "", err
 	}
@@ -74,8 +74,8 @@ func StartServer(verbosity ServerVerbosity, port uint32, stdout, stderr io.Write
 }
 
 // StopServer shuts down the JSON RPC remote cartesi machine server hosted at address.
-func StopServer(address string) error {
-	slog.Info("Stopping server at", "address", address)
+func StopServer(address string, logger *slog.Logger) error {
+	logger.Info("Stopping server at", "address", address)
 	remote, err := emulator.NewRemoteMachineManager(address)
 	if err != nil {
 		return err

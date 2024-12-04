@@ -13,6 +13,7 @@ import (
 
 	"github.com/cartesi/rollups-node/pkg/emulator"
 	"github.com/cartesi/rollups-node/pkg/rollupsmachine/cartesimachine"
+	"github.com/cartesi/rollups-node/pkg/service"
 	"github.com/cartesi/rollups-node/test/tooling/snapshot"
 
 	"github.com/stretchr/testify/require"
@@ -57,6 +58,7 @@ type NewSuite struct {
 
 	acceptSnapshot *snapshot.Snapshot
 	rejectSnapshot *snapshot.Snapshot
+	logger *slog.Logger
 }
 
 func (s *NewSuite) SetupSuite() {
@@ -75,6 +77,8 @@ func (s *NewSuite) SetupSuite() {
 	s.rejectSnapshot, err = snapshot.FromScript(script, cycles)
 	require.Nil(err)
 	require.Equal(emulator.BreakReasonYieldedManually, s.rejectSnapshot.BreakReason)
+
+	s.logger = service.NewLogger(slog.LevelDebug, true)
 }
 
 func (s *NewSuite) TearDownSuite() {
@@ -83,13 +87,13 @@ func (s *NewSuite) TearDownSuite() {
 }
 
 func (s *NewSuite) SetupTest() {
-	address, err := cartesimachine.StartServer(serverVerbosity, 0, os.Stdout, os.Stderr)
+	address, err := cartesimachine.StartServer(s.logger, serverVerbosity, 0, os.Stdout, os.Stderr)
 	s.Require().Nil(err)
 	s.address = address
 }
 
 func (s *NewSuite) TearDownTest() {
-	err := cartesimachine.StopServer(s.address)
+	err := cartesimachine.StopServer(s.address, s.logger)
 	s.Require().Nil(err)
 }
 
@@ -103,7 +107,7 @@ func (s *NewSuite) TestOkAccept() {
 	require.NotNil(cartesiMachine)
 	require.Nil(err, "%v", err)
 
-	rollupsMachine, err := New(ctx, cartesiMachine, defaultInc, defaultMax)
+	rollupsMachine, err := New(ctx, cartesiMachine, defaultInc, defaultMax, s.logger)
 	require.NotNil(rollupsMachine)
 	require.Nil(err)
 }
@@ -118,7 +122,7 @@ func (s *NewSuite) TestOkReject() {
 	require.NotNil(cartesiMachine)
 	require.Nil(err)
 
-	rollupsMachine, err := New(ctx, cartesiMachine, defaultInc, defaultMax)
+	rollupsMachine, err := New(ctx, cartesiMachine, defaultInc, defaultMax, s.logger)
 	require.NotNil(rollupsMachine)
 	require.Nil(err)
 }
@@ -166,7 +170,8 @@ func (s *ForkSuite) TestOk() {
 	defer func() { require.Nil(snapshot.Close()) }()
 
 	// Starts the server.
-	address, err := cartesimachine.StartServer(serverVerbosity, 0, os.Stdout, os.Stderr)
+	logger := service.NewLogger(slog.LevelDebug, true)
+	address, err := cartesimachine.StartServer(logger, serverVerbosity, 0, os.Stdout, os.Stderr)
 	require.Nil(err)
 
 	// Loads the machine.
@@ -178,7 +183,7 @@ func (s *ForkSuite) TestOk() {
 	require.NotNil(cartesiMachine)
 	require.Nil(err)
 
-	machine, err := New(ctx, cartesiMachine, defaultInc, defaultMax)
+	machine, err := New(ctx, cartesiMachine, defaultInc, defaultMax, service.NewLogger(slog.LevelDebug, true))
 	require.NotNil(machine)
 	require.Nil(err)
 	defer func() { require.Nil(machine.Close(ctx)) }()
@@ -198,6 +203,7 @@ type AdvanceSuite struct {
 	snapshotEcho   *snapshot.Snapshot
 	snapshotReject *snapshot.Snapshot
 	address        string
+	logger *slog.Logger
 }
 
 func (s *AdvanceSuite) SetupSuite() {
@@ -216,6 +222,8 @@ func (s *AdvanceSuite) SetupSuite() {
 	s.snapshotReject, err = snapshot.FromScript(script, cycles)
 	require.Nil(err)
 	require.Equal(emulator.BreakReasonYieldedManually, s.snapshotReject.BreakReason)
+
+	s.logger = service.NewLogger(slog.LevelDebug, true)
 }
 
 func (s *AdvanceSuite) TearDownSuite() {
@@ -224,7 +232,7 @@ func (s *AdvanceSuite) TearDownSuite() {
 }
 
 func (s *AdvanceSuite) SetupTest() {
-	address, err := cartesimachine.StartServer(serverVerbosity, 0, os.Stdout, os.Stderr)
+	address, err := cartesimachine.StartServer(s.logger, serverVerbosity, 0, os.Stdout, os.Stderr)
 	s.Require().Nil(err)
 	s.address = address
 }
@@ -239,7 +247,7 @@ func (s *AdvanceSuite) TestEchoLoop() {
 	require.NotNil(cartesiMachine)
 	require.Nil(err)
 
-	machine, err := New(ctx, cartesiMachine, defaultInc, defaultMax)
+	machine, err := New(ctx, cartesiMachine, defaultInc, defaultMax, s.logger)
 	require.Nil(err)
 	require.NotNil(machine)
 	defer func() { require.Nil(machine.Close(ctx)) }()
@@ -287,7 +295,7 @@ func (s *AdvanceSuite) TestAcceptRejectException() {
 	require.NotNil(cartesiMachine)
 	require.Nil(err)
 
-	machine, err := New(ctx, cartesiMachine, defaultInc, defaultMax)
+	machine, err := New(ctx, cartesiMachine, defaultInc, defaultMax, s.logger)
 	require.Nil(err)
 	require.NotNil(machine)
 	defer func() { require.Nil(machine.Close(ctx)) }()
@@ -338,7 +346,7 @@ func (s *AdvanceSuite) TestHalted() {
 	require.NotNil(cartesiMachine)
 	require.Nil(err)
 
-	machine, err := New(ctx, cartesiMachine, defaultInc, defaultMax)
+	machine, err := New(ctx, cartesiMachine, defaultInc, defaultMax, s.logger)
 	require.Nil(err)
 	require.NotNil(machine)
 	defer func() { require.Nil(machine.Close(ctx)) }()
@@ -358,6 +366,7 @@ type InspectSuite struct {
 	suite.Suite
 	snapshotEcho *snapshot.Snapshot
 	address      string
+	logger *slog.Logger
 }
 
 func (s *InspectSuite) SetupSuite() {
@@ -371,6 +380,7 @@ func (s *InspectSuite) SetupSuite() {
 	s.snapshotEcho, err = snapshot.FromScript(script, cycles)
 	require.Nil(err)
 	require.Equal(emulator.BreakReasonYieldedManually, s.snapshotEcho.BreakReason)
+	s.logger = service.NewLogger(slog.LevelDebug, true)
 }
 
 func (s *InspectSuite) TearDownSuite() {
@@ -378,7 +388,7 @@ func (s *InspectSuite) TearDownSuite() {
 }
 
 func (s *InspectSuite) SetupTest() {
-	address, err := cartesimachine.StartServer(serverVerbosity, 0, os.Stdout, os.Stderr)
+	address, err := cartesimachine.StartServer(s.logger, serverVerbosity, 0, os.Stdout, os.Stderr)
 	s.Require().Nil(err)
 	s.address = address
 }
@@ -393,7 +403,7 @@ func (s *InspectSuite) TestEchoLoop() {
 	require.NotNil(cartesiMachine)
 	require.Nil(err)
 
-	machine, err := New(ctx, cartesiMachine, defaultInc, defaultMax)
+	machine, err := New(ctx, cartesiMachine, defaultInc, defaultMax, s.logger)
 	require.Nil(err)
 	require.NotNil(machine)
 	defer func() { require.Nil(machine.Close(ctx)) }()
@@ -440,7 +450,12 @@ type UnitSuite struct{ suite.Suite }
 
 func (_ *UnitSuite) newMachines() (*CartesiMachineMock, *rollupsMachine) {
 	mock := new(CartesiMachineMock)
-	machine := &rollupsMachine{inner: mock, inc: defaultInc, max: defaultMax}
+	machine := &rollupsMachine{
+		inner: mock,
+		inc: defaultInc,
+		max: defaultMax,
+		logger: service.NewLogger(slog.LevelDebug, true),
+	}
 	return mock, machine
 }
 
@@ -460,7 +475,7 @@ func (s *UnitSuite) TestNew() {
 			require := s.Require()
 			mock := newCartesiMachine()
 
-			machine, err := New(ctx, mock, defaultInc, defaultMax)
+			machine, err := New(ctx, mock, defaultInc, defaultMax, service.NewLogger(slog.LevelDebug, true))
 			require.Nil(err)
 			require.NotNil(machine)
 		})
@@ -472,7 +487,7 @@ func (s *UnitSuite) TestNew() {
 				emulator.ManualYieldReasonRejected,
 			}
 
-			machine, err := New(ctx, mock, defaultInc, defaultMax)
+			machine, err := New(ctx, mock, defaultInc, defaultMax, service.NewLogger(slog.LevelDebug, true))
 			require.Nil(err)
 			require.NotNil(machine)
 		})
@@ -484,7 +499,7 @@ func (s *UnitSuite) TestNew() {
 			mock := newCartesiMachine()
 			mock.IsAtManualYieldReturn = false
 
-			machine, err := New(ctx, mock, defaultInc, defaultMax)
+			machine, err := New(ctx, mock, defaultInc, defaultMax, service.NewLogger(slog.LevelDebug, true))
 			require.Equal(ErrNotAtManualYield, err)
 			require.Nil(machine)
 		})
@@ -496,7 +511,7 @@ func (s *UnitSuite) TestNew() {
 				emulator.ManualYieldReasonException,
 			}
 
-			machine, err := New(ctx, mock, defaultInc, defaultMax)
+			machine, err := New(ctx, mock, defaultInc, defaultMax, service.NewLogger(slog.LevelDebug, true))
 			require.Equal(ErrException, err)
 			require.Nil(machine)
 		})
@@ -506,7 +521,7 @@ func (s *UnitSuite) TestNew() {
 			require.PanicsWithValue(ErrUnreachable, func() {
 				mock := newCartesiMachine()
 				mock.ReadYieldReasonReturn = []emulator.HtifYieldReason{10}
-				_, _ = New(ctx, mock, defaultInc, defaultMax)
+				_, _ = New(ctx, mock, defaultInc, defaultMax, service.NewLogger(slog.LevelDebug, true))
 			})
 		})
 	})
@@ -518,7 +533,7 @@ func (s *UnitSuite) TestNew() {
 			mock := newCartesiMachine()
 			mock.IsAtManualYieldError = errIsAtManualYield
 
-			machine, err := New(ctx, mock, defaultInc, defaultMax)
+			machine, err := New(ctx, mock, defaultInc, defaultMax, service.NewLogger(slog.LevelDebug, true))
 			require.Equal(errIsAtManualYield, err)
 			require.Nil(machine)
 		})
@@ -529,7 +544,7 @@ func (s *UnitSuite) TestNew() {
 			mock := newCartesiMachine()
 			mock.ReadYieldReasonError = []error{errReadYieldReason}
 
-			machine, err := New(ctx, mock, defaultInc, defaultMax)
+			machine, err := New(ctx, mock, defaultInc, defaultMax, service.NewLogger(slog.LevelDebug, true))
 			require.Equal(errReadYieldReason, err)
 			require.Nil(machine)
 		})

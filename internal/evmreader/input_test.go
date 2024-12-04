@@ -14,18 +14,10 @@ import (
 )
 
 func (s *EvmReaderSuite) TestItReadsInputsFromNewBlocks() {
-
+	//New EVM Reader
 	wsClient := FakeWSEhtClient{}
-
-	evmReader := NewEvmReader(
-		s.client,
-		&wsClient,
-		s.inputBox,
-		s.repository,
-		0x10,
-		DefaultBlockStatusLatest,
-		s.contractFactory,
-	)
+	s.evmReader.wsClient = &wsClient
+	s.evmReader.inputBoxDeploymentBlock = 0x10
 
 	// Prepare repository
 	s.repository.Unset("GetAllRunningApplications")
@@ -99,7 +91,7 @@ func (s *EvmReaderSuite) TestItReadsInputsFromNewBlocks() {
 	errChannel := make(chan error, 1)
 
 	go func() {
-		errChannel <- evmReader.Run(s.ctx, ready)
+		errChannel <- s.evmReader.Run(s.ctx, ready)
 	}()
 
 	select {
@@ -122,18 +114,9 @@ func (s *EvmReaderSuite) TestItReadsInputsFromNewBlocks() {
 }
 
 func (s *EvmReaderSuite) TestItUpdatesLastProcessedBlockWhenThereIsNoInputs() {
-
 	wsClient := FakeWSEhtClient{}
-
-	evmReader := NewEvmReader(
-		s.client,
-		&wsClient,
-		s.inputBox,
-		s.repository,
-		0x10,
-		DefaultBlockStatusLatest,
-		s.contractFactory,
-	)
+	s.evmReader.wsClient = &wsClient
+	s.evmReader.inputBoxDeploymentBlock = 0x10
 
 	// Prepare repository
 	s.repository.Unset("GetAllRunningApplications")
@@ -207,7 +190,7 @@ func (s *EvmReaderSuite) TestItUpdatesLastProcessedBlockWhenThereIsNoInputs() {
 	errChannel := make(chan error, 1)
 
 	go func() {
-		errChannel <- evmReader.Run(s.ctx, ready)
+		errChannel <- s.evmReader.Run(s.ctx, ready)
 	}()
 
 	select {
@@ -231,17 +214,10 @@ func (s *EvmReaderSuite) TestItUpdatesLastProcessedBlockWhenThereIsNoInputs() {
 
 func (s *EvmReaderSuite) TestItReadsMultipleInputsFromSingleNewBlock() {
 
+	//New EVM Reader
 	wsClient := FakeWSEhtClient{}
-
-	inputReader := NewEvmReader(
-		s.client,
-		&wsClient,
-		s.inputBox,
-		s.repository,
-		0x10,
-		DefaultBlockStatusLatest,
-		s.contractFactory,
-	)
+	s.evmReader.wsClient = &wsClient
+	s.evmReader.inputBoxDeploymentBlock = 0x10
 
 	// Prepare Client
 	s.client.Unset("HeaderByNumber")
@@ -302,7 +278,7 @@ func (s *EvmReaderSuite) TestItReadsMultipleInputsFromSingleNewBlock() {
 	errChannel := make(chan error, 1)
 
 	go func() {
-		errChannel <- inputReader.Run(s.ctx, ready)
+		errChannel <- s.evmReader.Run(s.ctx, ready)
 	}()
 
 	select {
@@ -325,17 +301,10 @@ func (s *EvmReaderSuite) TestItReadsMultipleInputsFromSingleNewBlock() {
 }
 
 func (s *EvmReaderSuite) TestItStartsWhenLasProcessedBlockIsTheMostRecentBlock() {
-
+	//New EVM Reader
 	wsClient := FakeWSEhtClient{}
-	inputReader := NewEvmReader(
-		s.client,
-		&wsClient,
-		s.inputBox,
-		s.repository,
-		0x10,
-		DefaultBlockStatusLatest,
-		s.contractFactory,
-	)
+	s.evmReader.wsClient = &wsClient
+	s.evmReader.inputBoxDeploymentBlock = 0x10
 
 	// Prepare Client
 	s.client.Unset("HeaderByNumber")
@@ -361,7 +330,7 @@ func (s *EvmReaderSuite) TestItStartsWhenLasProcessedBlockIsTheMostRecentBlock()
 	errChannel := make(chan error, 1)
 
 	go func() {
-		errChannel <- inputReader.Run(s.ctx, ready)
+		errChannel <- s.evmReader.Run(s.ctx, ready)
 	}()
 
 	select {

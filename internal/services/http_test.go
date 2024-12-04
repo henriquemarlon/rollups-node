@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"testing"
 	"time"
@@ -42,7 +43,7 @@ func (s *HttpServiceSuite) TestItStopsWhenContextIsClosed() {
 	result := make(chan error, 1)
 	ready := make(chan struct{}, 1)
 	go func() {
-		result <- service.Start(ctx, ready)
+		result <- service.Start(ctx, ready, slog.Default())
 	}()
 
 	select {
@@ -71,7 +72,7 @@ func (s *HttpServiceSuite) TestItRespondsToRequests() {
 	result := make(chan error, 1)
 	ready := make(chan struct{}, 1)
 	go func() {
-		result <- service.Start(ctx, ready)
+		result <- service.Start(ctx, ready, slog.Default())
 	}()
 
 	select {
@@ -103,7 +104,7 @@ func (s *HttpServiceSuite) TestItRespondsOngoingRequestsAfterContextIsClosed() {
 	result := make(chan error, 1)
 	ready := make(chan struct{}, 1)
 	go func() {
-		result <- service.Start(ctx, ready)
+		result <- service.Start(ctx, ready, slog.Default())
 	}()
 
 	select {

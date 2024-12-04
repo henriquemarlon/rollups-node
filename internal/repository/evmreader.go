@@ -498,4 +498,3 @@ func (pg *Database) InsertEvmReaderConfig(
 
 	return pg.db.Exec(ctx, query, args)
 }
-

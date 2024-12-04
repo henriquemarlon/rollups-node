@@ -20,8 +20,8 @@ import (
 
 const SNAPSHOT_CONTAINER_PATH = "/usr/share/cartesi/snapshot"
 
-func runCommand(name string, args ...string) error {
-	slog.Debug("Running command", "name", name, "args", strings.Join(args, " "))
+func runCommand(logger *slog.Logger, name string, args ...string) error {
+	logger.Debug("Running command", "name", name, "args", strings.Join(args, " "))
 	cmd := exec.Command(name, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
@@ -39,34 +39,34 @@ func fileExists(filePath string) bool {
 	return !errors.Is(err, fs.ErrNotExist)
 }
 
-func Save(destDir string) error {
+func Save(logger *slog.Logger, destDir string) error {
 
 	// Remove previous snapshot dir
 	if fileExists(destDir) {
-		slog.Info("Removing previous snapshot")
+		logger.Info("Removing previous snapshot")
 		err := os.RemoveAll(destDir)
 		if err != nil {
 			return err
 		}
 	}
 
-	err := runCommand("cartesi-machine", "--ram-length=128Mi", "--store="+destDir,
+	err := runCommand(logger, "cartesi-machine", "--ram-length=128Mi", "--store="+destDir,
 		"--", "ioctl-echo-loop --vouchers=1 --notices=1 --reports=1 --verbose=1")
 	if err != nil {
 		return err
 	}
 
-	slog.Info("Cartesi machine snapshot saved on",
+	logger.Info("Cartesi machine snapshot saved on",
 		"destination-dir", destDir)
 	return nil
 }
 
-func CreateDefaultMachineSnapshot() (string, error) {
+func CreateDefaultMachineSnapshot(logger *slog.Logger) (string, error) {
 	tmpDir, err := os.MkdirTemp("", "")
 	if err != nil {
 		return "", err
 	}
-	if err = Save(tmpDir); err != nil {
+	if err = Save(logger, tmpDir); err != nil {
 		return "", err
 	}
 	return tmpDir, nil

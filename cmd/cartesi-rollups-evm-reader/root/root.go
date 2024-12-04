@@ -4,8 +4,13 @@
 package root
 
 import (
+	"time"
+
+	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/internal/evmreader"
+	"github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/pkg/service"
+	"github.com/ethereum/go-ethereum/common"
 
 	"github.com/spf13/cobra"
 )
@@ -24,8 +29,13 @@ var (
 			TelemetryAddress:     ":10000",
 			Impl:                 &readerService,
 		},
-		DefaultBlockString: "safe",
+		EvmReaderPersistentConfig: model.EvmReaderPersistentConfig{
+			DefaultBlock: model.DefaultBlockStatusSafe,
+		},
+		MaxStartupTime: 10 * time.Second,
 	}
+	inputBoxAddress    service.EthAddress
+	DefaultBlockString = "safe"
 )
 
 var Cmd = &cobra.Command{
@@ -38,8 +48,8 @@ var Cmd = &cobra.Command{
 func init() {
 	createInfo.LoadEnv()
 
-	Cmd.Flags().StringVarP(&createInfo.DefaultBlockString,
-		"default-block", "d", createInfo.DefaultBlockString,
+	Cmd.Flags().StringVarP(&DefaultBlockString,
+		"default-block", "d", DefaultBlockString,
 		`Default block to be used when fetching new blocks.
 		One of 'latest', 'safe', 'pending', 'finalized'`)
 
@@ -61,11 +71,9 @@ func init() {
 		createInfo.BlockchainWsEndpoint.Value,
 		"Blockchain WS Endpoint")
 
-//	Cmd.Flags().StringVarP(&inputBoxAddress,
-//		"inputbox-address",
-//		"i",
-//		"",
-//		"Input Box contract address")
+	Cmd.Flags().Var(&inputBoxAddress,
+		"inputbox-address",
+		"Input Box contract address")
 
 	Cmd.Flags().Uint64VarP(&createInfo.InputBoxDeploymentBlock,
 		"inputbox-block-number",
@@ -75,11 +83,25 @@ func init() {
 	Cmd.Flags().Var(&createInfo.LogLevel,
 		"log-level",
 		"log level: debug, info, warn or error")
+	Cmd.Flags().BoolVar(&createInfo.LogPretty,
+		"log-color", createInfo.LogPretty,
+		"tint the logs (colored output)")
+	Cmd.Flags().DurationVar(&createInfo.MaxStartupTime,
+		"max-startup-time", createInfo.MaxStartupTime,
+		"maximum startup time in seconds")
 }
 
 func run(cmd *cobra.Command, args []string) {
-	ready := make(chan struct{}, 1)
+	if cmd.Flags().Changed("default-block") {
+		var err error
+		createInfo.DefaultBlock, err = config.ToDefaultBlockFromString(DefaultBlockString)
+		cobra.CheckErr(err)
+	}
+	if cmd.Flags().Changed("inputbox-address") {
+		createInfo.InputBoxAddress = common.Address(inputBoxAddress)
+	}
+
 	cobra.CheckErr(evmreader.Create(&createInfo, &readerService))
 	readerService.CreateDefaultHandlers("/" + readerService.Name)
-	cobra.CheckErr(readerService.Start(nil, ready))
+	cobra.CheckErr(readerService.Serve())
 }

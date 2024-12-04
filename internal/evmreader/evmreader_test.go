@@ -17,6 +17,7 @@ import (
 	appcontract "github.com/cartesi/rollups-node/pkg/contracts/iapplication"
 	"github.com/cartesi/rollups-node/pkg/contracts/iconsensus"
 	"github.com/cartesi/rollups-node/pkg/contracts/iinputbox"
+	"github.com/cartesi/rollups-node/pkg/service"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -73,7 +74,7 @@ type EvmReaderSuite struct {
 	wsClient        *MockEthClient
 	inputBox        *MockInputBox
 	repository      *MockRepository
-	evmReader       *EvmReader
+	evmReader       *Service
 	contractFactory *MockEvmReaderContractFactory
 }
 
@@ -107,23 +108,30 @@ func (s *EvmReaderSuite) TearDownSuite() {
 	s.cancel()
 }
 
-func (s *EvmReaderSuite) SetupTest() {
+func (me *EvmReaderSuite) SetupTest() {
+	me.client = newMockEthClient()
+	me.wsClient = me.client
+	me.inputBox = newMockInputBox()
+	me.repository = newMockRepository()
+	me.contractFactory = newEmvReaderContractFactory()
 
-	s.client = newMockEthClient()
-	s.wsClient = s.client
-	s.inputBox = newMockInputBox()
-	s.repository = newMockRepository()
-	s.contractFactory = newEmvReaderContractFactory()
-	inputReader := NewEvmReader(
-		s.client,
-		s.wsClient,
-		s.inputBox,
-		s.repository,
-		0,
-		DefaultBlockStatusLatest,
-		s.contractFactory,
-	)
-	s.evmReader = &inputReader
+	me.evmReader = &Service{
+		client:                  me.client,
+		wsClient:                me.wsClient,
+		inputSource:             me.inputBox,
+		repository:              me.repository,
+		inputBoxDeploymentBlock: 0,
+		defaultBlock:            DefaultBlockStatusLatest,
+		contractFactory:         me.contractFactory,
+		hasEnabledApps:          true,
+	}
+	c := CreateInfo{
+		CreateInfo: service.CreateInfo{
+			Name: "evm-reader",
+			Impl: me.evmReader,
+		},
+	}
+	me.Require().NotNil(Create(&c, me.evmReader))
 }
 
 // Service tests
@@ -170,27 +178,19 @@ func (s *EvmReaderSuite) TestItFailsToSubscribeForNewInputsOnStart() {
 }
 
 func (s *EvmReaderSuite) TestItWrongIConsensus() {
+	s.SetupTest()
 
 	consensusContract := &MockIConsensusContract{}
-
 	contractFactory := newEmvReaderContractFactory()
-
 	contractFactory.Unset("NewIConsensus")
 	contractFactory.On("NewIConsensus",
 		mock.Anything,
 	).Return(consensusContract, nil)
 
 	wsClient := FakeWSEhtClient{}
-
-	evmReader := NewEvmReader(
-		s.client,
-		&wsClient,
-		s.inputBox,
-		s.repository,
-		0x10,
-		DefaultBlockStatusLatest,
-		contractFactory,
-	)
+	s.evmReader.wsClient = &wsClient
+	s.evmReader.inputBoxDeploymentBlock = 0x10
+	s.evmReader.contractFactory = contractFactory
 
 	// Prepare consensus
 	claimEvent0 := &iconsensus.IConsensusClaimAcceptance{
@@ -229,7 +229,7 @@ func (s *EvmReaderSuite) TestItWrongIConsensus() {
 	errChannel := make(chan error, 1)
 
 	go func() {
-		errChannel <- evmReader.Run(s.ctx, ready)
+		errChannel <- s.evmReader.Run(s.ctx, ready)
 	}()
 
 	select {

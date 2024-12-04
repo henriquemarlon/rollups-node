@@ -5,11 +5,13 @@ package repository
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 
 	. "github.com/cartesi/rollups-node/internal/model"
 
 	"github.com/cartesi/rollups-node/pkg/rollupsmachine"
+	"github.com/cartesi/rollups-node/pkg/service"
 	"github.com/ethereum/go-ethereum/common"
 
 	"github.com/cartesi/rollups-node/test/tooling/db"
@@ -29,7 +31,7 @@ func TestMachineRepository(t *testing.T) {
 		err = db.SetupTestPostgres(endpoint)
 		require.Nil(err)
 
-		database, err := Connect(ctx, endpoint)
+		database, err := Connect(ctx, endpoint, service.NewLogger(slog.LevelDebug, true))
 		require.Nil(err)
 		require.NotNil(database)
 
@@ -84,7 +86,7 @@ func TestMachineRepository(t *testing.T) {
 		err = db.SetupTestPostgres(endpoint)
 		require.Nil(err)
 
-		database, err := Connect(ctx, endpoint)
+		database, err := Connect(ctx, endpoint, service.NewLogger(slog.LevelDebug, true))
 		require.Nil(err)
 		require.NotNil(database)
 

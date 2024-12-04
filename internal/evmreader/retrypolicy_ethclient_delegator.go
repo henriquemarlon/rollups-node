@@ -5,6 +5,7 @@ package evmreader
 
 import (
 	"context"
+	"log/slog"
 	"math/big"
 	"time"
 
@@ -19,17 +20,20 @@ type EthClientRetryPolicyDelegator struct {
 	delegate          EthClient
 	maxRetries        uint64
 	delayBetweenCalls time.Duration
+	logger            *slog.Logger
 }
 
 func NewEhtClientWithRetryPolicy(
 	delegate EthClient,
 	maxRetries uint64,
 	delayBetweenCalls time.Duration,
+	logger *slog.Logger,
 ) *EthClientRetryPolicyDelegator {
 	return &EthClientRetryPolicyDelegator{
 		delegate:          delegate,
 		maxRetries:        maxRetries,
 		delayBetweenCalls: delayBetweenCalls,
+		logger: logger,
 	}
 }
 
@@ -48,6 +52,7 @@ func (d *EthClientRetryPolicyDelegator) HeaderByNumber(
 			ctx:    ctx,
 			number: number,
 		},
+		d.logger,
 		d.maxRetries,
 		d.delayBetweenCalls,
 		"EthClient::HeaderByNumber",

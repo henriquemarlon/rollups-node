@@ -19,6 +19,7 @@ import (
 
 type Database struct {
 	db *pgxpool.Pool
+	Logger *slog.Logger
 }
 
 var (
@@ -58,6 +59,7 @@ func ValidateSchemaWithRetry(endpoint string, maxRetries int, delay time.Duratio
 func Connect(
 	ctx context.Context,
 	postgresEndpoint string,
+	logger *slog.Logger,
 ) (*Database, error) {
 	var (
 		pgError    error
@@ -77,7 +79,10 @@ func Connect(
 			return
 		}
 
-		pgInstance = &Database{dbpool}
+		pgInstance = &Database{
+			db: dbpool,
+			Logger: logger,
+		}
 	})
 
 	return pgInstance, pgError
@@ -399,7 +404,7 @@ func (pg *Database) GetApplication(
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			slog.Debug("GetApplication returned no rows",
+			pg.Logger.Debug("GetApplication returned no rows",
 				"service", "repository",
 				"app", appAddressKey)
 			return nil, nil
@@ -446,7 +451,7 @@ func (pg *Database) UpdateApplicationStatus(
 	}
 
 	if commandTag.RowsAffected() == 0 {
-		slog.Debug("UpdateApplicationStatus affected no rows",
+		pg.Logger.Debug("UpdateApplicationStatus affected no rows",
 			"service", "repository",
 			"app", appAddressKey)
 		return fmt.Errorf("no application found with contract address: %s", appAddressKey)
@@ -561,7 +566,7 @@ func (pg *Database) GetEpoch(
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			slog.Debug("GetEpoch returned no rows",
+			pg.Logger.Debug("GetEpoch returned no rows",
 				"service", "repository",
 				"app", appAddressKey,
 				"epoch", indexKey)
@@ -669,7 +674,7 @@ func (pg *Database) GetInput(
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			slog.Debug("GetInput returned no rows",
+			pg.Logger.Debug("GetInput returned no rows",
 				"service", "repository",
 				"app", appAddressKey,
 				"index", indexKey)
@@ -860,7 +865,7 @@ func (pg *Database) GetOutput(
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			slog.Debug("GetOutput returned no rows",
+			pg.Logger.Debug("GetOutput returned no rows",
 				"service", "repository",
 				"app", appAddressKey,
 				"index", indexKey)
@@ -1034,7 +1039,7 @@ func (pg *Database) GetReport(
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			slog.Debug("GetReport returned no rows",
+			pg.Logger.Debug("GetReport returned no rows",
 				"service", "repository",
 				"app", appAddressKey,
 				"index", indexKey)
@@ -1092,7 +1097,7 @@ func (pg *Database) GetSnapshot(
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			slog.Debug("GetSnapshot returned no rows",
+			pg.Logger.Debug("GetSnapshot returned no rows",
 				"service", "repository",
 				"app", appAddressKey,
 				"input index", inputIndexKey)

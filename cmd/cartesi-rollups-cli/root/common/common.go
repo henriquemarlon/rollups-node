@@ -4,6 +4,8 @@
 package common
 
 import (
+	"log/slog"
+
 	"github.com/cartesi/rollups-node/internal/repository"
 	"github.com/spf13/cobra"
 )
@@ -19,6 +21,6 @@ func Setup(cmd *cobra.Command, args []string) {
 	ctx := cmd.Context()
 
 	var err error
-	Database, err = repository.Connect(ctx, PostgresEndpoint)
+	Database, err = repository.Connect(ctx, PostgresEndpoint, slog.Default())
 	cobra.CheckErr(err)
 }

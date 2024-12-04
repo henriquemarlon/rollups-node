@@ -5,11 +5,13 @@ package repository
 
 import (
 	"context"
+	"log/slog"
 	"math"
 	"testing"
 	"time"
 
 	. "github.com/cartesi/rollups-node/internal/model"
+	"github.com/cartesi/rollups-node/pkg/service"
 	"github.com/cartesi/rollups-node/test/tooling/db"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/suite"
@@ -35,7 +37,7 @@ func (s *RepositorySuite) SetupSuite() {
 	err = db.SetupTestPostgres(endpoint)
 	s.Require().Nil(err)
 
-	s.database, err = Connect(s.ctx, endpoint)
+	s.database, err = Connect(s.ctx, endpoint, service.NewLogger(slog.LevelDebug, true))
 	s.Require().Nil(err)
 
 	s.SetupDatabase()

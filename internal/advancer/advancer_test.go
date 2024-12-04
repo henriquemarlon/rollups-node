@@ -11,10 +11,12 @@ import (
 	"fmt"
 	mrand "math/rand"
 	"testing"
+	"time"
 
 	"github.com/cartesi/rollups-node/internal/advancer/machines"
 	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/nodemachine"
+	"github.com/cartesi/rollups-node/pkg/service"
 
 	"github.com/stretchr/testify/suite"
 )
@@ -25,41 +27,18 @@ func TestAdvancer(t *testing.T) {
 
 type AdvancerSuite struct{ suite.Suite }
 
-func (s *AdvancerSuite) TestNew() {
-	s.Run("Ok", func() {
-		require := s.Require()
-		machines := newMockMachines()
-		machines.Map[randomAddress()] = &MockMachine{}
-		var repository IAdvancerRepository = &MockRepository{}
-		advancer, err := New(machines, repository)
-		require.NotNil(advancer)
-		require.Nil(err)
-	})
-
-	s.Run("InvalidMachines", func() {
-		require := s.Require()
-		var machines IAdvancerMachines = nil
-		var repository IAdvancerRepository = &MockRepository{}
-		advancer, err := New(machines, repository)
-		require.Nil(advancer)
-		require.Error(err)
-		require.Equal(ErrInvalidMachines, err)
-	})
-
-	s.Run("InvalidRepository", func() {
-		require := s.Require()
-		machines := newMockMachines()
-		machines.Map[randomAddress()] = &MockMachine{}
-		var repository IAdvancerRepository = nil
-		advancer, err := New(machines, repository)
-		require.Nil(advancer)
-		require.Error(err)
-		require.Equal(ErrInvalidRepository, err)
-	})
-}
-
-func (s *AdvancerSuite) TestPoller() {
-	s.T().Skip("TODO")
+func newMock(m IAdvancerMachines, r IAdvancerRepository) (*Service, error) {
+	s := &Service{
+		machines:   m,
+		repository: r,
+	}
+	return s, Create(&CreateInfo{
+		CreateInfo: service.CreateInfo{
+			Name: "advancer",
+			Impl: s,
+		},
+		MaxStartupTime: 1 * time.Second,
+	}, s)
 }
 
 func (s *AdvancerSuite) TestRun() {
@@ -87,7 +66,7 @@ func (s *AdvancerSuite) TestRun() {
 			},
 		}
 
-		advancer, err := New(machines, repository)
+		advancer, err := newMock(machines, repository)
 		require.NotNil(advancer)
 		require.Nil(err)
 
@@ -105,15 +84,15 @@ func (s *AdvancerSuite) TestRun() {
 }
 
 func (s *AdvancerSuite) TestProcess() {
-	setup := func() (IAdvancerMachines, *MockRepository, *Advancer, Address) {
+	setup := func() (IAdvancerMachines, *MockRepository, *Service, Address) {
+		require := s.Require()
+
 		app := randomAddress()
 		machines := newMockMachines()
 		machines.Map[app] = &MockMachine{}
 		repository := &MockRepository{}
-		advancer := &Advancer{
-			machines: machines,
-			repository: repository,
-		}
+		advancer, err := newMock(machines, repository)
+		require.Nil(err)
 		return machines, repository, advancer, app
 	}
 

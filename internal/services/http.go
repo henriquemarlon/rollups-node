@@ -9,7 +9,10 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"time"
 )
+
+const DefaultServiceTimeout = 1 * time.Minute
 
 // FIXME: Simple CORS middleware. Improve this
 func CorsMiddleware(next http.Handler) http.Handler {
@@ -30,6 +33,7 @@ func CorsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+// Used for testing
 type HttpService struct {
 	Name    string
 	Address string
@@ -40,11 +44,11 @@ func (s *HttpService) String() string {
 	return s.Name
 }
 
-func (s *HttpService) Start(ctx context.Context, ready chan<- struct{}) error {
+func (s *HttpService) Start(ctx context.Context, ready chan<- struct{}, logger *slog.Logger) error {
 	server := http.Server{
 		Addr:     s.Address,
 		Handler:  CorsMiddleware(s.Handler),
-		ErrorLog: slog.NewLogLogger(slog.Default().Handler(), slog.LevelError),
+		ErrorLog: slog.NewLogLogger(logger.Handler(), slog.LevelError),
 	}
 
 	listener, err := net.Listen("tcp", s.Address)
@@ -52,14 +56,14 @@ func (s *HttpService) Start(ctx context.Context, ready chan<- struct{}) error {
 		return err
 	}
 
-	slog.Info("HTTP server started listening", "service", s, "port", listener.Addr())
+	logger.Info("HTTP server started listening", "service", s, "port", listener.Addr())
 	ready <- struct{}{}
 
 	done := make(chan error, 1)
 	go func() {
 		err := server.Serve(listener)
 		if !errors.Is(err, http.ErrServerClosed) {
-			slog.Warn("Service exited with error", "service", s, "error", err)
+			logger.Warn("Service exited with error", "service", s, "error", err)
 		}
 		done <- err
 	}()

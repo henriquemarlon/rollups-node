@@ -228,18 +228,6 @@ func GetBlockchainBlockTimeout() int {
 	return val
 }
 
-func GetBlockchainFinalityOffset() int {
-	s, ok := os.LookupEnv("CARTESI_BLOCKCHAIN_FINALITY_OFFSET")
-	if !ok {
-		s = "10"
-	}
-	val, err := toInt(s)
-	if err != nil {
-		panic(fmt.Sprintf("failed to parse CARTESI_BLOCKCHAIN_FINALITY_OFFSET: %v", err))
-	}
-	return val
-}
-
 func GetBlockchainHttpEndpoint() string {
 	s, ok := os.LookupEnv("CARTESI_BLOCKCHAIN_HTTP_ENDPOINT")
 	if !ok {
@@ -387,7 +375,7 @@ func GetLogLevel() LogLevel {
 func GetLogPrettyEnabled() bool {
 	s, ok := os.LookupEnv("CARTESI_LOG_PRETTY_ENABLED")
 	if !ok {
-		s = "false"
+		s = "true"
 	}
 	val, err := toBool(s)
 	if err != nil {
@@ -452,6 +440,18 @@ func GetEvmReaderRetryPolicyMaxRetries() uint64 {
 	val, err := toUint64(s)
 	if err != nil {
 		panic(fmt.Sprintf("failed to parse CARTESI_EVM_READER_RETRY_POLICY_MAX_RETRIES: %v", err))
+	}
+	return val
+}
+
+func GetMaxStartupTime() Duration {
+	s, ok := os.LookupEnv("CARTESI_MAX_STARTUP_TIME")
+	if !ok {
+		s = "5"
+	}
+	val, err := toDuration(s)
+	if err != nil {
+		panic(fmt.Sprintf("failed to parse CARTESI_MAX_STARTUP_TIME: %v", err))
 	}
 	return val
 }

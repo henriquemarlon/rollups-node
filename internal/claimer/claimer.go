@@ -40,6 +40,7 @@ package claimer
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/internal/repository"
@@ -54,7 +55,7 @@ import (
 var (
 	ErrClaimMismatch = fmt.Errorf("claim and antecessor mismatch")
 	ErrEventMismatch = fmt.Errorf("Computed Claim mismatches ClaimSubmission event")
-	ErrMissingEvent = fmt.Errorf("accepted claim has no matching blockchain event")
+	ErrMissingEvent  = fmt.Errorf("accepted claim has no matching blockchain event")
 )
 
 type address = common.Address
@@ -69,18 +70,17 @@ type CreateInfo struct {
 
 	BlockchainHttpEndpoint config.Redacted[string]
 	EthConn                *ethclient.Client
-
-	PostgresEndpoint config.Redacted[string]
-	DBConn           *repository.Database
-
-	EnableSubmission bool
+	PostgresEndpoint       config.Redacted[string]
+	Repository             *repository.Database
+	EnableSubmission       bool
+	MaxStartupTime         time.Duration
 }
 
 type Service struct {
 	service.Service
 
 	submissionEnabled bool
-	DBConn            *repository.Database
+	Repository        *repository.Database
 	EthConn           *ethclient.Client
 	TxOpts            *bind.TransactOpts
 	claimsInFlight    map[address]hash // -> txHash
@@ -93,49 +93,53 @@ func (c *CreateInfo) LoadEnv() {
 	}
 	c.BlockchainHttpEndpoint.Value = config.GetBlockchainHttpEndpoint()
 	c.PostgresEndpoint.Value = config.GetPostgresEndpoint()
+	c.PollInterval = config.GetClaimerPollingInterval()
+	c.LogLevel = service.LogLevel(config.GetLogLevel())
+	c.MaxStartupTime = config.GetMaxStartupTime()
 }
 
-func Create(ci CreateInfo, s *Service) error {
+func Create(c *CreateInfo, s *Service) error {
 	var err error
 
-	err = service.Create(&ci.CreateInfo, &s.Service)
+	err = service.Create(&c.CreateInfo, &s.Service)
 	if err != nil {
 		return err
 	}
 
-	s.submissionEnabled = ci.EnableSubmission
-	if s.EthConn == nil {
-		if ci.EthConn == nil {
-			ci.EthConn, err = ethclient.Dial(ci.BlockchainHttpEndpoint.Value)
+	return service.WithTimeout(c.MaxStartupTime, func() error {
+		s.submissionEnabled = c.EnableSubmission
+		if s.EthConn == nil {
+			if c.EthConn == nil {
+				c.EthConn, err = ethclient.Dial(c.BlockchainHttpEndpoint.Value)
+				if err != nil {
+					return err
+				}
+			}
+			s.EthConn = c.EthConn
+		}
+
+		if s.Repository == nil {
+			if c.Repository == nil {
+				c.Repository, err = repository.Connect(s.Context, c.PostgresEndpoint.Value, s.Logger)
+				if err != nil {
+					return err
+				}
+			}
+			s.Repository = c.Repository
+		}
+
+		if s.claimsInFlight == nil {
+			s.claimsInFlight = map[address]hash{}
+		}
+
+		if s.submissionEnabled && s.TxOpts == nil {
+			s.TxOpts, err = CreateTxOptsFromAuth(c.Auth, s.Context, s.EthConn)
 			if err != nil {
 				return err
 			}
 		}
-		s.EthConn = ci.EthConn
-	}
-
-	if s.DBConn == nil {
-		if ci.DBConn == nil {
-			ci.DBConn, err = repository.Connect(s.Context, ci.PostgresEndpoint.Value)
-			if err != nil {
-				return err
-			}
-		}
-		s.DBConn = ci.DBConn
-	}
-
-	if s.claimsInFlight == nil {
-		s.claimsInFlight = map[address]hash{}
-	}
-
-	if s.submissionEnabled && s.TxOpts == nil {
-		s.TxOpts, err = CreateTxOptsFromAuth(ci.Auth, s.Context, s.EthConn)
-		if err != nil {
-			return err
-		}
-	}
-
-	return err
+		return nil
+	})
 }
 
 func (s *Service) Alive() bool {
@@ -182,14 +186,14 @@ func (s *Service) submitClaimsAndUpdateDatabase(se sideEffects) []error {
 				errs = append(errs, err)
 				return errs
 			}
-			s.Logger.Info("claimer: Claim submitted",
+			s.Logger.Info("Claim submitted",
 				"app", claim.AppContractAddress,
 				"claim", claim.EpochHash,
 				"last_block", claim.EpochLastBlock,
 				"tx", txHash)
 			delete(currClaims, key)
 		} else {
-			s.Logger.Warn("claimer: expected claim in flight to be in currClaims.",
+			s.Logger.Warn("expected claim in flight to be in currClaims.",
 				"tx", receipt.TxHash)
 		}
 		delete(s.claimsInFlight, key)
@@ -208,7 +212,7 @@ func (s *Service) submitClaimsAndUpdateDatabase(se sideEffects) []error {
 		if prevClaimRow, ok := prevClaims[key]; ok {
 			err := checkClaimsConstraint(&prevClaimRow, &currClaimRow)
 			if err != nil {
-				s.Logger.Error("claimer: database mismatch",
+				s.Logger.Error("database mismatch",
 					"prevClaim", prevClaimRow,
 					"currClaim", currClaimRow,
 					"err", err,
@@ -227,7 +231,7 @@ func (s *Service) submitClaimsAndUpdateDatabase(se sideEffects) []error {
 				goto nextApp
 			}
 			if prevEvent == nil {
-				s.Logger.Error("claimer: missing event",
+				s.Logger.Error("missing event",
 					"claim", prevClaimRow,
 					"err", ErrMissingEvent,
 				)
@@ -236,7 +240,7 @@ func (s *Service) submitClaimsAndUpdateDatabase(se sideEffects) []error {
 				goto nextApp
 			}
 			if !claimMatchesEvent(&prevClaimRow, prevEvent) {
-				s.Logger.Error("claimer: event mismatch",
+				s.Logger.Error("event mismatch",
 					"claim", prevClaimRow,
 					"event", prevEvent,
 					"err", ErrEventMismatch,
@@ -258,7 +262,7 @@ func (s *Service) submitClaimsAndUpdateDatabase(se sideEffects) []error {
 
 		if currEvent != nil {
 			if !claimMatchesEvent(&currClaimRow, currEvent) {
-				s.Logger.Error("claimer: event mismatch",
+				s.Logger.Error("event mismatch",
 					"claim", currClaimRow,
 					"event", currEvent,
 					"err", ErrEventMismatch,
@@ -282,14 +286,14 @@ func (s *Service) submitClaimsAndUpdateDatabase(se sideEffects) []error {
 				errs = append(errs, err)
 				goto nextApp
 			}
-			s.Logger.Info("claimer: Submitting claim to blockchain",
-				"app",        currClaimRow.AppContractAddress,
-				"claim",      currClaimRow.EpochHash,
+			s.Logger.Info("Submitting claim to blockchain",
+				"app", currClaimRow.AppContractAddress,
+				"claim", currClaimRow.EpochHash,
 				"last_block", currClaimRow.EpochLastBlock,
 			)
 			s.claimsInFlight[currClaimRow.AppContractAddress] = txHash
 		}
-		nextApp:
+	nextApp:
 	}
 	return errs
 }
@@ -335,7 +339,7 @@ func checkClaimsConstraint(p *claimRow, c *claimRow) error {
 }
 
 func claimMatchesEvent(c *claimRow, e *claimSubmissionEvent) bool {
-	return  c.AppContractAddress == e.AppContract &&
+	return c.AppContractAddress == e.AppContract &&
 		c.EpochLastBlock == e.LastProcessedBlockNumber.Uint64()
 }
 

@@ -8,7 +8,6 @@ package validator
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/cartesi/rollups-node/internal/config"
@@ -29,30 +28,35 @@ type CreateInfo struct {
 	PostgresEndpoint config.Redacted[string]
 	Repository       ValidatorRepository
 	PollingInterval  time.Duration
+	MaxStartupTime   time.Duration
 }
 
 func (c *CreateInfo) LoadEnv() {
 	c.PostgresEndpoint.Value = config.GetPostgresEndpoint()
 	c.PollInterval = config.GetValidatorPollingInterval()
 	c.LogLevel = service.LogLevel(config.GetLogLevel())
+	c.LogPretty = config.GetLogPrettyEnabled()
+	c.MaxStartupTime = config.GetMaxStartupTime()
 }
 
-func Create(ci CreateInfo, s *Service) error {
+func Create(c *CreateInfo, s *Service) error {
 	var err error
 
-	err = service.Create(&ci.CreateInfo, &s.Service)
+	err = service.Create(&c.CreateInfo, &s.Service)
 	if err != nil {
 		return err
 	}
 
-	if ci.Repository == nil {
-		ci.Repository, err = repository.Connect(s.Context, ci.PostgresEndpoint.Value)
-		if err != nil {
-			return err
+	return service.WithTimeout(c.MaxStartupTime, func() error {
+		if c.Repository == nil {
+			c.Repository, err = repository.Connect(s.Context, c.PostgresEndpoint.Value, s.Logger)
+			if err != nil {
+				return err
+			}
 		}
-	}
-	s.repository = ci.Repository
-	return nil
+		s.repository = c.Repository
+		return nil
+	})
 }
 
 func (s *Service) Alive() bool     { return true }
@@ -139,7 +143,7 @@ func (v *Service) Run(ctx context.Context) error {
 // validateApplication calculates, validates and stores the claim and/or proofs
 // for each processed epoch of the application.
 func (v *Service) validateApplication(ctx context.Context, app Application) error {
-	slog.Debug("validator: starting validation", "application", app.ContractAddress)
+	v.Logger.Debug("starting validation", "application", app.ContractAddress)
 	processedEpochs, err := v.repository.GetProcessedEpochs(ctx, app.ContractAddress)
 	if err != nil {
 		return fmt.Errorf(
@@ -149,12 +153,12 @@ func (v *Service) validateApplication(ctx context.Context, app Application) erro
 	}
 
 	for _, epoch := range processedEpochs {
-		slog.Debug("validator: started calculating claim",
+		v.Logger.Debug("started calculating claim",
 			"app", app.ContractAddress,
 			"epoch_index", epoch.Index,
 		)
 		claim, outputs, err := v.createClaimAndProofs(ctx, epoch)
-		slog.Info("validator: claim calculated",
+		v.Logger.Info("claim calculated",
 			"app", app.ContractAddress,
 			"epoch_index", epoch.Index,
 		)
@@ -209,7 +213,7 @@ func (v *Service) validateApplication(ctx context.Context, app Application) erro
 	}
 
 	if len(processedEpochs) == 0 {
-		slog.Debug("validator: no processed epochs to validate",
+		v.Logger.Debug("no processed epochs to validate",
 			"app", app.ContractAddress,
 		)
 	}

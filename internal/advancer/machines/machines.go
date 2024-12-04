@@ -45,6 +45,7 @@ type Machines struct {
 	machines   map[Address]*nm.NodeMachine
 	repository Repository
 	verbosity  cm.ServerVerbosity
+	Logger     *slog.Logger
 }
 
 // Load initializes the cartesi machines.
@@ -52,7 +53,12 @@ type Machines struct {
 //
 // Load does not fail when one of those machines fail to initialize.
 // It stores the error to be returned later and continues to initialize the other machines.
-func Load(ctx context.Context, repo Repository, verbosity cm.ServerVerbosity) (*Machines, error) {
+func Load(
+	ctx context.Context,
+	repo Repository,
+	verbosity cm.ServerVerbosity,
+	logger *slog.Logger,
+) (*Machines, error) {
 	configs, err := repo.GetMachineConfigurations(ctx)
 	if err != nil {
 		return nil, err
@@ -63,7 +69,7 @@ func Load(ctx context.Context, repo Repository, verbosity cm.ServerVerbosity) (*
 
 	for _, config := range configs {
 		// Creates the machine.
-		machine, err := createMachine(ctx, verbosity, config)
+		machine, err := createMachine(ctx, verbosity, config, logger)
 		if err != nil {
 			err = fmt.Errorf("failed to create machine from snapshot (%v): %w", config, err)
 			errs = errors.Join(errs, err)
@@ -71,7 +77,7 @@ func Load(ctx context.Context, repo Repository, verbosity cm.ServerVerbosity) (*
 		}
 
 		// Advances the machine until it catches up with the state of the database (if necessary).
-		err = catchUp(ctx, repo, config.AppAddress, machine, config.ProcessedInputs)
+		err = catchUp(ctx, repo, config.AppAddress, machine, config.ProcessedInputs, logger)
 		if err != nil {
 			err = fmt.Errorf("failed to advance cartesi machine (%v): %w", config, err)
 			errs = errors.Join(errs, err, machine.Close())
@@ -81,7 +87,12 @@ func Load(ctx context.Context, repo Repository, verbosity cm.ServerVerbosity) (*
 		machines[config.AppAddress] = machine
 	}
 
-	return &Machines{machines: machines, repository: repo, verbosity: verbosity}, errs
+	return &Machines{
+		machines:   machines,
+		repository: repo,
+		verbosity:  verbosity,
+		Logger:     logger,
+	}, errs
 }
 
 func (m *Machines) UpdateMachines(ctx context.Context) error {
@@ -95,15 +106,15 @@ func (m *Machines) UpdateMachines(ctx context.Context) error {
 			continue
 		}
 
-		machine, err := createMachine(ctx, m.verbosity, config)
+		machine, err := createMachine(ctx, m.verbosity, config, m.Logger)
 		if err != nil {
-			slog.Error("advancer: Failed to create machine", "app", config.AppAddress, "error", err)
+			m.Logger.Error("Failed to create machine", "app", config.AppAddress, "error", err)
 			continue
 		}
 
-		err = catchUp(ctx, m.repository, config.AppAddress, machine, config.ProcessedInputs)
+		err = catchUp(ctx, m.repository, config.AppAddress, machine, config.ProcessedInputs, m.Logger)
 		if err != nil {
-			slog.Error("Failed to sync the machine", "app", config.AppAddress, "error", err)
+			m.Logger.Error("Failed to sync the machine", "app", config.AppAddress, "error", err)
 			machine.Close()
 			continue
 		}
@@ -158,7 +169,7 @@ func (m *Machines) RemoveAbsent(configs []*MachineConfig) {
 	}
 	for address, machine := range m.machines {
 		if !configMap[address] {
-			slog.Info("advancer: Application was disabled, shutting down machine", "application", address)
+			m.Logger.Info("Application was disabled, shutting down machine", "application", address)
 			machine.Close()
 			delete(m.machines, address)
 		}
@@ -200,7 +211,7 @@ func (m *Machines) Close() error {
 
 	err := closeMachines(m.machines)
 	if err != nil {
-		slog.Error(fmt.Sprintf("failed to close some machines: %v", err))
+		m.Logger.Error(fmt.Sprintf("failed to close some machines: %v", err))
 	}
 	return err
 }
@@ -227,33 +238,36 @@ func closeMachines(machines map[Address]*nm.NodeMachine) (err error) {
 func createMachine(ctx context.Context,
 	verbosity cm.ServerVerbosity,
 	config *MachineConfig,
+	logger *slog.Logger,
 ) (*nm.NodeMachine, error) {
-	slog.Info("advancer: creating machine", "application", config.AppAddress,
+	logger.Info("creating machine", "application", config.AppAddress,
 		"template-path", config.SnapshotPath)
-	slog.Debug("advancer: instantiating remote machine server", "application", config.AppAddress)
+	logger.Debug("instantiating remote machine server", "application", config.AppAddress)
 	// Starts the server.
-	address, err := cm.StartServer(verbosity, 0, os.Stdout, os.Stderr)
+	address, err := cm.StartServer(logger, verbosity, 0, os.Stdout, os.Stderr)
 	if err != nil {
 		return nil, err
 	}
 
-	slog.Info("advancer: loading machine on server", "application", config.AppAddress,
+	logger.Info("loading machine on server", "application", config.AppAddress,
 		"remote-machine", address, "template-path", config.SnapshotPath)
 	// Creates a CartesiMachine from the snapshot.
 	runtimeConfig := &emulator.MachineRuntimeConfig{}
 	cartesiMachine, err := cm.Load(ctx, config.SnapshotPath, address, runtimeConfig)
 	if err != nil {
-		return nil, errors.Join(err, cm.StopServer(address))
+		return nil, errors.Join(err, cm.StopServer(address, logger))
 	}
 
-	slog.Debug("advancer: machine loaded on server", "application", config.AppAddress,
+	logger.Debug("machine loaded on server", "application", config.AppAddress,
 		"remote-machine", address, "template-path", config.SnapshotPath)
 
 	// Creates a RollupsMachine from the CartesiMachine.
 	rollupsMachine, err := rm.New(ctx,
 		cartesiMachine,
 		config.AdvanceIncCycles,
-		config.AdvanceMaxCycles)
+		config.AdvanceMaxCycles,
+		logger,
+	)
 	if err != nil {
 		return nil, errors.Join(err, cartesiMachine.Close(ctx))
 	}
@@ -276,9 +290,10 @@ func catchUp(ctx context.Context,
 	app Address,
 	machine *nm.NodeMachine,
 	processedInputs uint64,
+	logger *slog.Logger,
 ) error {
 
-	slog.Info("advancer: catching up unprocessed inputs", "app", app)
+	logger.Info("catching up unprocessed inputs", "app", app)
 
 	inputs, err := repo.GetProcessedInputs(ctx, app, processedInputs)
 	if err != nil {
@@ -287,7 +302,7 @@ func catchUp(ctx context.Context,
 
 	for _, input := range inputs {
 		// FIXME epoch id to epoch index
-		slog.Info("advancer: advancing", "app", app, "epochId", input.EpochId,
+		logger.Info("advancing", "app", app, "epochId", input.EpochId,
 			"input_index", input.Index)
 		_, err := machine.Advance(ctx, input.RawData, input.Index)
 		if err != nil {

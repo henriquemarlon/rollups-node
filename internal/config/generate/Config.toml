@@ -10,7 +10,7 @@ description = """
 One of "debug", "info", "warn", "error"."""
 
 [logging.CARTESI_LOG_PRETTY_ENABLED]
-default = "false"
+default = "true"
 go-type = "bool"
 description = """
 If set to true, the node will add colors to its log output."""
@@ -65,6 +65,12 @@ default = "7"
 go-type = "Duration"
 description = """
 How many seconds the node will wait before querying the database for new claims."""
+
+[rollups.CARTESI_MAX_STARTUP_TIME]
+default = "5"
+go-type = "Duration"
+description = """
+How many seconds the node expects services take initializing before aborting."""
 
 #
 # Blockchain

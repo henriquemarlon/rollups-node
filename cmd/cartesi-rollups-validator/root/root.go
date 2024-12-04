@@ -44,13 +44,16 @@ func init() {
 	Cmd.Flags().Var(&createInfo.LogLevel,
 		"log-level",
 		"log level: debug, info, warn or error")
+	Cmd.Flags().BoolVar(&createInfo.LogPretty,
+		"log-color", createInfo.LogPretty,
+		"tint the logs (colored output)")
 	Cmd.Flags().StringVar(&createInfo.PostgresEndpoint.Value,
 		"postgres-endpoint", createInfo.PostgresEndpoint.Value,
 		"Postgres endpoint")
 }
 
 func run(cmd *cobra.Command, args []string) {
-	cobra.CheckErr(validator.Create(createInfo, &validatorService))
+	cobra.CheckErr(validator.Create(&createInfo, &validatorService))
 	validatorService.CreateDefaultHandlers("/" + validatorService.Name)
 	cobra.CheckErr(validatorService.Serve())
 }

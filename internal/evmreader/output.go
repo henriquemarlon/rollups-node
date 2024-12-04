@@ -6,13 +6,12 @@ package evmreader
 import (
 	"bytes"
 	"context"
-	"log/slog"
 
 	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 )
 
-func (r *EvmReader) checkForOutputExecution(
+func (r *Service) checkForOutputExecution(
 	ctx context.Context,
 	apps []application,
 	mostRecentBlockNumber uint64,
@@ -20,7 +19,7 @@ func (r *EvmReader) checkForOutputExecution(
 
 	appAddresses := appsToAddresses(apps)
 
-	slog.Debug("evmreader: Checking for new Output Executed Events", "apps", appAddresses)
+	r.Logger.Debug("Checking for new Output Executed Events", "apps", appAddresses)
 
 	for _, app := range apps {
 
@@ -34,7 +33,7 @@ func (r *EvmReader) checkForOutputExecution(
 
 		if mostRecentBlockNumber > LastOutputCheck {
 
-			slog.Debug("evmreader: Checking output execution for application",
+			r.Logger.Debug("Checking output execution for application",
 				"app", app.ContractAddress,
 				"last output check block", LastOutputCheck,
 				"most recent block", mostRecentBlockNumber)
@@ -42,14 +41,14 @@ func (r *EvmReader) checkForOutputExecution(
 			r.readAndUpdateOutputs(ctx, app, LastOutputCheck, mostRecentBlockNumber)
 
 		} else if mostRecentBlockNumber < LastOutputCheck {
-			slog.Warn(
-				"evmreader: Not reading output execution: most recent block is lower than the last processed one", //nolint:lll
+			r.Logger.Warn(
+				"Not reading output execution: most recent block is lower than the last processed one", //nolint:lll
 				"app", app.ContractAddress,
 				"last output check block", LastOutputCheck,
 				"most recent block", mostRecentBlockNumber,
 			)
 		} else {
-			slog.Warn("evmreader: Not reading output execution: already checked the most recent blocks",
+			r.Logger.Warn("Not reading output execution: already checked the most recent blocks",
 				"app", app.ContractAddress,
 				"last output check block", LastOutputCheck,
 				"most recent block", mostRecentBlockNumber,
@@ -59,7 +58,7 @@ func (r *EvmReader) checkForOutputExecution(
 
 }
 
-func (r *EvmReader) readAndUpdateOutputs(
+func (r *Service) readAndUpdateOutputs(
 	ctx context.Context, app application, lastOutputCheck, mostRecentBlockNumber uint64) {
 
 	contract := app.applicationContract
@@ -71,7 +70,7 @@ func (r *EvmReader) readAndUpdateOutputs(
 
 	outputExecutedEvents, err := contract.RetrieveOutputExecutionEvents(opts)
 	if err != nil {
-		slog.Error("evmreader: Error reading output events", "app", app.ContractAddress, "error", err)
+		r.Logger.Error("Error reading output events", "app", app.ContractAddress, "error", err)
 		return
 	}
 
@@ -82,30 +81,30 @@ func (r *EvmReader) readAndUpdateOutputs(
 		// Compare output to check it is the correct one
 		output, err := r.repository.GetOutput(ctx, app.ContractAddress, event.OutputIndex)
 		if err != nil {
-			slog.Error("evmreader: Error retrieving output",
+			r.Logger.Error("Error retrieving output",
 				"app", app.ContractAddress, "index", event.OutputIndex, "error", err)
 			return
 		}
 
 		if output == nil {
-			slog.Warn("evmreader: Found OutputExecuted event but output does not exist in the database yet",
+			r.Logger.Warn("Found OutputExecuted event but output does not exist in the database yet",
 				"app", app.ContractAddress, "index", event.OutputIndex)
 			return
 		}
 
 		if !bytes.Equal(output.RawData, event.Output) {
-			slog.Debug("evmreader: Output mismatch",
+			r.Logger.Debug("Output mismatch",
 				"app", app.ContractAddress, "index", event.OutputIndex,
 				"actual", output.RawData, "event's", event.Output)
 
-			slog.Error("evmreader: Output mismatch. Application is in an invalid state",
+			r.Logger.Error("Output mismatch. Application is in an invalid state",
 				"app", app.ContractAddress,
 				"index", event.OutputIndex)
 
 			return
 		}
 
-		slog.Info("evmreader: Output executed", "app", app.ContractAddress, "index", event.OutputIndex)
+		r.Logger.Info("Output executed", "app", app.ContractAddress, "index", event.OutputIndex)
 		output.TransactionHash = &event.Raw.TxHash
 		executedOutputs = append(executedOutputs, output)
 	}
@@ -113,7 +112,7 @@ func (r *EvmReader) readAndUpdateOutputs(
 	err = r.repository.UpdateOutputExecutionTransaction(
 		ctx, app.ContractAddress, executedOutputs, mostRecentBlockNumber)
 	if err != nil {
-		slog.Error("evmreader: Error storing output execution statuses", "app", app, "error", err)
+		r.Logger.Error("Error storing output execution statuses", "app", app, "error", err)
 	}
 
 }

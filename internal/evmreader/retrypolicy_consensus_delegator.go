@@ -4,6 +4,7 @@
 package evmreader
 
 import (
+	"log/slog"
 	"math/big"
 	"time"
 
@@ -20,17 +21,20 @@ type ConsensusRetryPolicyDelegator struct {
 	delegate          ConsensusContract
 	maxRetries        uint64
 	delayBetweenCalls time.Duration
+	logger            *slog.Logger
 }
 
 func NewConsensusWithRetryPolicy(
 	delegate ConsensusContract,
 	maxRetries uint64,
 	delayBetweenCalls time.Duration,
+	logger            *slog.Logger,
 ) *ConsensusRetryPolicyDelegator {
 	return &ConsensusRetryPolicyDelegator{
 		delegate:          delegate,
 		maxRetries:        maxRetries,
 		delayBetweenCalls: delayBetweenCalls,
+		logger: logger,
 	}
 }
 
@@ -40,6 +44,7 @@ func (d *ConsensusRetryPolicyDelegator) GetEpochLength(
 
 	return retry.CallFunctionWithRetryPolicy(d.delegate.GetEpochLength,
 		opts,
+		d.logger,
 		d.maxRetries,
 		d.delayBetweenCalls,
 		"Consensus::GetEpochLength",
@@ -60,7 +65,9 @@ func (d *ConsensusRetryPolicyDelegator) RetrieveClaimAcceptanceEvents(
 		retrieveClaimAcceptedEventsArgs{
 			opts:         opts,
 			appAddresses: appAddresses,
-		}, d.maxRetries,
+		},
+		d.logger,
+		d.maxRetries,
 		d.delayBetweenCalls,
 		"Consensus::RetrieveClaimAcceptedEvents")
 }

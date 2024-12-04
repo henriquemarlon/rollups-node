@@ -4,6 +4,7 @@
 package inspect
 
 import (
+	"log/slog"
 	"bytes"
 	"context"
 	crand "crypto/rand"
@@ -20,6 +21,7 @@ import (
 	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/nodemachine"
 	"github.com/cartesi/rollups-node/internal/services"
+	"github.com/cartesi/rollups-node/pkg/service"
 
 	"github.com/stretchr/testify/suite"
 )
@@ -53,12 +55,12 @@ func (s *InspectSuite) TestGetOk() {
 
 	router := http.NewServeMux()
 	router.Handle("/inspect/{dapp}/{payload}", inspect)
-	service := services.HttpService{Name: "http", Address: s.ServiceAddr, Handler: router}
+	httpService := services.HttpService{Name: "http", Address: s.ServiceAddr, Handler: router}
 
 	result := make(chan error, 1)
 	ready := make(chan struct{}, 1)
 	go func() {
-		result <- service.Start(ctx, ready)
+		result <- httpService.Start(ctx, ready, service.NewLogger(slog.LevelDebug, true))
 	}()
 
 	select {
@@ -85,12 +87,12 @@ func (s *InspectSuite) TestGetInvalidPayload() {
 
 	router := http.NewServeMux()
 	router.Handle("/inspect/{dapp}/{payload}", inspect)
-	service := services.HttpService{Name: "http", Address: s.ServiceAddr, Handler: router}
+	httpService := services.HttpService{Name: "http", Address: s.ServiceAddr, Handler: router}
 
 	result := make(chan error, 1)
 	ready := make(chan struct{}, 1)
 	go func() {
-		result <- service.Start(ctx, ready)
+		result <- httpService.Start(ctx, ready, service.NewLogger(slog.LevelDebug, true))
 	}()
 
 	select {
@@ -118,12 +120,12 @@ func (s *InspectSuite) TestPostOk() {
 
 	router := http.NewServeMux()
 	router.Handle("/inspect/{dapp}", inspect)
-	service := services.HttpService{Name: "http", Address: s.ServiceAddr, Handler: router}
+	httpService := services.HttpService{Name: "http", Address: s.ServiceAddr, Handler: router}
 
 	result := make(chan error, 1)
 	ready := make(chan struct{}, 1)
 	go func() {
-		result <- service.Start(ctx, ready)
+		result <- httpService.Start(ctx, ready, service.NewLogger(slog.LevelDebug, true))
 	}()
 
 	select {
@@ -147,7 +149,10 @@ func (s *InspectSuite) setup() (*Inspector, Address, Hash) {
 	app := randomAddress()
 	machines := newMockMachines()
 	machines.Map[app] = &MockMachine{}
-	inspect := &Inspector{machines}
+	inspect := &Inspector{
+		IInspectMachines: machines,
+		Logger: service.NewLogger(slog.LevelDebug, true),
+	}
 	payload := randomHash()
 	return inspect, app, payload
 }

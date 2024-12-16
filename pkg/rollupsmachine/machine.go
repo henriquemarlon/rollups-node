@@ -69,7 +69,7 @@ type rollupsMachine struct {
 	inner cartesimachine.CartesiMachine
 
 	inc, max Cycle
-	logger *slog.Logger
+	logger   *slog.Logger
 }
 
 // New checks if the provided cartesimachine.CartesiMachine is in a valid state to receive
@@ -81,9 +81,9 @@ func New(ctx context.Context,
 	logger *slog.Logger,
 ) (RollupsMachine, error) {
 	machine := &rollupsMachine{
-		inner: inner,
-		inc: inc,
-		max: max,
+		inner:  inner,
+		inc:    inc,
+		max:    max,
 		logger: logger,
 	}
 
@@ -111,9 +111,9 @@ func (machine *rollupsMachine) Fork(ctx context.Context) (RollupsMachine, error)
 		return nil, err
 	}
 	return &rollupsMachine{
-		inner: inner,
-		inc: machine.inc,
-		max: machine.max,
+		inner:  inner,
+		inc:    machine.inc,
+		max:    machine.max,
 		logger: machine.logger,
 	}, nil
 }

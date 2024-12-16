@@ -30,7 +30,7 @@ func NewEthWsClientWithRetryPolicy(
 		delegate:          delegate,
 		maxRetries:        maxRetries,
 		delayBetweenCalls: delayBetweenCalls,
-		logger: logger,
+		logger:            logger,
 	}
 }
 

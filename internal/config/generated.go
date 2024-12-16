@@ -336,26 +336,14 @@ func GetFeatureMachineHashCheckEnabled() bool {
 	return val
 }
 
-func GetHttpAddress() string {
-	s, ok := os.LookupEnv("CARTESI_HTTP_ADDRESS")
+func GetInspectAddress() string {
+	s, ok := os.LookupEnv("CARTESI_INSPECT_ADDRESS")
 	if !ok {
-		s = "127.0.0.1"
+		s = ":10012"
 	}
 	val, err := toString(s)
 	if err != nil {
-		panic(fmt.Sprintf("failed to parse CARTESI_HTTP_ADDRESS: %v", err))
-	}
-	return val
-}
-
-func GetHttpPort() int {
-	s, ok := os.LookupEnv("CARTESI_HTTP_PORT")
-	if !ok {
-		s = "10000"
-	}
-	val, err := toInt(s)
-	if err != nil {
-		panic(fmt.Sprintf("failed to parse CARTESI_HTTP_PORT: %v", err))
+		panic(fmt.Sprintf("failed to parse CARTESI_INSPECT_ADDRESS: %v", err))
 	}
 	return val
 }

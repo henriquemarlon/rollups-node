@@ -55,11 +55,9 @@ func (s *Service) selectClaimPairsPerApp() (
 	computed, accepted, err := s.Repository.SelectClaimPairsPerApp(s.Context)
 	if err != nil {
 		s.Logger.Error("selectClaimPairsPerApp:failed",
-			"service", s.Name,
 			"error", err)
 	} else {
 		s.Logger.Debug("selectClaimPairsPerApp:success",
-			"service", s.Name,
 			"len(computed)", len(computed),
 			"len(accepted)", len(accepted))
 	}
@@ -74,14 +72,12 @@ func (s *Service) updateEpochWithSubmittedClaim(
 	err := s.Repository.UpdateEpochWithSubmittedClaim(s.Context, claim.EpochID, txHash)
 	if err != nil {
 		s.Logger.Error("updateEpochWithSubmittedClaim:failed",
-			"service", s.Name,
 			"appContractAddress", claim.AppContractAddress,
 			"hash", claim.EpochHash,
 			"txHash", txHash,
 			"error", err)
 	} else {
 		s.Logger.Debug("updateEpochWithSubmittedClaim:success",
-			"service", s.Name,
 			"appContractAddress", claim.AppContractAddress,
 			"hash", claim.EpochHash,
 			"txHash", txHash)
@@ -100,12 +96,10 @@ func (s *Service) findClaimSubmissionEventAndSucc(
 	ic, curr, next, err := s.FindClaimSubmissionEventAndSucc(claim)
 	if err != nil {
 		s.Logger.Error("findClaimSubmissionEventAndSucc:failed",
-			"service", s.Name,
 			"claim", claim,
 			"error", err)
 	} else {
 		s.Logger.Debug("findClaimSubmissionEventAndSucc:success",
-			"service", s.Name,
 			"claim", claim,
 			"currEvent", curr,
 			"nextEvent", next,
@@ -124,14 +118,12 @@ func (s *Service) submitClaimToBlockchain(
 		lastBlockNumber, claim.EpochHash)
 	if err != nil {
 		s.Logger.Error("submitClaimToBlockchain:failed",
-			"service", s.Name,
 			"appContractAddress", claim.AppContractAddress,
 			"claimHash", claim.EpochHash,
 			"error", err)
 	} else {
 		txHash = tx.Hash()
 		s.Logger.Debug("submitClaimToBlockchain:success",
-			"service", s.Name,
 			"appContractAddress", claim.AppContractAddress,
 			"claimHash", claim.EpochHash,
 			"TxHash", txHash)
@@ -143,18 +135,15 @@ func (s *Service) pollTransaction(txHash hash) (bool, *types.Receipt, error) {
 	ready, receipt, err := s.PollTransaction(txHash)
 	if err != nil {
 		s.Logger.Error("PollTransaction:failed",
-			"service", s.Name,
 			"tx", txHash,
 			"error", err)
 	} else if ready {
 		s.Logger.Debug("PollTransaction:success",
-			"service", s.Name,
 			"tx", txHash,
 			"ready", ready,
 			"blockNumber", receipt.BlockNumber)
 	} else {
 		s.Logger.Debug("PollTransaction:pending",
-			"service", s.Name,
 			"tx", txHash,
 			"ready", ready)
 	}

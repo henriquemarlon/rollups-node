@@ -24,13 +24,13 @@ func NewApplicationWithRetryPolicy(
 	delegate ApplicationContract,
 	maxRetries uint64,
 	delayBetweenCalls time.Duration,
-	logger            *slog.Logger,
+	logger *slog.Logger,
 ) *ApplicationRetryPolicyDelegator {
 	return &ApplicationRetryPolicyDelegator{
 		delegate:          delegate,
 		maxRetries:        maxRetries,
 		delayBetweenCalls: delayBetweenCalls,
-		logger: logger,
+		logger:            logger,
 	}
 }
 

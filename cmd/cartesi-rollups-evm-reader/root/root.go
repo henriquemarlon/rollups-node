@@ -23,10 +23,9 @@ var (
 	createInfo    = evmreader.CreateInfo{
 		CreateInfo: service.CreateInfo{
 			Name:                 "evm-reader",
-			ProcOwner:            true,
 			EnableSignalHandling: true,
 			TelemetryCreate:      true,
-			TelemetryAddress:     ":10000",
+			TelemetryAddress:     ":10001",
 			Impl:                 &readerService,
 		},
 		EvmReaderPersistentConfig: model.EvmReaderPersistentConfig{
@@ -47,45 +46,40 @@ var Cmd = &cobra.Command{
 
 func init() {
 	createInfo.LoadEnv()
-
-	Cmd.Flags().StringVarP(&DefaultBlockString,
-		"default-block", "d", DefaultBlockString,
-		`Default block to be used when fetching new blocks.
-		One of 'latest', 'safe', 'pending', 'finalized'`)
-
-	Cmd.Flags().StringVarP(&createInfo.PostgresEndpoint.Value,
-		"postgres-endpoint",
-		"p",
-		createInfo.PostgresEndpoint.Value,
-		"Postgres endpoint")
-
-	Cmd.Flags().StringVarP(&createInfo.BlockchainHttpEndpoint.Value,
-		"blockchain-http-endpoint",
-		"b",
-		createInfo.BlockchainHttpEndpoint.Value,
-		"Blockchain HTTP Endpoint")
-
-	Cmd.Flags().StringVarP(&createInfo.BlockchainWsEndpoint.Value,
-		"blockchain-ws-endpoint",
-		"w",
-		createInfo.BlockchainWsEndpoint.Value,
-		"Blockchain WS Endpoint")
-
-	Cmd.Flags().Var(&inputBoxAddress,
-		"inputbox-address",
-		"Input Box contract address")
-
-	Cmd.Flags().Uint64VarP(&createInfo.InputBoxDeploymentBlock,
-		"inputbox-block-number",
-		"n",
-		0,
-		"Input Box deployment block number")
+	Cmd.Flags().StringVar(&createInfo.TelemetryAddress,
+		"telemetry-address", createInfo.TelemetryAddress,
+		"telemetry address")
 	Cmd.Flags().Var(&createInfo.LogLevel,
 		"log-level",
 		"log level: debug, info, warn or error")
 	Cmd.Flags().BoolVar(&createInfo.LogPretty,
 		"log-color", createInfo.LogPretty,
 		"tint the logs (colored output)")
+	Cmd.Flags().StringVarP(&DefaultBlockString,
+		"default-block", "d", DefaultBlockString,
+		`Default block to be used when fetching new blocks.
+		One of 'latest', 'safe', 'pending', 'finalized'`)
+	Cmd.Flags().StringVarP(&createInfo.PostgresEndpoint.Value,
+		"postgres-endpoint",
+		"p",
+		createInfo.PostgresEndpoint.Value,
+		"Postgres endpoint")
+	Cmd.Flags().StringVarP(&createInfo.BlockchainHttpEndpoint.Value,
+		"blockchain-http-endpoint",
+		"b",
+		createInfo.BlockchainHttpEndpoint.Value,
+		"Blockchain HTTP Endpoint")
+	Cmd.Flags().StringVarP(&createInfo.BlockchainWsEndpoint.Value,
+		"blockchain-ws-endpoint",
+		"w",
+		createInfo.BlockchainWsEndpoint.Value,
+		"Blockchain WS Endpoint")
+	Cmd.Flags().Var(&inputBoxAddress,
+		"inputbox-address",
+		"Input Box contract address")
+	Cmd.Flags().Uint64VarP(&createInfo.InputBoxDeploymentBlock,
+		"inputbox-block-number", "n", 0,
+		"Input Box deployment block number")
 	Cmd.Flags().DurationVar(&createInfo.MaxStartupTime,
 		"max-startup-time", createInfo.MaxStartupTime,
 		"maximum startup time in seconds")
@@ -102,6 +96,6 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	cobra.CheckErr(evmreader.Create(&createInfo, &readerService))
-	readerService.CreateDefaultHandlers("/" + readerService.Name)
+	readerService.CreateDefaultHandlers("")
 	cobra.CheckErr(readerService.Serve())
 }

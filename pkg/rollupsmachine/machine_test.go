@@ -58,7 +58,7 @@ type NewSuite struct {
 
 	acceptSnapshot *snapshot.Snapshot
 	rejectSnapshot *snapshot.Snapshot
-	logger *slog.Logger
+	logger         *slog.Logger
 }
 
 func (s *NewSuite) SetupSuite() {
@@ -203,7 +203,7 @@ type AdvanceSuite struct {
 	snapshotEcho   *snapshot.Snapshot
 	snapshotReject *snapshot.Snapshot
 	address        string
-	logger *slog.Logger
+	logger         *slog.Logger
 }
 
 func (s *AdvanceSuite) SetupSuite() {
@@ -366,7 +366,7 @@ type InspectSuite struct {
 	suite.Suite
 	snapshotEcho *snapshot.Snapshot
 	address      string
-	logger *slog.Logger
+	logger       *slog.Logger
 }
 
 func (s *InspectSuite) SetupSuite() {
@@ -451,9 +451,9 @@ type UnitSuite struct{ suite.Suite }
 func (_ *UnitSuite) newMachines() (*CartesiMachineMock, *rollupsMachine) {
 	mock := new(CartesiMachineMock)
 	machine := &rollupsMachine{
-		inner: mock,
-		inc: defaultInc,
-		max: defaultMax,
+		inner:  mock,
+		inc:    defaultInc,
+		max:    defaultMax,
 		logger: service.NewLogger(slog.LevelDebug, true),
 	}
 	return mock, machine

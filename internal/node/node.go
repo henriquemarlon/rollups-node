@@ -27,7 +27,6 @@ type CreateInfo struct {
 
 	BlockchainHttpEndpoint config.Redacted[string]
 	BlockchainID           uint64
-	HTTPEndpoint           config.Redacted[string]
 	PostgresEndpoint       config.Redacted[string]
 	EnableClaimSubmission  bool
 	MaxStartupTime         time.Duration
@@ -49,10 +48,6 @@ func (c *CreateInfo) LoadEnv() {
 	c.MaxStartupTime = config.GetMaxStartupTime()
 	c.LogLevel = service.LogLevel(config.GetLogLevel())
 	c.LogPretty = config.GetLogPrettyEnabled()
-
-	httpAddress := config.GetHttpAddress()
-	httpPort := config.GetHttpPort()
-	c.HTTPEndpoint.Value = fmt.Sprintf("%v:%v", httpAddress, httpPort)
 }
 
 func Create(c *CreateInfo, s *Service) error {
@@ -103,7 +98,7 @@ func createServices(c *CreateInfo, s *Service) error {
 
 	numChildren++
 	go func() {
-		ch <- newEVMReader(c, s.Logger, s.Repository)
+		ch <- newEVMReader(c, s.Logger, s.Repository, s.ServeMux)
 	}()
 
 	numChildren++
@@ -113,12 +108,12 @@ func createServices(c *CreateInfo, s *Service) error {
 
 	numChildren++
 	go func() {
-		ch <- newValidator(c, s.Logger, s.Repository)
+		ch <- newValidator(c, s.Logger, s.Repository, s.ServeMux)
 	}()
 
 	numChildren++
 	go func() {
-		ch <- newClaimer(c, s.Logger, s.Repository)
+		ch <- newClaimer(c, s.Logger, s.Repository, s.ServeMux)
 	}()
 
 	for range numChildren {
@@ -173,13 +168,19 @@ func newEVMReader(
 	nc *CreateInfo,
 	logger *slog.Logger,
 	database *repository.Database,
+	serveMux *http.ServeMux,
 ) service.IService {
-	s := evmreader.Service{}
+	s := evmreader.Service{
+		Service: service.Service{
+			ServeMux: serveMux,
+		},
+	}
 	c := evmreader.CreateInfo{
 		CreateInfo: service.CreateInfo{
-			Name:      "evm-reader",
-			Impl:      &s,
-			ProcOwner: true, // TODO: Remove this after updating supervisor
+			Name:                 "evm-reader",
+			Impl:                 &s,
+			ServeMux:             serveMux,
+			EnableSignalHandling: true,
 		},
 		EvmReaderPersistentConfig: model.EvmReaderPersistentConfig{
 			DefaultBlock: model.DefaultBlockStatusSafe,
@@ -196,6 +197,7 @@ func newEVMReader(
 			"error", err)
 		panic(err)
 	}
+	s.CreateDefaultHandlers("/" + s.Name)
 	return &s
 }
 
@@ -205,13 +207,17 @@ func newAdvancer(
 	database *repository.Database,
 	serveMux *http.ServeMux,
 ) service.IService {
-	s := advancer.Service{}
+	s := advancer.Service{
+		Service: service.Service{
+			ServeMux: serveMux,
+		},
+	}
 	c := advancer.CreateInfo{
 		CreateInfo: service.CreateInfo{
-			Name:      "advancer",
-			Impl:      &s,
-			ProcOwner: true,
-			ServeMux:  serveMux,
+			Name:                 "advancer",
+			Impl:                 &s,
+			ServeMux:             serveMux,
+			EnableSignalHandling: true,
 		},
 		Repository: database,
 	}
@@ -225,6 +231,7 @@ func newAdvancer(
 			"error", err)
 		panic(err)
 	}
+	s.CreateDefaultHandlers("/" + s.Name)
 	return &s
 }
 
@@ -232,13 +239,19 @@ func newValidator(
 	nc *CreateInfo,
 	logger *slog.Logger,
 	database *repository.Database,
+	serveMux *http.ServeMux,
 ) service.IService {
-	s := validator.Service{}
+	s := validator.Service{
+		Service: service.Service{
+			ServeMux: serveMux,
+		},
+	}
 	c := validator.CreateInfo{
 		CreateInfo: service.CreateInfo{
-			Name:      "validator",
-			Impl:      &s,
-			ProcOwner: true,
+			Name:                 "validator",
+			Impl:                 &s,
+			ServeMux:             serveMux,
+			EnableSignalHandling: true,
 		},
 		Repository: database,
 	}
@@ -252,6 +265,7 @@ func newValidator(
 			"error", err)
 		panic(err)
 	}
+	s.CreateDefaultHandlers("/" + s.Name)
 	return &s
 }
 
@@ -259,13 +273,18 @@ func newClaimer(
 	nc *CreateInfo,
 	logger *slog.Logger,
 	database *repository.Database,
+	serveMux *http.ServeMux,
 ) service.IService {
-	s := claimer.Service{}
+	s := claimer.Service{
+		Service: service.Service{
+			ServeMux: serveMux,
+		},
+	}
 	c := claimer.CreateInfo{
 		CreateInfo: service.CreateInfo{
-			Name:      "claimer",
-			Impl:      &s,
-			ProcOwner: true,
+			Name:                 "claimer",
+			Impl:                 &s,
+			EnableSignalHandling: true,
 		},
 		Repository: database,
 	}
@@ -280,5 +299,6 @@ func newClaimer(
 			"error", err)
 		panic(err)
 	}
+	s.CreateDefaultHandlers("/" + s.Name)
 	return &s
 }

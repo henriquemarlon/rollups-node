@@ -17,10 +17,9 @@ var (
 	createInfo       = validator.CreateInfo{
 		CreateInfo: service.CreateInfo{
 			Name:                 "validator",
-			ProcOwner:            true,
 			EnableSignalHandling: true,
 			TelemetryCreate:      true,
-			TelemetryAddress:     ":10002",
+			TelemetryAddress:     ":10003",
 			Impl:                 &validatorService,
 		},
 	}
@@ -54,6 +53,6 @@ func init() {
 
 func run(cmd *cobra.Command, args []string) {
 	cobra.CheckErr(validator.Create(&createInfo, &validatorService))
-	validatorService.CreateDefaultHandlers("/" + validatorService.Name)
+	validatorService.CreateDefaultHandlers("")
 	cobra.CheckErr(validatorService.Serve())
 }

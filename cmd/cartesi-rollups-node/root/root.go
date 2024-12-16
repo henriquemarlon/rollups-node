@@ -19,10 +19,9 @@ var (
 	createInfo   = node.CreateInfo{
 		CreateInfo: service.CreateInfo{
 			Name:                 "cartesi-rollups-node",
-			ProcOwner:            true,
 			EnableSignalHandling: true,
 			TelemetryCreate:      true,
-			TelemetryAddress:     ":10001",
+			TelemetryAddress:     ":10000",
 			Impl:                 &nodeService,
 		},
 		MaxStartupTime: 10 * time.Second,
@@ -38,15 +37,18 @@ var Cmd = &cobra.Command{
 
 func init() {
 	createInfo.LoadEnv()
-	Cmd.Flags().BoolVar(&createInfo.EnableClaimSubmission,
-		"claim-submission", createInfo.EnableClaimSubmission,
-		"enable or disable claim submission (reader mode)")
+	Cmd.Flags().StringVar(&createInfo.TelemetryAddress,
+		"telemetry-address", createInfo.TelemetryAddress,
+		"telemetry address")
 	Cmd.Flags().Var(&createInfo.LogLevel,
 		"log-level",
 		"log level: debug, info, warn or error")
 	Cmd.Flags().BoolVar(&createInfo.LogPretty,
 		"log-color", createInfo.LogPretty,
 		"tint the logs (colored output)")
+	Cmd.Flags().BoolVar(&createInfo.EnableClaimSubmission,
+		"claim-submission", createInfo.EnableClaimSubmission,
+		"enable or disable claim submission (reader mode)")
 	Cmd.Flags().DurationVar(&createInfo.MaxStartupTime,
 		"max-startup-time", createInfo.MaxStartupTime,
 		"maximum startup time in seconds")

@@ -17,13 +17,13 @@ var (
 	createInfo      = advancer.CreateInfo{
 		CreateInfo: service.CreateInfo{
 			Name:                 "advancer",
-			ProcOwner:            true,
 			EnableSignalHandling: true,
 			TelemetryCreate:      true,
-			TelemetryAddress:     ":10001",
+			TelemetryAddress:     ":10002",
 			Impl:                 &advancerService,
 		},
 		MaxStartupTime: 10 * time.Second,
+		InspectAddress: ":10012",
 	}
 )
 
@@ -36,6 +36,9 @@ var Cmd = &cobra.Command{
 
 func init() {
 	createInfo.LoadEnv()
+	Cmd.Flags().StringVar(&createInfo.TelemetryAddress,
+		"telemetry-address", createInfo.TelemetryAddress,
+		"telemetry address")
 	Cmd.Flags().Var(&createInfo.LogLevel,
 		"log-level",
 		"log level: debug, info, warn or error")
@@ -45,10 +48,13 @@ func init() {
 	Cmd.Flags().DurationVar(&createInfo.MaxStartupTime,
 		"max-startup-time", createInfo.MaxStartupTime,
 		"maximum startup time in seconds")
+	Cmd.Flags().StringVar(&createInfo.InspectAddress,
+		"inspect-address", createInfo.InspectAddress,
+		"inspect address")
 }
 
 func run(cmd *cobra.Command, args []string) {
 	cobra.CheckErr(advancer.Create(&createInfo, &advancerService))
-	advancerService.CreateDefaultHandlers("/" + advancerService.Name)
+	advancerService.CreateDefaultHandlers("")
 	cobra.CheckErr(advancerService.Serve())
 }

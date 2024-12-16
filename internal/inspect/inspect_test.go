@@ -4,13 +4,13 @@
 package inspect
 
 import (
-	"log/slog"
 	"bytes"
 	"context"
 	crand "crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -151,7 +151,7 @@ func (s *InspectSuite) setup() (*Inspector, Address, Hash) {
 	machines.Map[app] = &MockMachine{}
 	inspect := &Inspector{
 		IInspectMachines: machines,
-		Logger: service.NewLogger(slog.LevelDebug, true),
+		Logger:           service.NewLogger(slog.LevelDebug, true),
 	}
 	payload := randomHash()
 	return inspect, app, payload

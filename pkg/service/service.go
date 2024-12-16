@@ -95,7 +95,6 @@ type CreateInfo struct {
 	Impl                 ServiceImpl
 	LogLevel             LogLevel
 	LogPretty            bool
-	ProcOwner            bool
 	ServeMux             *http.ServeMux
 	Context              context.Context
 	PollInterval         time.Duration
@@ -106,19 +105,19 @@ type CreateInfo struct {
 
 // Service stores runtime information.
 type Service struct {
-	Running        atomic.Bool
-	Name           string
-	Impl           ServiceImpl
-	Logger         *slog.Logger
-	Ticker         *time.Ticker
-	PollInterval   time.Duration
-	Context        context.Context
-	Cancel         context.CancelFunc
-	Sighup         chan os.Signal // SIGHUP to reload
-	Sigint         chan os.Signal // SIGINT to exit gracefully
-	ServeMux       *http.ServeMux
-	HTTPServer     *http.Server
-	HTTPServerFunc func() error
+	Running       atomic.Bool
+	Name          string
+	Impl          ServiceImpl
+	Logger        *slog.Logger
+	Ticker        *time.Ticker
+	PollInterval  time.Duration
+	Context       context.Context
+	Cancel        context.CancelFunc
+	Sighup        chan os.Signal // SIGHUP to reload
+	Sigint        chan os.Signal // SIGINT to exit gracefully
+	ServeMux      *http.ServeMux
+	Telemetry     *http.Server
+	TelemetryFunc func() error
 }
 
 // Create a service by:
@@ -151,36 +150,29 @@ func Create(c *CreateInfo, s *Service) error {
 		s.Context, s.Cancel = context.WithCancel(c.Context)
 	}
 
-	if c.ProcOwner {
-		// ticker
-		if s.Ticker == nil {
-			if c.PollInterval == 0 {
-				c.PollInterval = 60 * time.Second
-			}
-			s.PollInterval = c.PollInterval
-			s.Ticker = time.NewTicker(s.PollInterval)
+	// ticker
+	if s.Ticker == nil {
+		if c.PollInterval == 0 {
+			c.PollInterval = 60 * time.Second
 		}
+		s.PollInterval = c.PollInterval
+		s.Ticker = time.NewTicker(s.PollInterval)
+	}
 
-		// signal handling
-		if s.Sighup == nil {
-			s.Sighup = make(chan os.Signal, 1)
-			signal.Notify(s.Sighup, syscall.SIGHUP)
-		}
-		if s.Sigint == nil {
-			s.Sigint = make(chan os.Signal, 1)
-			signal.Notify(s.Sigint, syscall.SIGINT)
-		}
+	// signal handling
+	if s.Sighup == nil {
+		s.Sighup = make(chan os.Signal, 1)
+		signal.Notify(s.Sighup, syscall.SIGHUP)
+	}
+	if s.Sigint == nil {
+		s.Sigint = make(chan os.Signal, 1)
+		signal.Notify(s.Sigint, syscall.SIGINT)
 	}
 
 	// telemetry
 	if c.TelemetryCreate {
 		if s.ServeMux == nil {
 			if c.ServeMux == nil {
-				if !c.ProcOwner {
-					s.Logger.Warn("Create:Created a new ServeMux",
-						"ProcOwner", c.ProcOwner,
-						"LogLevel", c.LogLevel)
-				}
 				c.ServeMux = http.NewServeMux()
 			}
 			s.ServeMux = c.ServeMux
@@ -188,21 +180,12 @@ func Create(c *CreateInfo, s *Service) error {
 		if c.TelemetryAddress == "" {
 			c.TelemetryAddress = ":8080"
 		}
-		s.HTTPServer, s.HTTPServerFunc = s.CreateDefaultTelemetry(
+		s.Telemetry, s.TelemetryFunc = s.CreateDefaultTelemetry(
 			c.TelemetryAddress, 3, 5*time.Second, s.ServeMux)
-		go s.HTTPServerFunc()
+		go s.TelemetryFunc()
 	}
 
-	// ProcOwner will be ready on the call to Serve
-	if c.ProcOwner {
-		s.Logger.Info("Create",
-			"LogLevel", c.LogLevel,
-			"pid", os.Getpid())
-	} else {
-		s.Running.Store(true)
-		s.Logger.Info("Create",
-			"LogLevel", c.LogLevel)
-	}
+	s.Logger.Info("Create", "LogLevel", c.LogLevel, "pid", os.Getpid())
 	return nil
 }
 
@@ -249,8 +232,8 @@ func (s *Service) Tick() []error {
 func (s *Service) Stop(force bool) []error {
 	start := time.Now()
 	errs := s.Impl.Stop(force)
-	if s.HTTPServer != nil {
-		s.HTTPServer.Shutdown(s.Context)
+	if s.Telemetry != nil {
+		s.Telemetry.Shutdown(s.Context)
 	}
 	elapsed := time.Since(start)
 
@@ -319,7 +302,7 @@ func WithTimeout(limit time.Duration, fn func() error) error {
 	case err := <-ch:
 		return err
 	case <-deadline:
-		return fmt.Errorf("Time limit exceded")
+		return fmt.Errorf("Time limit exceeded")
 	}
 }
 
@@ -341,7 +324,7 @@ func (s *Service) CreateDefaultTelemetry(
 		ErrorLog: slog.NewLogLogger(s.Logger.Handler(), slog.LevelError),
 	}
 	return server, func() error {
-		s.Logger.Info("Telemetry", "service", s.Name, "addr", addr)
+		s.Logger.Info("Telemetry", "addr", addr)
 		var err error = nil
 		for retry := 0; retry < maxRetries+1; retry++ {
 			switch err = server.ListenAndServe(); err {

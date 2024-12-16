@@ -19,10 +19,9 @@ var (
 	createInfo     = claimer.CreateInfo{
 		CreateInfo: service.CreateInfo{
 			Name:                 "claimer",
-			ProcOwner:            true,
 			EnableSignalHandling: true,
 			TelemetryCreate:      true,
-			TelemetryAddress:     ":10003",
+			TelemetryAddress:     ":10004",
 			Impl:                 &claimerService,
 		},
 		EnableSubmission: true,
@@ -42,18 +41,18 @@ func init() {
 	Cmd.Flags().StringVar(&createInfo.TelemetryAddress,
 		"telemetry-address", createInfo.TelemetryAddress,
 		"health check and metrics address and port")
-	Cmd.Flags().StringVar(&createInfo.BlockchainHttpEndpoint.Value,
-		"blockchain-http-endpoint", createInfo.BlockchainHttpEndpoint.Value,
-		"blockchain http endpoint")
-	Cmd.Flags().DurationVar(&createInfo.PollInterval,
-		"poll-interval", createInfo.PollInterval,
-		"poll interval")
 	Cmd.Flags().Var(&createInfo.LogLevel,
 		"log-level",
 		"log level: debug, info, warn or error")
 	Cmd.Flags().BoolVar(&createInfo.LogPretty,
 		"log-color", createInfo.LogPretty,
 		"tint the logs (colored output)")
+	Cmd.Flags().StringVar(&createInfo.BlockchainHttpEndpoint.Value,
+		"blockchain-http-endpoint", createInfo.BlockchainHttpEndpoint.Value,
+		"blockchain http endpoint")
+	Cmd.Flags().DurationVar(&createInfo.PollInterval,
+		"poll-interval", createInfo.PollInterval,
+		"poll interval")
 	Cmd.Flags().DurationVar(&createInfo.MaxStartupTime,
 		"max-startup-time", createInfo.MaxStartupTime,
 		"maximum startup time in seconds")
@@ -64,6 +63,6 @@ func init() {
 
 func run(cmd *cobra.Command, args []string) {
 	cobra.CheckErr(claimer.Create(&createInfo, &claimerService))
-	claimerService.CreateDefaultHandlers("/" + claimerService.Name)
+	claimerService.CreateDefaultHandlers("")
 	cobra.CheckErr(claimerService.Serve())
 }

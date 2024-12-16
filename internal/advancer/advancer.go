@@ -46,9 +46,11 @@ type IAdvancerMachines interface {
 
 type Service struct {
 	service.Service
-	repository IAdvancerRepository
-	machines   IAdvancerMachines
-	inspector  inspect.Inspector
+	repository     IAdvancerRepository
+	machines       IAdvancerMachines
+	inspector      inspect.Inspector
+	HTTPServer     *http.Server
+	HTTPServerFunc func() error
 }
 
 type CreateInfo struct {
@@ -57,23 +59,22 @@ type CreateInfo struct {
 	PostgresEndpoint        config.Redacted[string]
 	PostgresSslMode         bool
 	Repository              *repository.Database
-	HttpAddress             string
-	HttpPort                int
 	MachineServerVerbosity  config.Redacted[cartesimachine.ServerVerbosity]
 	Machines                *machines.Machines
 	MaxStartupTime          time.Duration
+	InspectAddress          string
+	InspectServeMux         *http.ServeMux
 }
 
 func (c *CreateInfo) LoadEnv() {
 	c.PostgresEndpoint.Value = config.GetPostgresEndpoint()
 	c.PollInterval = config.GetAdvancerPollingInterval()
-	c.HttpAddress = config.GetHttpAddress()
-	c.HttpPort = config.GetHttpPort()
 	c.MachineServerVerbosity.Value =
 		cartesimachine.ServerVerbosity(config.GetMachineServerVerbosity())
 	c.LogLevel = service.LogLevel(config.GetLogLevel())
 	c.LogPretty = config.GetLogPrettyEnabled()
 	c.MaxStartupTime = config.GetMaxStartupTime()
+	c.InspectAddress = config.GetInspectAddress()
 }
 
 func Create(c *CreateInfo, s *Service) error {
@@ -110,19 +111,17 @@ func Create(c *CreateInfo, s *Service) error {
 			logger = logger.With("service", "inspect")
 			s.inspector = inspect.Inspector{
 				IInspectMachines: c.Machines,
-				Logger: logger,
-			}
-			if s.Service.ServeMux == nil {
-				if c.CreateInfo.ServeMux == nil {
-					c.ServeMux = http.NewServeMux()
-				}
-				s.ServeMux = c.ServeMux
+				Logger:           logger,
+				ServeMux:         http.NewServeMux(),
 			}
 
-			s.ServeMux.Handle("/inspect/{dapp}",
+			s.inspector.ServeMux.Handle("/inspect/{dapp}",
 				services.CorsMiddleware(http.Handler(&s.inspector)))
-			s.ServeMux.Handle("/inspect/{dapp}/{payload}",
+			s.inspector.ServeMux.Handle("/inspect/{dapp}/{payload}",
 				services.CorsMiddleware(http.Handler(&s.inspector)))
+			s.HTTPServer, s.HTTPServerFunc = s.inspector.CreateInspectServer(
+				c.InspectAddress, 3, 5*time.Second, s.inspector.ServeMux)
+			go s.HTTPServerFunc()
 		}
 		return nil
 	})

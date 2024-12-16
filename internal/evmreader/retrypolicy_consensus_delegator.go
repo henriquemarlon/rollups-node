@@ -28,13 +28,13 @@ func NewConsensusWithRetryPolicy(
 	delegate ConsensusContract,
 	maxRetries uint64,
 	delayBetweenCalls time.Duration,
-	logger            *slog.Logger,
+	logger *slog.Logger,
 ) *ConsensusRetryPolicyDelegator {
 	return &ConsensusRetryPolicyDelegator{
 		delegate:          delegate,
 		maxRetries:        maxRetries,
 		delayBetweenCalls: delayBetweenCalls,
-		logger: logger,
+		logger:            logger,
 	}
 }
 

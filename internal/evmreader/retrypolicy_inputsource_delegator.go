@@ -25,7 +25,7 @@ func NewInputSourceWithRetryPolicy(
 	delegate InputSource,
 	maxRetries uint64,
 	delay time.Duration,
-	logger     *slog.Logger,
+	logger *slog.Logger,
 ) *InputSourceWithRetryPolicyDelegator {
 	return &InputSourceWithRetryPolicyDelegator{
 		delegate:   delegate,

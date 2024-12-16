@@ -94,8 +94,9 @@ func (c *CreateInfo) LoadEnv() {
 	c.BlockchainHttpEndpoint.Value = config.GetBlockchainHttpEndpoint()
 	c.PostgresEndpoint.Value = config.GetPostgresEndpoint()
 	c.PollInterval = config.GetClaimerPollingInterval()
-	c.LogLevel = service.LogLevel(config.GetLogLevel())
 	c.MaxStartupTime = config.GetMaxStartupTime()
+	c.LogLevel = service.LogLevel(config.GetLogLevel())
+	c.LogPretty = config.GetLogPrettyEnabled()
 }
 
 func Create(c *CreateInfo, s *Service) error {

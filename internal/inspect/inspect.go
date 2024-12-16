@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"time"
 
 	"github.com/cartesi/rollups-node/internal/advancer/machines"
 	. "github.com/cartesi/rollups-node/internal/model"
@@ -27,7 +28,8 @@ var (
 
 type Inspector struct {
 	IInspectMachines
-	Logger *slog.Logger
+	Logger   *slog.Logger
+	ServeMux *http.ServeMux
 }
 
 type ReportResponse struct {
@@ -39,6 +41,37 @@ type InspectResponse struct {
 	Exception       string           `json:"exception"`
 	Reports         []ReportResponse `json:"reports"`
 	ProcessedInputs uint64           `json:"processed_input_count"`
+}
+
+func (s *Inspector) CreateInspectServer(
+	addr string,
+	maxRetries int,
+	retryInterval time.Duration,
+	mux *http.ServeMux,
+) (*http.Server, func() error) {
+	server := &http.Server{
+		Addr:     addr,
+		Handler:  mux,
+		ErrorLog: slog.NewLogLogger(s.Logger.Handler(), slog.LevelError),
+	}
+	return server, func() error {
+		s.Logger.Info("Create Inspect Server", "addr", addr)
+		var err error = nil
+		for retry := 0; retry < maxRetries+1; retry++ {
+			switch err = server.ListenAndServe(); err {
+			case http.ErrServerClosed:
+				return nil
+			default:
+				s.Logger.Error("http",
+					"error", err,
+					"try", retry+1,
+					"maxRetries", maxRetries,
+					"error", err)
+			}
+			time.Sleep(retryInterval)
+		}
+		return err
+	}
 }
 
 func (inspect *Inspector) ServeHTTP(w http.ResponseWriter, r *http.Request) {

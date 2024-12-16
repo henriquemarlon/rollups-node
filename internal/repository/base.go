@@ -18,7 +18,7 @@ import (
 )
 
 type Database struct {
-	db *pgxpool.Pool
+	db     *pgxpool.Pool
 	Logger *slog.Logger
 }
 
@@ -80,7 +80,7 @@ func Connect(
 		}
 
 		pgInstance = &Database{
-			db: dbpool,
+			db:     dbpool,
 			Logger: logger,
 		}
 	})

@@ -4,13 +4,13 @@
 package root
 
 import (
+	"strings"
 	"time"
 
 	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/internal/evmreader"
 	"github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/pkg/service"
-	"github.com/ethereum/go-ethereum/common"
 
 	"github.com/spf13/cobra"
 )
@@ -28,13 +28,13 @@ var (
 			TelemetryAddress:     ":10001",
 			Impl:                 &readerService,
 		},
-		EvmReaderPersistentConfig: model.EvmReaderPersistentConfig{
-			DefaultBlock: model.DefaultBlockStatusSafe,
+		NodeConfig: model.NodeConfig{
+			DefaultBlock: model.DefaultBlock_Finalized,
 		},
 		MaxStartupTime: 10 * time.Second,
 	}
 	inputBoxAddress    service.EthAddress
-	DefaultBlockString = "safe"
+	DefaultBlockString = "finalized"
 )
 
 var Cmd = &cobra.Command{
@@ -92,7 +92,7 @@ func run(cmd *cobra.Command, args []string) {
 		cobra.CheckErr(err)
 	}
 	if cmd.Flags().Changed("inputbox-address") {
-		createInfo.InputBoxAddress = common.Address(inputBoxAddress)
+		createInfo.InputBoxAddress = strings.ToLower(inputBoxAddress.String())
 	}
 
 	cobra.CheckErr(evmreader.Create(&createInfo, &readerService))

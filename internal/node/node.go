@@ -17,6 +17,7 @@ import (
 	"github.com/cartesi/rollups-node/internal/evmreader"
 	"github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/repository"
+	"github.com/cartesi/rollups-node/internal/repository/factory"
 	"github.com/cartesi/rollups-node/internal/validator"
 
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -24,6 +25,7 @@ import (
 
 type CreateInfo struct {
 	service.CreateInfo
+	model.NodeConfig
 
 	BlockchainHttpEndpoint config.Redacted[string]
 	BlockchainID           uint64
@@ -37,7 +39,7 @@ type Service struct {
 
 	Children   []service.IService
 	Client     *ethclient.Client
-	Repository *repository.Database
+	Repository repository.Repository
 }
 
 func (c *CreateInfo) LoadEnv() {
@@ -60,7 +62,7 @@ func Create(c *CreateInfo, s *Service) error {
 
 	err = service.WithTimeout(c.MaxStartupTime, func() error {
 		// database connection
-		s.Repository, err = repository.Connect(s.Context, c.PostgresEndpoint.Value, s.Logger)
+		s.Repository, err = factory.NewRepositoryFromConnectionString(s.Context, c.PostgresEndpoint.Value)
 		if err != nil {
 			return err
 		}
@@ -121,9 +123,9 @@ func createServices(c *CreateInfo, s *Service) error {
 		case child := <-ch:
 			s.Children = append(s.Children, child)
 		case <-deadline:
-			s.Logger.Error("Failed to create services. Time limit exceded",
+			s.Logger.Error("Failed to create services. Time limit exceeded",
 				"limit", c.MaxStartupTime)
-			return fmt.Errorf("Failed to create services. Time limit exceded")
+			return fmt.Errorf("Failed to create services. Time limit exceeded")
 		}
 	}
 	return nil
@@ -167,9 +169,10 @@ func (me *Service) Serve() error {
 func newEVMReader(
 	nc *CreateInfo,
 	logger *slog.Logger,
-	database *repository.Database,
+	r repository.Repository,
 	serveMux *http.ServeMux,
 ) service.IService {
+	println(nc.DefaultBlock)
 	s := evmreader.Service{
 		Service: service.Service{
 			ServeMux: serveMux,
@@ -182,10 +185,12 @@ func newEVMReader(
 			ServeMux:             serveMux,
 			EnableSignalHandling: true,
 		},
-		EvmReaderPersistentConfig: model.EvmReaderPersistentConfig{
-			DefaultBlock: model.DefaultBlockStatusSafe,
+		NodeConfig: model.NodeConfig{
+			DefaultBlock:            nc.DefaultBlock,
+			InputBoxAddress:         nc.InputBoxAddress,
+			InputBoxDeploymentBlock: nc.InputBoxDeploymentBlock,
 		},
-		Database: database,
+		Repository: r,
 	}
 	c.LoadEnv()
 	c.LogLevel = nc.LogLevel
@@ -204,7 +209,7 @@ func newEVMReader(
 func newAdvancer(
 	nc *CreateInfo,
 	logger *slog.Logger,
-	database *repository.Database,
+	r repository.Repository,
 	serveMux *http.ServeMux,
 ) service.IService {
 	s := advancer.Service{
@@ -219,7 +224,7 @@ func newAdvancer(
 			ServeMux:             serveMux,
 			EnableSignalHandling: true,
 		},
-		Repository: database,
+		Repository: r,
 	}
 	c.LoadEnv()
 	c.LogLevel = nc.LogLevel
@@ -238,7 +243,7 @@ func newAdvancer(
 func newValidator(
 	nc *CreateInfo,
 	logger *slog.Logger,
-	database *repository.Database,
+	r repository.Repository,
 	serveMux *http.ServeMux,
 ) service.IService {
 	s := validator.Service{
@@ -253,7 +258,7 @@ func newValidator(
 			ServeMux:             serveMux,
 			EnableSignalHandling: true,
 		},
-		Repository: database,
+		Repository: r,
 	}
 	c.LoadEnv()
 	c.LogLevel = nc.LogLevel
@@ -272,7 +277,7 @@ func newValidator(
 func newClaimer(
 	nc *CreateInfo,
 	logger *slog.Logger,
-	database *repository.Database,
+	r repository.Repository,
 	serveMux *http.ServeMux,
 ) service.IService {
 	s := claimer.Service{
@@ -286,7 +291,7 @@ func newClaimer(
 			Impl:                 &s,
 			EnableSignalHandling: true,
 		},
-		Repository: database,
+		Repository: r,
 	}
 	c.LoadEnv()
 	c.LogLevel = nc.LogLevel

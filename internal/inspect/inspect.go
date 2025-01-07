@@ -12,11 +12,11 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/cartesi/rollups-node/internal/advancer/machines"
 	. "github.com/cartesi/rollups-node/internal/model"
-	"github.com/cartesi/rollups-node/internal/nodemachine"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 )
@@ -76,7 +76,7 @@ func (s *Inspector) CreateInspectServer(
 
 func (inspect *Inspector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var (
-		dapp         Address
+		dapp         string
 		payload      []byte
 		err          error
 		reports      []ReportResponse
@@ -91,7 +91,7 @@ func (inspect *Inspector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dapp = common.HexToAddress(r.PathValue("dapp"))
+	dapp = strings.ToLower(common.HexToAddress(r.PathValue("dapp")).String())
 	if r.Method == "POST" {
 		payload, err = io.ReadAll(r.Body)
 		if err != nil {
@@ -117,7 +117,7 @@ func (inspect *Inspector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		payload = []byte(decodedValue)
 	}
 
-	inspect.Logger.Info("Got new inspect request", "application", dapp.String())
+	inspect.Logger.Info("Got new inspect request", "application", dapp)
 	result, err := inspect.process(r.Context(), dapp, payload)
 	if err != nil {
 		if errors.Is(err, ErrNoApp) {
@@ -162,18 +162,18 @@ func (inspect *Inspector) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	inspect.Logger.Info("Request executed",
 		"status", status,
-		"application", dapp.String())
+		"application", dapp)
 }
 
 // process sends an inspect request to the machine
 func (inspect *Inspector) process(
 	ctx context.Context,
-	app Address,
-	query []byte) (*nodemachine.InspectResult, error) {
+	app string,
+	query []byte) (*InspectResult, error) {
 	// Asserts that the app has an associated machine.
 	machine, exists := inspect.GetInspectMachine(app)
 	if !exists {
-		return nil, fmt.Errorf("%w %s", ErrNoApp, app.String())
+		return nil, fmt.Errorf("%w %s", ErrNoApp, app)
 	}
 
 	res, err := machine.Inspect(ctx, query)
@@ -187,9 +187,9 @@ func (inspect *Inspector) process(
 // ------------------------------------------------------------------------------------------------
 
 type IInspectMachines interface {
-	GetInspectMachine(app Address) (machines.InspectMachine, bool)
+	GetInspectMachine(app string) (machines.InspectMachine, bool)
 }
 
 type IInspectMachine interface {
-	Inspect(_ context.Context, query []byte) (*nodemachine.InspectResult, error)
+	Inspect(_ context.Context, query []byte) (*InspectResult, error)
 }

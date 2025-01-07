@@ -13,7 +13,7 @@ import (
 
 func (r *Service) checkForOutputExecution(
 	ctx context.Context,
-	apps []application,
+	apps []appContracts,
 	mostRecentBlockNumber uint64,
 ) {
 
@@ -23,7 +23,7 @@ func (r *Service) checkForOutputExecution(
 
 	for _, app := range apps {
 
-		LastOutputCheck := app.LastOutputCheckBlock
+		LastOutputCheck := app.application.LastOutputCheckBlock
 
 		// Safeguard: Only check blocks starting from the block where the InputBox
 		// contract was deployed as Inputs can be added to that same block
@@ -34,7 +34,7 @@ func (r *Service) checkForOutputExecution(
 		if mostRecentBlockNumber > LastOutputCheck {
 
 			r.Logger.Debug("Checking output execution for application",
-				"app", app.ContractAddress,
+				"app", app.application.IApplicationAddress,
 				"last output check block", LastOutputCheck,
 				"most recent block", mostRecentBlockNumber)
 
@@ -43,13 +43,13 @@ func (r *Service) checkForOutputExecution(
 		} else if mostRecentBlockNumber < LastOutputCheck {
 			r.Logger.Warn(
 				"Not reading output execution: most recent block is lower than the last processed one", //nolint:lll
-				"app", app.ContractAddress,
+				"app", app.application.IApplicationAddress,
 				"last output check block", LastOutputCheck,
 				"most recent block", mostRecentBlockNumber,
 			)
 		} else {
 			r.Logger.Warn("Not reading output execution: already checked the most recent blocks",
-				"app", app.ContractAddress,
+				"app", app.application.IApplicationAddress,
 				"last output check block", LastOutputCheck,
 				"most recent block", mostRecentBlockNumber,
 			)
@@ -59,7 +59,7 @@ func (r *Service) checkForOutputExecution(
 }
 
 func (r *Service) readAndUpdateOutputs(
-	ctx context.Context, app application, lastOutputCheck, mostRecentBlockNumber uint64) {
+	ctx context.Context, app appContracts, lastOutputCheck, mostRecentBlockNumber uint64) {
 
 	contract := app.applicationContract
 
@@ -70,7 +70,7 @@ func (r *Service) readAndUpdateOutputs(
 
 	outputExecutedEvents, err := contract.RetrieveOutputExecutionEvents(opts)
 	if err != nil {
-		r.Logger.Error("Error reading output events", "app", app.ContractAddress, "error", err)
+		r.Logger.Error("Error reading output events", "app", app.application.IApplicationAddress, "error", err)
 		return
 	}
 
@@ -79,38 +79,38 @@ func (r *Service) readAndUpdateOutputs(
 	for _, event := range outputExecutedEvents {
 
 		// Compare output to check it is the correct one
-		output, err := r.repository.GetOutput(ctx, app.ContractAddress, event.OutputIndex)
+		output, err := r.repository.GetOutput(ctx, app.application.IApplicationAddress, event.OutputIndex)
 		if err != nil {
 			r.Logger.Error("Error retrieving output",
-				"app", app.ContractAddress, "index", event.OutputIndex, "error", err)
+				"app", app.application.IApplicationAddress, "index", event.OutputIndex, "error", err)
 			return
 		}
 
 		if output == nil {
 			r.Logger.Warn("Found OutputExecuted event but output does not exist in the database yet",
-				"app", app.ContractAddress, "index", event.OutputIndex)
+				"app", app.application.IApplicationAddress, "index", event.OutputIndex)
 			return
 		}
 
 		if !bytes.Equal(output.RawData, event.Output) {
 			r.Logger.Debug("Output mismatch",
-				"app", app.ContractAddress, "index", event.OutputIndex,
+				"app", app.application.IApplicationAddress, "index", event.OutputIndex,
 				"actual", output.RawData, "event's", event.Output)
 
 			r.Logger.Error("Output mismatch. Application is in an invalid state",
-				"app", app.ContractAddress,
+				"app", app.application.IApplicationAddress,
 				"index", event.OutputIndex)
 
 			return
 		}
 
-		r.Logger.Info("Output executed", "app", app.ContractAddress, "index", event.OutputIndex)
-		output.TransactionHash = &event.Raw.TxHash
+		r.Logger.Info("Output executed", "app", app.application.IApplicationAddress, "index", event.OutputIndex)
+		output.ExecutionTransactionHash = &event.Raw.TxHash
 		executedOutputs = append(executedOutputs, output)
 	}
 
-	err = r.repository.UpdateOutputExecutionTransaction(
-		ctx, app.ContractAddress, executedOutputs, mostRecentBlockNumber)
+	err = r.repository.UpdateOutputsExecution(
+		ctx, app.application.IApplicationAddress, executedOutputs, mostRecentBlockNumber)
 	if err != nil {
 		r.Logger.Error("Error storing output execution statuses", "app", app, "error", err)
 	}

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 
 	cmdcommon "github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/common"
 	"github.com/cartesi/rollups-node/internal/advancer/snapshot"
@@ -23,24 +24,28 @@ var Cmd = &cobra.Command{
 }
 
 const examples = `# Adds an application to Rollups Node:
-cartesi-rollups-cli app register -a 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF -i 0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA` //nolint:lll
-
-const (
-	statusRunning    = "running"
-	statusNotRunning = "not-running"
-)
+cartesi-rollups-cli app register -n echo-dapp -a 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF -c 0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA` //nolint:lll
 
 var (
-	applicationAddress            string
-	templatePath                  string
-	templateHash                  string
-	inputBoxDeploymentBlockNumber uint64
-	status                        string
-	iConsensusAddress             string
-	printAsJSON                   bool
+	name                string
+	applicationAddress  string
+	consensusAddress    string
+	templatePath        string
+	templateHash        string
+	inputBoxBlockNumber uint64
+	disabled            bool
+	printAsJSON         bool
 )
 
 func init() {
+	Cmd.Flags().StringVarP(
+		&name,
+		"name",
+		"n",
+		"",
+		"Application name",
+	)
+	cobra.CheckErr(Cmd.MarkFlagRequired("name"))
 
 	Cmd.Flags().StringVarP(
 		&applicationAddress,
@@ -52,13 +57,13 @@ func init() {
 	cobra.CheckErr(Cmd.MarkFlagRequired("address"))
 
 	Cmd.Flags().StringVarP(
-		&iConsensusAddress,
-		"iconsensus",
-		"i",
+		&consensusAddress,
+		"consensus",
+		"c",
 		"",
 		"Application IConsensus Address",
 	)
-	cobra.CheckErr(Cmd.MarkFlagRequired("iconsensus"))
+	cobra.CheckErr(Cmd.MarkFlagRequired("consensus"))
 
 	Cmd.Flags().StringVarP(
 		&templatePath,
@@ -78,19 +83,19 @@ func init() {
 	)
 
 	Cmd.Flags().Uint64VarP(
-		&inputBoxDeploymentBlockNumber,
+		&inputBoxBlockNumber,
 		"inputbox-block-number",
-		"n",
+		"i",
 		0,
 		"InputBox deployment block number",
 	)
 
-	Cmd.Flags().StringVarP(
-		&status,
-		"status",
-		"s",
-		statusRunning,
-		"Sets the application status",
+	Cmd.Flags().BoolVarP(
+		&disabled,
+		"disabled",
+		"d",
+		false,
+		"Sets the application state to disabled",
 	)
 
 	Cmd.Flags().BoolVarP(
@@ -105,19 +110,13 @@ func init() {
 func run(cmd *cobra.Command, args []string) {
 	ctx := cmd.Context()
 
-	if cmdcommon.Database == nil {
+	if cmdcommon.Repository == nil {
 		panic("Database was not initialized")
 	}
 
-	var applicationStatus model.ApplicationStatus
-	switch status {
-	case statusRunning:
-		applicationStatus = model.ApplicationStatusRunning
-	case statusNotRunning:
-		applicationStatus = model.ApplicationStatusNotRunning
-	default:
-		fmt.Fprintf(os.Stderr, "Invalid application status: %s\n", status)
-		os.Exit(1)
+	applicationState := model.ApplicationState_Enabled
+	if disabled {
+		applicationState = model.ApplicationState_Disabled
 	}
 
 	if templateHash == "" {
@@ -130,15 +129,18 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	application := model.Application{
-		ContractAddress:    common.HexToAddress(applicationAddress),
-		TemplateUri:        templatePath,
-		TemplateHash:       common.HexToHash(templateHash),
-		LastProcessedBlock: inputBoxDeploymentBlockNumber,
-		Status:             applicationStatus,
-		IConsensusAddress:  common.HexToAddress(iConsensusAddress),
+		Name:                 name,
+		IApplicationAddress:  strings.ToLower(common.HexToAddress(applicationAddress).String()),
+		IConsensusAddress:    strings.ToLower(common.HexToAddress(consensusAddress).String()),
+		TemplateURI:          templatePath,
+		TemplateHash:         common.HexToHash(templateHash),
+		State:                applicationState,
+		LastProcessedBlock:   inputBoxBlockNumber,
+		LastOutputCheckBlock: inputBoxBlockNumber,
+		LastClaimCheckBlock:  inputBoxBlockNumber,
 	}
 
-	_, err := cmdcommon.Database.InsertApplication(ctx, &application)
+	_, err := cmdcommon.Repository.CreateApplication(ctx, &application)
 	cobra.CheckErr(err)
 
 	if printAsJSON {
@@ -149,6 +151,6 @@ func run(cmd *cobra.Command, args []string) {
 		}
 		fmt.Println(string(jsonData))
 	} else {
-		fmt.Printf("Application %v successfully registered\n", application.ContractAddress)
+		fmt.Printf("Application %v successfully registered\n", application.IApplicationAddress)
 	}
 }

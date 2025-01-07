@@ -5,8 +5,8 @@ package evmreader
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"strings"
 
 	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -16,9 +16,12 @@ import (
 // checkForNewInputs checks if is there new Inputs for all running Applications
 func (r *Service) checkForNewInputs(
 	ctx context.Context,
-	apps []application,
+	apps []appContracts,
 	mostRecentBlockNumber uint64,
 ) {
+	if !r.inputReaderEnabled {
+		return
+	}
 
 	r.Logger.Debug("Checking for new inputs")
 
@@ -79,32 +82,16 @@ func (r *Service) readAndStoreInputs(
 	ctx context.Context,
 	startBlock uint64,
 	endBlock uint64,
-	apps []application,
+	apps []appContracts,
 ) error {
-	appsToProcess := []common.Address{}
 
-	for _, app := range apps {
-
-		// Get App EpochLength
-		err := r.addAppEpochLengthIntoCache(app)
-		if err != nil {
-			r.Logger.Error("Error adding epoch length into cache",
-				"app", app.ContractAddress,
-				"error", err)
-			continue
-		}
-
-		appsToProcess = append(appsToProcess, app.ContractAddress)
-
-	}
-
-	if len(appsToProcess) == 0 {
+	if len(apps) == 0 {
 		r.Logger.Warn("No valid running applications")
 		return nil
 	}
 
 	// Retrieve Inputs from blockchain
-	appInputsMap, err := r.readInputsFromBlockchain(ctx, appsToProcess, startBlock, endBlock)
+	appInputsMap, err := r.readInputsFromBlockchain(ctx, apps, startBlock, endBlock)
 	if err != nil {
 		return fmt.Errorf("failed to read inputs from block %v to block %v. %w",
 			startBlock,
@@ -118,8 +105,7 @@ func (r *Service) readAndStoreInputs(
 		epochLength := r.epochLengthCache[address]
 
 		// Retrieves last open epoch from DB
-		currentEpoch, err := r.repository.GetEpoch(ctx,
-			calculateEpochIndex(epochLength, startBlock), address)
+		currentEpoch, err := r.repository.GetEpoch(ctx, address, calculateEpochIndex(epochLength, startBlock))
 		if err != nil {
 			r.Logger.Error("Error retrieving existing current epoch",
 				"app", address,
@@ -129,7 +115,7 @@ func (r *Service) readAndStoreInputs(
 		}
 
 		// Check current epoch status
-		if currentEpoch != nil && currentEpoch.Status != EpochStatusOpen {
+		if currentEpoch != nil && currentEpoch.Status != EpochStatus_Open {
 			r.Logger.Error("Current epoch is not open",
 				"app", address,
 				"epoch_index", currentEpoch.Index,
@@ -139,7 +125,7 @@ func (r *Service) readAndStoreInputs(
 		}
 
 		// Initialize epochs inputs map
-		var epochInputMap = make(map[*Epoch][]Input)
+		var epochInputMap = make(map[*Epoch][]*Input)
 
 		// Index Inputs into epochs
 		for _, input := range inputs {
@@ -148,12 +134,16 @@ func (r *Service) readAndStoreInputs(
 
 			// If input belongs into a new epoch, close the previous known one
 			if currentEpoch != nil && currentEpoch.Index != inputEpochIndex {
-				currentEpoch.Status = EpochStatusClosed
+				currentEpoch.Status = EpochStatus_Closed
 				r.Logger.Info("Closing epoch",
-					"app", currentEpoch.AppAddress,
+					"app", address,
 					"epoch_index", currentEpoch.Index,
 					"start", currentEpoch.FirstBlock,
 					"end", currentEpoch.LastBlock)
+				_, ok := epochInputMap[currentEpoch]
+				if !ok {
+					epochInputMap[currentEpoch] = []*Input{}
+				}
 				currentEpoch = nil
 			}
 			if currentEpoch == nil {
@@ -161,10 +151,9 @@ func (r *Service) readAndStoreInputs(
 					Index:      inputEpochIndex,
 					FirstBlock: inputEpochIndex * epochLength,
 					LastBlock:  (inputEpochIndex * epochLength) + epochLength - 1,
-					Status:     EpochStatusOpen,
-					AppAddress: address,
+					Status:     EpochStatus_Open,
 				}
-				epochInputMap[currentEpoch] = []Input{}
+				epochInputMap[currentEpoch] = []*Input{}
 			}
 
 			r.Logger.Info("Found new Input",
@@ -175,32 +164,32 @@ func (r *Service) readAndStoreInputs(
 
 			currentInputs, ok := epochInputMap[currentEpoch]
 			if !ok {
-				currentInputs = []Input{}
+				currentInputs = []*Input{}
 			}
-			epochInputMap[currentEpoch] = append(currentInputs, *input)
+			epochInputMap[currentEpoch] = append(currentInputs, input)
 
 		}
 
 		// Indexed all inputs. Check if it is time to close this epoch
 		if currentEpoch != nil && endBlock >= currentEpoch.LastBlock {
-			currentEpoch.Status = EpochStatusClosed
+			currentEpoch.Status = EpochStatus_Closed
 			r.Logger.Info("Closing epoch",
-				"app", currentEpoch.AppAddress,
+				"app", address,
 				"epoch_index", currentEpoch.Index,
 				"start", currentEpoch.FirstBlock,
 				"end", currentEpoch.LastBlock)
 			// Add to inputMap so it is stored
 			_, ok := epochInputMap[currentEpoch]
 			if !ok {
-				epochInputMap[currentEpoch] = []Input{}
+				epochInputMap[currentEpoch] = []*Input{}
 			}
 		}
 
-		_, _, err = r.repository.StoreEpochAndInputsTransaction(
+		err = r.repository.CreateEpochsAndInputs(
 			ctx,
+			address,
 			epochInputMap,
 			endBlock,
-			address,
 		)
 		if err != nil {
 			r.Logger.Error("Error storing inputs and epochs",
@@ -229,44 +218,19 @@ func (r *Service) readAndStoreInputs(
 	return nil
 }
 
-// addAppEpochLengthIntoCache checks the epoch length cache and read epoch length from IConsensus
-// contract and add it to the cache if needed
-func (r *Service) addAppEpochLengthIntoCache(app application) error {
-
-	epochLength, ok := r.epochLengthCache[app.ContractAddress]
-	if !ok {
-
-		epochLength, err := getEpochLength(app.consensusContract)
-		if err != nil {
-			return errors.Join(
-				fmt.Errorf("error retrieving epoch length from contracts for app %s",
-					app.ContractAddress),
-				err)
-		}
-		r.epochLengthCache[app.ContractAddress] = epochLength
-		r.Logger.Info("Got epoch length from IConsensus",
-			"app", app.ContractAddress,
-			"epoch length", epochLength)
-	} else {
-		r.Logger.Debug("Got epoch length from cache",
-			"app", app.ContractAddress,
-			"epoch length", epochLength)
-	}
-
-	return nil
-}
-
 // readInputsFromBlockchain read the inputs from the blockchain ordered by Input index
 func (r *Service) readInputsFromBlockchain(
 	ctx context.Context,
-	appsAddresses []Address,
+	apps []appContracts,
 	startBlock, endBlock uint64,
-) (map[Address][]*Input, error) {
+) (map[string][]*Input, error) {
 
 	// Initialize app input map
-	var appInputsMap = make(map[Address][]*Input)
-	for _, appsAddress := range appsAddresses {
-		appInputsMap[appsAddress] = []*Input{}
+	var appInputsMap = make(map[string][]*Input)
+	var appsAddresses = []common.Address{}
+	for _, app := range apps {
+		appInputsMap[app.application.IApplicationAddress] = []*Input{}
+		appsAddresses = append(appsAddresses, common.HexToAddress(app.application.IApplicationAddress))
 	}
 
 	opts := bind.FilterOpts{
@@ -286,35 +250,22 @@ func (r *Service) readInputsFromBlockchain(
 			"index", event.Index,
 			"block", event.Raw.BlockNumber)
 		input := &Input{
-			Index:            event.Index.Uint64(),
-			CompletionStatus: InputStatusNone,
-			RawData:          event.Input,
-			BlockNumber:      event.Raw.BlockNumber,
-			AppAddress:       event.AppContract,
+			Index:                event.Index.Uint64(),
+			Status:               InputCompletionStatus_None,
+			RawData:              event.Input,
+			BlockNumber:          event.Raw.BlockNumber,
+			TransactionReference: common.BigToHash(event.Index),
 		}
 
 		// Insert Sorted
-		appInputsMap[event.AppContract] = insertSorted(
-			sortByInputIndex, appInputsMap[event.AppContract], input)
+		appContract := strings.ToLower(event.AppContract.String())
+		appInputsMap[appContract] = insertSorted(
+			sortByInputIndex, appInputsMap[appContract], input)
 	}
 	return appInputsMap, nil
 }
 
 // byLastProcessedBlock key extractor function intended to be used with `indexApps` function
-func byLastProcessedBlock(app application) uint64 {
-	return app.LastProcessedBlock
-}
-
-// getEpochLength reads the application epoch length given it's consensus contract
-func getEpochLength(consensus ConsensusContract) (uint64, error) {
-
-	epochLengthRaw, err := consensus.GetEpochLength(nil)
-	if err != nil {
-		return 0, errors.Join(
-			fmt.Errorf("error retrieving application epoch length"),
-			err,
-		)
-	}
-
-	return epochLengthRaw.Uint64(), nil
+func byLastProcessedBlock(app appContracts) uint64 {
+	return app.application.LastProcessedBlock
 }

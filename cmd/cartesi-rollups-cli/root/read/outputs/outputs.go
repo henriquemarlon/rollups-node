@@ -8,10 +8,10 @@ import (
 	"fmt"
 	"os"
 
-	cmdcommon "github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/common"
-
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/spf13/cobra"
+
+	cmdcommon "github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/common"
+	"github.com/cartesi/rollups-node/internal/repository"
 )
 
 var Cmd = &cobra.Command{
@@ -22,7 +22,7 @@ var Cmd = &cobra.Command{
 }
 
 const examples = `# Read all notices:
-cartesi-rollups-cli read outputs -a 0x000000000000000000000000000000000`
+cartesi-rollups-cli read outputs -n echo-dapp`
 
 var (
 	outputIndex uint64
@@ -40,11 +40,17 @@ func init() {
 func run(cmd *cobra.Command, args []string) {
 	ctx := cmd.Context()
 
-	if cmdcommon.Database == nil {
-		panic("Database was not initialized")
+	if cmdcommon.Repository == nil {
+		panic("Repository was not initialized")
 	}
 
-	application := common.HexToAddress(cmdcommon.ApplicationAddress)
+	var nameOrAddress string
+	pFlags := cmd.Flags()
+	if pFlags.Changed("name") {
+		nameOrAddress = pFlags.Lookup("name").Value.String()
+	} else if pFlags.Changed("address") {
+		nameOrAddress = pFlags.Lookup("address").Value.String()
+	}
 
 	var result []byte
 	if cmd.Flags().Changed("output-index") {
@@ -52,17 +58,21 @@ func run(cmd *cobra.Command, args []string) {
 			fmt.Fprintf(os.Stderr, "Error: Only one of 'output-index' or 'input-index' can be used at a time.\n")
 			os.Exit(1)
 		}
-		outputs, err := cmdcommon.Database.GetOutput(ctx, application, outputIndex)
+		outputs, err := cmdcommon.Repository.GetOutput(ctx, nameOrAddress, outputIndex)
 		cobra.CheckErr(err)
 		result, err = json.MarshalIndent(outputs, "", "    ")
 		cobra.CheckErr(err)
 	} else if cmd.Flags().Changed("input-index") {
-		outputs, err := cmdcommon.Database.GetOutputsByInputIndex(ctx, application, inputIndex)
+		f := repository.OutputFilter{InputIndex: &inputIndex}
+		p := repository.Pagination{}
+		outputs, err := cmdcommon.Repository.ListOutputs(ctx, nameOrAddress, f, p)
 		cobra.CheckErr(err)
 		result, err = json.MarshalIndent(outputs, "", "    ")
 		cobra.CheckErr(err)
 	} else {
-		outputs, err := cmdcommon.Database.GetOutputs(ctx, application)
+		f := repository.OutputFilter{}
+		p := repository.Pagination{}
+		outputs, err := cmdcommon.Repository.ListOutputs(ctx, nameOrAddress, f, p)
 		cobra.CheckErr(err)
 		result, err = json.MarshalIndent(outputs, "", "    ")
 		cobra.CheckErr(err)

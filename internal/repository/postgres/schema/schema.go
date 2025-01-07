@@ -10,20 +10,26 @@ import (
 	"log/slog"
 
 	"github.com/golang-migrate/migrate/v4"
-	mig "github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/pgx"
 	_ "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/stdlib"
 )
 
 //go:embed migrations/*
 var content embed.FS
 
-const ExpectedVersion uint = 2
+const ExpectedVersion uint = 1
 
 type Schema struct {
-	migrate *mig.Migrate
+	migrate *migrate.Migrate
 }
+
+var (
+	ErrMigrationNotCompleted = errors.New("Schema version is dirty")
+)
 
 func New(postgresEndpoint string) (*Schema, error) {
 	driver, err := iofs.New(content, "migrations")
@@ -31,7 +37,7 @@ func New(postgresEndpoint string) (*Schema, error) {
 		return nil, err
 	}
 
-	migrate, err := mig.NewWithSourceInstance("iofs", driver, postgresEndpoint)
+	migrate, err := migrate.NewWithSourceInstance("iofs", driver, postgresEndpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -39,12 +45,32 @@ func New(postgresEndpoint string) (*Schema, error) {
 	return &Schema{migrate: migrate}, nil
 }
 
-func (s *Schema) Version() (uint, error) {
-	version, _, err := s.migrate.Version()
-	if err != nil && errors.Is(err, migrate.ErrNilVersion) {
-		return version, fmt.Errorf("No valid database schema found")
+func NewWithPool(pool *pgxpool.Pool) (*Schema, error) {
+	source, err := iofs.New(content, "migrations")
+	if err != nil {
+		return nil, err
 	}
-	return version, err
+
+	db := stdlib.OpenDBFromPool(pool)
+	driver, err := pgx.WithInstance(db, &pgx.Config{})
+	if err != nil {
+		return nil, fmt.Errorf("could not instantiate pgx migrate driver: %v", err)
+	}
+
+	migrate, err := migrate.NewWithInstance("iofs", source, "postgres", driver)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Schema{migrate: migrate}, nil
+}
+
+func (s *Schema) Version() (uint, bool, error) {
+	version, dirty, err := s.migrate.Version()
+	if err != nil && errors.Is(err, migrate.ErrNilVersion) {
+		return version, dirty, fmt.Errorf("No valid database schema found")
+	}
+	return version, dirty, err
 }
 
 func (s *Schema) Upgrade() error {
@@ -72,9 +98,13 @@ func (s *Schema) Close() {
 }
 
 func (s *Schema) ValidateVersion() (uint, error) {
-	version, err := s.Version()
+	version, dirty, err := s.Version()
 	if err != nil {
 		return 0, err
+	}
+
+	if dirty {
+		return 0, ErrMigrationNotCompleted
 	}
 
 	if version != ExpectedVersion {

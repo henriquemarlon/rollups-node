@@ -16,9 +16,12 @@ import (
 // checkForNewInputs checks if is there new Inputs for all running Applications
 func (r *Service) checkForNewInputs(
 	ctx context.Context,
-	apps []application,
+	apps []appContracts,
 	mostRecentBlockNumber uint64,
 ) {
+	if !r.inputReaderEnabled {
+		return
+	}
 
 	r.Logger.Debug("Checking for new inputs")
 
@@ -28,7 +31,7 @@ func (r *Service) checkForNewInputs(
 
 		appAddresses := appsToAddresses(apps)
 
-		// Safeguard: Only check blocks starting from the block where the InputBox
+		// Only check blocks starting from the block where the InputBox
 		// contract was deployed as Inputs can be added to that same block
 		if lastProcessedBlock < r.inputBoxDeploymentBlock {
 			lastProcessedBlock = r.inputBoxDeploymentBlock - 1
@@ -43,7 +46,7 @@ func (r *Service) checkForNewInputs(
 			)
 
 			err := r.readAndStoreInputs(ctx,
-				lastProcessedBlock+1,
+				lastProcessedBlock,
 				mostRecentBlockNumber,
 				apps,
 			)
@@ -77,134 +80,151 @@ func (r *Service) checkForNewInputs(
 // them into epochs and store the indexed inputs and epochs
 func (r *Service) readAndStoreInputs(
 	ctx context.Context,
-	startBlock uint64,
-	endBlock uint64,
-	apps []application,
+	lastProcessedBlock uint64,
+	mostRecentBlockNumber uint64,
+	apps []appContracts,
 ) error {
-	appsToProcess := []common.Address{}
 
-	for _, app := range apps {
-
-		// Get App EpochLength
-		err := r.addAppEpochLengthIntoCache(app)
-		if err != nil {
-			r.Logger.Error("Error adding epoch length into cache",
-				"app", app.ContractAddress,
-				"error", err)
-			continue
-		}
-
-		appsToProcess = append(appsToProcess, app.ContractAddress)
-
-	}
-
-	if len(appsToProcess) == 0 {
+	if len(apps) == 0 {
 		r.Logger.Warn("No valid running applications")
 		return nil
 	}
 
 	// Retrieve Inputs from blockchain
-	appInputsMap, err := r.readInputsFromBlockchain(ctx, appsToProcess, startBlock, endBlock)
+	nextSearchBlock := lastProcessedBlock + 1
+	appInputsMap, err := r.readInputsFromBlockchain(ctx, apps, nextSearchBlock, mostRecentBlockNumber)
 	if err != nil {
 		return fmt.Errorf("failed to read inputs from block %v to block %v. %w",
-			startBlock,
-			endBlock,
+			nextSearchBlock,
+			mostRecentBlockNumber,
 			err)
 	}
+
+	addrToApp := mapAddressToApp(apps)
 
 	// Index Inputs into epochs and handle epoch finalization
 	for address, inputs := range appInputsMap {
 
-		epochLength := r.epochLengthCache[address]
+		app, exists := addrToApp[address]
+		if !exists {
+			r.Logger.Error("Application address on input not found",
+				"address", address)
+			continue
+		}
+		epochLength := app.application.EpochLength
 
 		// Retrieves last open epoch from DB
-		currentEpoch, err := r.repository.GetEpoch(ctx,
-			calculateEpochIndex(epochLength, startBlock), address)
+		currentEpoch, err := r.repository.GetEpoch(ctx, address.String(), calculateEpochIndex(epochLength, lastProcessedBlock))
 		if err != nil {
 			r.Logger.Error("Error retrieving existing current epoch",
-				"app", address,
+				"application", app.application.Name,
+				"address", address,
 				"error", err,
 			)
 			continue
 		}
 
-		// Check current epoch status
-		if currentEpoch != nil && currentEpoch.Status != EpochStatusOpen {
-			r.Logger.Error("Current epoch is not open",
-				"app", address,
-				"epoch_index", currentEpoch.Index,
-				"status", currentEpoch.Status,
-			)
-			continue
-		}
-
 		// Initialize epochs inputs map
-		var epochInputMap = make(map[*Epoch][]Input)
-
+		var epochInputMap = make(map[*Epoch][]*Input)
 		// Index Inputs into epochs
 		for _, input := range inputs {
 
 			inputEpochIndex := calculateEpochIndex(epochLength, input.BlockNumber)
 
 			// If input belongs into a new epoch, close the previous known one
-			if currentEpoch != nil && currentEpoch.Index != inputEpochIndex {
-				currentEpoch.Status = EpochStatusClosed
-				r.Logger.Info("Closing epoch",
-					"app", currentEpoch.AppAddress,
+			if currentEpoch != nil {
+				r.Logger.Debug("Current epoch and new input",
+					"application", app.application.Name,
+					"address", address,
 					"epoch_index", currentEpoch.Index,
-					"start", currentEpoch.FirstBlock,
-					"end", currentEpoch.LastBlock)
-				currentEpoch = nil
+					"epoch_status", currentEpoch.Status,
+					"input_epoch_index", inputEpochIndex,
+				)
+				if currentEpoch.Index == inputEpochIndex {
+					// Input can only be added to open epochs
+					if currentEpoch.Status != EpochStatus_Open {
+						reason := "Received inputs for an epoch that was not open. Should never happen"
+						r.Logger.Error(reason,
+							"application", app.application.Name,
+							"address", address,
+							"epoch_index", currentEpoch.Index,
+							"status", currentEpoch.Status,
+						)
+						err := r.repository.UpdateApplicationState(ctx, app.application.ID, ApplicationState_Inoperable, &reason)
+						if err != nil {
+							r.Logger.Error("failed to update application state to inoperable", "application", app.application.Name, "err", err)
+						}
+						return errors.New(reason)
+					}
+				} else {
+					if currentEpoch.Status == EpochStatus_Open {
+						currentEpoch.Status = EpochStatus_Closed
+						r.Logger.Info("Closing epoch",
+							"application", app.application.Name,
+							"address", address,
+							"epoch_index", currentEpoch.Index,
+							"start", currentEpoch.FirstBlock,
+							"end", currentEpoch.LastBlock)
+						_, ok := epochInputMap[currentEpoch]
+						if !ok {
+							epochInputMap[currentEpoch] = []*Input{}
+						}
+					}
+					currentEpoch = nil
+				}
 			}
 			if currentEpoch == nil {
 				currentEpoch = &Epoch{
 					Index:      inputEpochIndex,
 					FirstBlock: inputEpochIndex * epochLength,
 					LastBlock:  (inputEpochIndex * epochLength) + epochLength - 1,
-					Status:     EpochStatusOpen,
-					AppAddress: address,
+					Status:     EpochStatus_Open,
 				}
-				epochInputMap[currentEpoch] = []Input{}
+				epochInputMap[currentEpoch] = []*Input{}
 			}
 
 			r.Logger.Info("Found new Input",
-				"app", address,
+				"application", app.application.Name,
+				"address", address,
 				"index", input.Index,
 				"block", input.BlockNumber,
 				"epoch_index", inputEpochIndex)
 
 			currentInputs, ok := epochInputMap[currentEpoch]
 			if !ok {
-				currentInputs = []Input{}
+				currentInputs = []*Input{}
 			}
-			epochInputMap[currentEpoch] = append(currentInputs, *input)
+			epochInputMap[currentEpoch] = append(currentInputs, input)
 
 		}
 
-		// Indexed all inputs. Check if it is time to close this epoch
-		if currentEpoch != nil && endBlock >= currentEpoch.LastBlock {
-			currentEpoch.Status = EpochStatusClosed
+		// Indexed all inputs. Check if it is time to close the last epoch
+		if currentEpoch != nil && currentEpoch.Status == EpochStatus_Open &&
+			mostRecentBlockNumber >= currentEpoch.LastBlock {
+			currentEpoch.Status = EpochStatus_Closed
 			r.Logger.Info("Closing epoch",
-				"app", currentEpoch.AppAddress,
+				"application", app.application.Name,
+				"address", address,
 				"epoch_index", currentEpoch.Index,
 				"start", currentEpoch.FirstBlock,
 				"end", currentEpoch.LastBlock)
 			// Add to inputMap so it is stored
 			_, ok := epochInputMap[currentEpoch]
 			if !ok {
-				epochInputMap[currentEpoch] = []Input{}
+				epochInputMap[currentEpoch] = []*Input{}
 			}
 		}
 
-		_, _, err = r.repository.StoreEpochAndInputsTransaction(
+		err = r.repository.CreateEpochsAndInputs(
 			ctx,
+			address.String(),
 			epochInputMap,
-			endBlock,
-			address,
+			mostRecentBlockNumber,
 		)
 		if err != nil {
 			r.Logger.Error("Error storing inputs and epochs",
-				"app", address,
+				"application", app.application.Name,
+				"address", address,
 				"error", err,
 			)
 			continue
@@ -212,11 +232,11 @@ func (r *Service) readAndStoreInputs(
 
 		// Store everything
 		if len(epochInputMap) > 0 {
-
 			r.Logger.Debug("Inputs and epochs stored successfully",
-				"app", address,
-				"start-block", startBlock,
-				"end-block", endBlock,
+				"application", app.application.Name,
+				"address", address,
+				"start-block", nextSearchBlock,
+				"end-block", mostRecentBlockNumber,
 				"total epochs", len(epochInputMap),
 				"total inputs", len(inputs),
 			)
@@ -229,44 +249,19 @@ func (r *Service) readAndStoreInputs(
 	return nil
 }
 
-// addAppEpochLengthIntoCache checks the epoch length cache and read epoch length from IConsensus
-// contract and add it to the cache if needed
-func (r *Service) addAppEpochLengthIntoCache(app application) error {
-
-	epochLength, ok := r.epochLengthCache[app.ContractAddress]
-	if !ok {
-
-		epochLength, err := getEpochLength(app.consensusContract)
-		if err != nil {
-			return errors.Join(
-				fmt.Errorf("error retrieving epoch length from contracts for app %s",
-					app.ContractAddress),
-				err)
-		}
-		r.epochLengthCache[app.ContractAddress] = epochLength
-		r.Logger.Info("Got epoch length from IConsensus",
-			"app", app.ContractAddress,
-			"epoch length", epochLength)
-	} else {
-		r.Logger.Debug("Got epoch length from cache",
-			"app", app.ContractAddress,
-			"epoch length", epochLength)
-	}
-
-	return nil
-}
-
 // readInputsFromBlockchain read the inputs from the blockchain ordered by Input index
 func (r *Service) readInputsFromBlockchain(
 	ctx context.Context,
-	appsAddresses []Address,
+	apps []appContracts,
 	startBlock, endBlock uint64,
-) (map[Address][]*Input, error) {
+) (map[common.Address][]*Input, error) {
 
 	// Initialize app input map
-	var appInputsMap = make(map[Address][]*Input)
-	for _, appsAddress := range appsAddresses {
-		appInputsMap[appsAddress] = []*Input{}
+	var appInputsMap = make(map[common.Address][]*Input)
+	var appsAddresses = []common.Address{}
+	for _, app := range apps {
+		appInputsMap[app.application.IApplicationAddress] = []*Input{}
+		appsAddresses = append(appsAddresses, app.application.IApplicationAddress)
 	}
 
 	opts := bind.FilterOpts{
@@ -282,15 +277,15 @@ func (r *Service) readInputsFromBlockchain(
 	// Order inputs as order is not enforced by RetrieveInputs method nor the APIs
 	for _, event := range inputsEvents {
 		r.Logger.Debug("Received input",
-			"app", event.AppContract,
+			"address", event.AppContract,
 			"index", event.Index,
 			"block", event.Raw.BlockNumber)
 		input := &Input{
-			Index:            event.Index.Uint64(),
-			CompletionStatus: InputStatusNone,
-			RawData:          event.Input,
-			BlockNumber:      event.Raw.BlockNumber,
-			AppAddress:       event.AppContract,
+			Index:                event.Index.Uint64(),
+			Status:               InputCompletionStatus_None,
+			RawData:              event.Input,
+			BlockNumber:          event.Raw.BlockNumber,
+			TransactionReference: common.BigToHash(event.Index),
 		}
 
 		// Insert Sorted
@@ -301,20 +296,6 @@ func (r *Service) readInputsFromBlockchain(
 }
 
 // byLastProcessedBlock key extractor function intended to be used with `indexApps` function
-func byLastProcessedBlock(app application) uint64 {
-	return app.LastProcessedBlock
-}
-
-// getEpochLength reads the application epoch length given it's consensus contract
-func getEpochLength(consensus ConsensusContract) (uint64, error) {
-
-	epochLengthRaw, err := consensus.GetEpochLength(nil)
-	if err != nil {
-		return 0, errors.Join(
-			fmt.Errorf("error retrieving application epoch length"),
-			err,
-		)
-	}
-
-	return epochLengthRaw.Uint64(), nil
+func byLastProcessedBlock(app appContracts) uint64 {
+	return app.application.LastProcessedBlock
 }

@@ -7,6 +7,7 @@ package validator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -14,7 +15,9 @@ import (
 	"github.com/cartesi/rollups-node/internal/merkle"
 	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/repository"
+	"github.com/cartesi/rollups-node/internal/repository/factory"
 	"github.com/cartesi/rollups-node/pkg/service"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
@@ -49,7 +52,7 @@ func Create(c *CreateInfo, s *Service) error {
 
 	return service.WithTimeout(c.MaxStartupTime, func() error {
 		if c.Repository == nil {
-			c.Repository, err = repository.Connect(s.Context, c.PostgresEndpoint.Value, s.Logger)
+			c.Repository, err = factory.NewRepositoryFromConnectionString(s.Context, c.PostgresEndpoint.Value)
 			if err != nil {
 				return err
 			}
@@ -85,41 +88,23 @@ func (v *Service) String() string {
 const MAX_OUTPUT_TREE_HEIGHT = 63
 
 type ValidatorRepository interface {
-	// GetAllRunningApplications returns a slice with the applications currently
-	// being validated by the node.
-	GetAllRunningApplications(ctx context.Context) ([]Application, error)
-	// GetOutputsProducedInBlockRange returns outputs produced by inputs sent to
-	// the application in the provided block range, inclusive. Outputs are
-	// returned in ascending order by index.
-	GetOutputsProducedInBlockRange(
-		ctx context.Context,
-		application Address,
-		firstBlock, lastBlock uint64,
-	) ([]Output, error)
-	// GetProcessedEpochs returns epochs from the application which had all
-	// its inputs processed. Epochs are returned in ascending order by index.
-	GetProcessedEpochs(ctx context.Context, application Address) ([]Epoch, error)
-	// GetLastInputOutputsHash returns the outputs Merkle tree hash calculated
-	// by the Cartesi Machine after it processed the last input in the epoch.
-	GetLastInputOutputsHash(
-		ctx context.Context,
-		epochIndex uint64,
-		appAddress Address,
-	) (*Hash, error)
-	// GetPreviousEpoch returns the epoch that ended one block before the start
-	// of the current epoch
-	GetPreviousEpoch(ctx context.Context, currentEpoch Epoch) (*Epoch, error)
-	// ValidateEpochTransaction performs a database transaction
-	// containing two operations:
-	//
-	// 1. Updates an epoch, adding its claim and modifying its status.
-	//
-	// 2. Updates outputs with their Keccak256 hash and proof.
-	SetEpochClaimAndInsertProofsTransaction(
-		ctx context.Context,
-		epoch Epoch,
-		outputs []Output,
-	) error
+	ListApplications(ctx context.Context, f repository.ApplicationFilter, p repository.Pagination) ([]*Application, error)
+	UpdateApplicationState(ctx context.Context, appID int64, state ApplicationState, reason *string) error
+
+	ListOutputs(ctx context.Context, nameOrAddress string, f repository.OutputFilter, p repository.Pagination) ([]*Output, error)
+
+	ListEpochs(ctx context.Context, nameOrAddress string, f repository.EpochFilter, p repository.Pagination) ([]*Epoch, error)
+
+	GetLastInput(ctx context.Context, appAddress string, epochIndex uint64) (*Input, error) // FIXME migrate to list
+
+	GetEpochByVirtualIndex(ctx context.Context, nameOrAddress string, index uint64) (*Epoch, error)
+
+	StoreClaimAndProofs(ctx context.Context, epoch *Epoch, outputs []*Output) error
+}
+
+func getAllRunningApplications(ctx context.Context, er ValidatorRepository) ([]*Application, error) {
+	f := repository.ApplicationFilter{State: Pointer(ApplicationState_Enabled)}
+	return er.ListApplications(ctx, f, repository.Pagination{})
 }
 
 // Run executes the Validator main logic of producing claims and/or proofs
@@ -127,7 +112,7 @@ type ValidatorRepository interface {
 // inside a loop. If an error occurs while processing any epoch, it halts and
 // returns the error.
 func (v *Service) Run(ctx context.Context) error {
-	apps, err := v.repository.GetAllRunningApplications(ctx)
+	apps, err := getAllRunningApplications(ctx, v.repository)
 	if err != nil {
 		return fmt.Errorf("failed to get running applications. %w", err)
 	}
@@ -140,27 +125,35 @@ func (v *Service) Run(ctx context.Context) error {
 	return nil
 }
 
+func getProcessedEpochs(ctx context.Context, er ValidatorRepository, address string) ([]*Epoch, error) {
+	f := repository.EpochFilter{Status: Pointer(EpochStatus_InputsProcessed)}
+	return er.ListEpochs(ctx, address, f, repository.Pagination{})
+}
+
 // validateApplication calculates, validates and stores the claim and/or proofs
 // for each processed epoch of the application.
-func (v *Service) validateApplication(ctx context.Context, app Application) error {
-	v.Logger.Debug("starting validation", "application", app.ContractAddress)
-	processedEpochs, err := v.repository.GetProcessedEpochs(ctx, app.ContractAddress)
+func (v *Service) validateApplication(ctx context.Context, app *Application) error {
+	v.Logger.Debug("Starting validation", "application", app.Name)
+	appAddress := app.IApplicationAddress.String()
+	processedEpochs, err := getProcessedEpochs(ctx, v.repository, appAddress)
 	if err != nil {
 		return fmt.Errorf(
 			"failed to get processed epochs of application %v. %w",
-			app.ContractAddress, err,
+			app.IApplicationAddress, err,
 		)
 	}
 
 	for _, epoch := range processedEpochs {
-		v.Logger.Debug("started calculating claim",
-			"app", app.ContractAddress,
+		v.Logger.Debug("Started calculating claim",
+			"app", app.IApplicationAddress,
 			"epoch_index", epoch.Index,
+			"last_block", epoch.LastBlock,
 		)
-		claim, outputs, err := v.createClaimAndProofs(ctx, epoch)
-		v.Logger.Info("claim calculated",
-			"app", app.ContractAddress,
+		claim, outputs, err := v.createClaimAndProofs(ctx, app, epoch)
+		v.Logger.Info("Claim Computed",
+			"app", app.IApplicationAddress,
 			"epoch_index", epoch.Index,
+			"last_block", epoch.LastBlock,
 		)
 		if err != nil {
 			return err
@@ -171,54 +164,76 @@ func (v *Service) validateApplication(ctx context.Context, app Application) erro
 		// last input in the epoch must match the claim hash calculated by the
 		// Validator. We first retrieve the hash calculated by the
 		// Cartesi Machine...
-		machineClaim, err := v.repository.GetLastInputOutputsHash(
+		input, err := v.repository.GetLastInput(
 			ctx,
+			appAddress,
 			epoch.Index,
-			epoch.AppAddress,
 		)
 		if err != nil {
 			return fmt.Errorf(
 				"failed to get the machine claim for epoch %v of application %v. %w",
-				epoch.Index, epoch.AppAddress, err,
+				epoch.Index, app.IApplicationAddress, err,
 			)
 		}
 
-		if machineClaim == nil {
-			return fmt.Errorf(
+		if input.OutputsHash == nil {
+			reason := fmt.Sprintf(
 				"inconsistent state: machine claim for epoch %v of application %v was not found",
-				epoch.Index, epoch.AppAddress,
+				epoch.Index, app.IApplicationAddress,
 			)
+			err := v.repository.UpdateApplicationState(ctx, app.ID, ApplicationState_Inoperable, &reason)
+			if err != nil {
+				v.Logger.Error("failed to update application state to inoperable", "app", app.IApplicationAddress, "err", err)
+			}
+			return errors.New(reason)
 		}
 
 		// ...and compare it to the hash calculated by the Validator
-		if *machineClaim != *claim {
-			return fmt.Errorf(
+		if *input.OutputsHash != *claim {
+			reason := fmt.Sprintf(
 				"validator claim does not match machine claim for epoch %v of application %v",
-				epoch.Index, epoch.AppAddress,
+				epoch.Index, app.IApplicationAddress,
 			)
+			err := v.repository.UpdateApplicationState(ctx, app.ID, ApplicationState_Inoperable, &reason)
+			if err != nil {
+				v.Logger.Error("failed to update application state to inoperable", "app", app.IApplicationAddress, "err", err)
+			}
+			return errors.New(reason)
 		}
 
 		// update the epoch status and its claim
-		epoch.Status = EpochStatusClaimComputed
+		epoch.Status = EpochStatus_ClaimComputed
 		epoch.ClaimHash = claim
 
 		// store the epoch and proofs in the database
-		err = v.repository.SetEpochClaimAndInsertProofsTransaction(ctx, epoch, outputs)
+		err = v.repository.StoreClaimAndProofs(ctx, epoch, outputs)
 		if err != nil {
 			return fmt.Errorf(
 				"failed to store claim and proofs for epoch %v of application %v. %w",
-				epoch.Index, epoch.AppAddress, err,
+				epoch.Index, app.IApplicationAddress, err,
 			)
 		}
 	}
 
 	if len(processedEpochs) == 0 {
 		v.Logger.Debug("no processed epochs to validate",
-			"app", app.ContractAddress,
+			"app", app.IApplicationAddress,
 		)
 	}
 
 	return nil
+}
+
+func getOutputsProducedInBlockRange(
+	ctx context.Context,
+	vr ValidatorRepository,
+	address string,
+	start uint64,
+	end uint64,
+) ([]*Output, error) {
+	r := repository.Range{Start: start, End: end}
+	f := repository.OutputFilter{BlockRange: Pointer(r)}
+	return vr.ListOutputs(ctx, address, f, repository.Pagination{})
 }
 
 // createClaimAndProofs calculates the claim and proofs for an epoch. It returns
@@ -227,27 +242,33 @@ func (v *Service) validateApplication(ctx context.Context, app Application) erro
 // claim for the first epoch or the previous epoch claim otherwise.
 func (v *Service) createClaimAndProofs(
 	ctx context.Context,
-	epoch Epoch,
-) (*Hash, []Output, error) {
-	epochOutputs, err := v.repository.GetOutputsProducedInBlockRange(
+	app *Application,
+	epoch *Epoch,
+) (*common.Hash, []*Output, error) {
+	appAddress := app.IApplicationAddress.String()
+	epochOutputs, err := getOutputsProducedInBlockRange(
 		ctx,
-		epoch.AppAddress,
+		v.repository,
+		appAddress,
 		epoch.FirstBlock,
 		epoch.LastBlock,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf(
-			"failed to get outputs for epoch %v of application %v. %w",
-			epoch.Index, epoch.AppAddress, err,
+			"failed to get outputs for epoch %v (%v) of application %v. %w",
+			epoch.Index, epoch.VirtualIndex, appAddress, err,
 		)
 	}
 
-	previousEpoch, err := v.repository.GetPreviousEpoch(ctx, epoch)
-	if err != nil {
-		return nil, nil, fmt.Errorf(
-			"failed to get previous epoch for epoch %v of application %v. %w",
-			epoch.Index, epoch.AppAddress, err,
-		)
+	var previousEpoch *Epoch
+	if epoch.VirtualIndex > 0 {
+		previousEpoch, err = v.repository.GetEpochByVirtualIndex(ctx, appAddress, epoch.VirtualIndex-1)
+		if err != nil {
+			return nil, nil, fmt.Errorf(
+				"failed to get previous epoch for epoch %v (%v) of application %v. %w",
+				epoch.Index, epoch.VirtualIndex, appAddress, err,
+			)
+		}
 	}
 
 	// if there are no outputs
@@ -257,41 +278,52 @@ func (v *Service) createClaimAndProofs(
 			// this is the first epoch, return the pristine claim
 			claim, _, err := merkle.CreateProofs(nil, MAX_OUTPUT_TREE_HEIGHT)
 			if err != nil {
-				return nil, nil, fmt.Errorf(
-					"failed to create proofs for epoch %v of application %v. %w",
-					epoch.Index, epoch.AppAddress, err,
+				reason := fmt.Sprintf(
+					"failed to create proofs for epoch %v (%v) of application %v. %s",
+					epoch.Index, epoch.VirtualIndex, appAddress, err.Error(),
 				)
+				err := v.repository.UpdateApplicationState(ctx, app.ID, ApplicationState_Inoperable, &reason)
+				if err != nil {
+					v.Logger.Error("failed to update application state to inoperable", "app", appAddress, "err", err)
+				}
+				return nil, nil, errors.New(reason)
 			}
 			return &claim, nil, nil
 		}
 	} else {
 		// if epoch has outputs, calculate a new claim and proofs
-		var previousOutputs []Output
+		var previousOutputs []*Output
 		if previousEpoch != nil {
 			// get all outputs created before the current epoch
-			previousOutputs, err = v.repository.GetOutputsProducedInBlockRange(
+			previousOutputs, err = getOutputsProducedInBlockRange(
 				ctx,
-				epoch.AppAddress,
+				v.repository,
+				appAddress,
 				0, // Current implementation requires all outputs
 				previousEpoch.LastBlock,
 			)
 			if err != nil {
 				return nil, nil, fmt.Errorf(
 					"failed to get all outputs of application %v before epoch %d. %w",
-					epoch.AppAddress, epoch.Index, err,
+					appAddress, epoch.Index, err,
 				)
 			}
 		}
 		// the leaves of the Merkle tree are the Keccak256 hashes of all the
 		// outputs
-		leaves := make([]Hash, 0, len(epochOutputs)+len(previousOutputs))
+		leaves := make([]common.Hash, 0, len(epochOutputs)+len(previousOutputs))
 		for idx := range previousOutputs {
 			if previousOutputs[idx].Hash == nil {
 				// should never happen
-				return nil, nil, fmt.Errorf(
+				reason := fmt.Sprintf(
 					"missing hash of output %d from input %d",
-					previousOutputs[idx].Index, previousOutputs[idx].InputId,
+					previousOutputs[idx].Index, previousOutputs[idx].InputIndex,
 				)
+				err := v.repository.UpdateApplicationState(ctx, app.ID, ApplicationState_Inoperable, &reason)
+				if err != nil {
+					v.Logger.Error("failed to update application state to inoperable", "app", appAddress, "err", err)
+				}
+				return nil, nil, errors.New(reason)
 			}
 			leaves = append(leaves, *previousOutputs[idx].Hash)
 		}
@@ -305,10 +337,15 @@ func (v *Service) createClaimAndProofs(
 
 		claim, proofs, err := merkle.CreateProofs(leaves, MAX_OUTPUT_TREE_HEIGHT)
 		if err != nil {
-			return nil, nil, fmt.Errorf(
-				"failed to create proofs for epoch %d of application %v. %w",
-				epoch.Index, epoch.AppAddress, err,
+			reason := fmt.Sprintf(
+				"failed to create proofs for epoch %v (%v) of application %v. %s",
+				epoch.Index, epoch.VirtualIndex, appAddress, err.Error(),
 			)
+			err := v.repository.UpdateApplicationState(ctx, app.ID, ApplicationState_Inoperable, &reason)
+			if err != nil {
+				v.Logger.Error("failed to update application state to inoperable", "app", appAddress, "err", err)
+			}
+			return nil, nil, errors.New(reason)
 		}
 
 		// update outputs with their proof
@@ -320,5 +357,16 @@ func (v *Service) createClaimAndProofs(
 		return &claim, epochOutputs, nil
 	}
 	// if there are no outputs and there is a previous epoch, return its claim
+	if previousEpoch.ClaimHash == nil {
+		reason := fmt.Sprintf(
+			"missing claim for previous epoch %v (current %v) of application %v. This should never happen",
+			previousEpoch.Index, epoch.Index, appAddress,
+		)
+		err := v.repository.UpdateApplicationState(ctx, app.ID, ApplicationState_Inoperable, &reason)
+		if err != nil {
+			v.Logger.Error("failed to update application state to inoperable", "app", appAddress, "err", err)
+		}
+		return nil, nil, errors.New(reason)
+	}
 	return previousEpoch.ClaimHash, nil, nil
 }

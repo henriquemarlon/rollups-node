@@ -47,7 +47,7 @@ func (pmutex *PMutex) LLock() {
 	// Even after acquiring the lock, a low-priority thread releases it if there are any
 	// high-priority threads waiting.
 	for pmutex.waitingHigh.Load() != 0 {
-		// NOTE: a cond.Wait() releases the lock uppon being called
+		// NOTE: a cond.Wait() releases the lock upon being called
 		// and tries to acquire it after being awakened.
 		pmutex.waitingLow.Wait()
 	}

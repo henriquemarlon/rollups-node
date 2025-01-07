@@ -6,8 +6,9 @@ package send
 import (
 	"fmt"
 
-	"github.com/cartesi/rollups-node/pkg/addresses"
+	cmdcommon "github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/common"
 	"github.com/cartesi/rollups-node/pkg/ethutil"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -22,15 +23,17 @@ var Cmd = &cobra.Command{
 }
 
 const examples = `# Send the string "hi" encoded as hex:
-cartesi-rollups-cli send --address 0x00000000000000000000 --payload 0x$(printf "hi" | xxd -p)`
+cartesi-rollups-cli send -n echo-dapp --payload 0x$(printf "hi" | xxd -p)`
 
 var (
+	name               string
+	address            string
 	ethEndpoint        string
 	mnemonic           string
 	account            uint32
 	hexPayload         string
-	addressBookFile    string
 	applicationAddress string
+	inputBoxAddress    string
 )
 
 func init() {
@@ -43,37 +46,72 @@ func init() {
 	Cmd.Flags().Uint32Var(&account, "account", 0,
 		"account index used to sign the transaction (default: 0)")
 
-	Cmd.Flags().StringVarP(&applicationAddress, "address", "a", "", "Application contract address")
-	cobra.CheckErr(Cmd.MarkFlagRequired("address"))
+	Cmd.Flags().StringVarP(&name, "name", "n", "",
+		"Application name")
+
+	Cmd.Flags().StringVarP(&address, "address", "a", "", "Application contract address")
 
 	Cmd.Flags().StringVar(&hexPayload, "payload", "",
 		"input payload hex-encoded starting with 0x")
 	cobra.CheckErr(Cmd.MarkFlagRequired("payload"))
 
-	Cmd.Flags().StringVar(&addressBookFile, "address-book", "deployment.json",
-		"if set, load the address book from the given file; else from deployment.json")
+	Cmd.Flags().StringVar(&inputBoxAddress, "inputbox-address", "",
+		"Input Box contract address")
+
+	Cmd.Flags().StringVarP(
+		&cmdcommon.PostgresEndpoint,
+		"postgres-endpoint",
+		"p",
+		"postgres://postgres:password@localhost:5432/rollupsdb?sslmode=disable",
+		"Postgres endpoint",
+	)
+
+	Cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		if name == "" && address == "" {
+			return fmt.Errorf("either 'name' or 'address' must be specified")
+		}
+		if name != "" && address != "" {
+			return fmt.Errorf("only one of 'name' or 'address' can be specified")
+		}
+		return cmdcommon.PersistentPreRun(cmd, args)
+	}
 }
 
 func run(cmd *cobra.Command, args []string) {
+	ctx := cmd.Context()
+	if cmdcommon.Repository == nil {
+		panic("Repository was not initialized")
+	}
+
+	var nameOrAddress string
+	if cmd.Flags().Changed("name") {
+		nameOrAddress = name
+	} else if cmd.Flags().Changed("address") {
+		nameOrAddress = address
+	}
+
+	app, err := cmdcommon.Repository.GetApplication(ctx, nameOrAddress)
+	cobra.CheckErr(err)
+
 	payload, err := hexutil.Decode(hexPayload)
 	cobra.CheckErr(err)
 
-	ctx := cmd.Context()
 	client, err := ethclient.DialContext(ctx, ethEndpoint)
 	cobra.CheckErr(err)
 
 	signer, err := ethutil.NewMnemonicSigner(ctx, client, mnemonic, account)
 	cobra.CheckErr(err)
 
-	var book *addresses.Book
-	if addressBookFile != "" {
-		book, err = addresses.GetBookFromFile(addressBookFile)
+	if !cmd.Flags().Changed("inputbox-address") {
+		nconfig, err := cmdcommon.Repository.GetNodeConfig(ctx)
 		cobra.CheckErr(err)
+		inputBoxAddress = nconfig.InputBoxAddress
 	}
 
-	appAddr := common.HexToAddress(applicationAddress)
+	appAddr := common.HexToAddress(app.IApplicationAddress)
+	ibAddr := common.HexToAddress(inputBoxAddress)
 
-	inputIndex, blockNumber, err := ethutil.AddInput(ctx, client, book, appAddr, signer, payload)
+	inputIndex, blockNumber, err := ethutil.AddInput(ctx, client, ibAddr, appAddr, signer, payload)
 	cobra.CheckErr(err)
 
 	fmt.Printf("Input sent to app at %s. Index: %d BlockNumber: %d\n", appAddr, inputIndex, blockNumber)

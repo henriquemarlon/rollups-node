@@ -9,10 +9,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cartesi/rollups-node/internal/model"
+	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/nodemachine/pmutex"
 	"github.com/cartesi/rollups-node/pkg/rollupsmachine"
 	"github.com/cartesi/rollups-node/pkg/rollupsmachine/cartesimachine"
+	"github.com/ethereum/go-ethereum/common"
 
 	"golang.org/x/sync/semaphore"
 )
@@ -26,21 +27,6 @@ var (
 	ErrClosed = errors.New("machine closed")
 )
 
-type AdvanceResult struct {
-	Status      model.InputCompletionStatus
-	Outputs     [][]byte
-	Reports     [][]byte
-	OutputsHash model.Hash
-	MachineHash *model.Hash
-}
-
-type InspectResult struct {
-	ProcessedInputs uint64
-	Accepted        bool
-	Reports         [][]byte
-	Error           error
-}
-
 type NodeMachine struct {
 	inner rollupsmachine.RollupsMachine
 
@@ -51,7 +37,7 @@ type NodeMachine struct {
 	advanceTimeout, inspectTimeout time.Duration
 
 	// Maximum number of concurrent Inspects.
-	maxConcurrentInspects int64
+	maxConcurrentInspects uint32
 
 	// Controls concurrency between Advances and Inspects.
 	// Advances and Inspects can be called concurrently, but Advances have a higher priority than
@@ -72,7 +58,7 @@ func NewNodeMachine(
 	processedInputs uint64,
 	advanceTimeout time.Duration,
 	inspectTimeout time.Duration,
-	maxConcurrentInspects int64,
+	maxConcurrentInspects uint32,
 ) (*NodeMachine, error) {
 	if advanceTimeout < 0 {
 		return nil, ErrInvalidAdvanceTimeout
@@ -142,6 +128,7 @@ func (machine *NodeMachine) Advance(ctx context.Context,
 	}
 
 	res := &AdvanceResult{
+		InputIndex:  index,
 		Status:      status,
 		Outputs:     outputs,
 		Reports:     reports,
@@ -149,13 +136,13 @@ func (machine *NodeMachine) Advance(ctx context.Context,
 	}
 
 	// If the forked machine is in a valid state:
-	if res.Status == model.InputStatusAccepted {
+	if res.Status == InputCompletionStatus_Accepted {
 		// Only gets the post-advance machine hash if the request was accepted.
 		machineHash, err := fork.Hash(ctx)
 		if err != nil {
 			return nil, errors.Join(err, fork.Close(ctx))
 		}
-		res.MachineHash = (*model.Hash)(&machineHash)
+		res.MachineHash = (*common.Hash)(&machineHash)
 
 		// Replaces the current machine with the fork and updates lastInputIndex.
 		machine.mutex.HLock()
@@ -169,7 +156,7 @@ func (machine *NodeMachine) Advance(ctx context.Context,
 		machine.processedInputs++
 		machine.mutex.Unlock()
 	} else {
-		res.MachineHash = (*model.Hash)(&prevMachineHash)
+		res.MachineHash = (*common.Hash)(&prevMachineHash)
 		res.OutputsHash = prevOutputsHash
 		// Closes the forked machine.
 		err = fork.Close(ctx)
@@ -232,30 +219,30 @@ func (machine *NodeMachine) Close() error {
 
 // ------------------------------------------------------------------------------------------------
 
-func toInputStatus(accepted bool, err error) (status model.InputCompletionStatus, _ error) {
+func toInputStatus(accepted bool, err error) (status InputCompletionStatus, _ error) {
 	if err == nil {
 		if accepted {
-			return model.InputStatusAccepted, nil
+			return InputCompletionStatus_Accepted, nil
 		} else {
-			return model.InputStatusRejected, nil
+			return InputCompletionStatus_Rejected, nil
 		}
 	}
 
 	if errors.Is(err, cartesimachine.ErrTimedOut) {
-		return model.InputStatusTimeLimitExceeded, nil
+		return InputCompletionStatus_TimeLimitExceeded, nil
 	}
 
 	switch {
 	case errors.Is(err, rollupsmachine.ErrException):
-		return model.InputStatusException, nil
+		return InputCompletionStatus_Exception, nil
 	case errors.Is(err, rollupsmachine.ErrHalted):
-		return model.InputStatusMachineHalted, nil
+		return InputCompletionStatus_MachineHalted, nil
 	case errors.Is(err, rollupsmachine.ErrOutputsLimitExceeded):
-		return model.InputStatusOutputsLimitExceeded, nil
+		return InputCompletionStatus_OutputsLimitExceeded, nil
 	case errors.Is(err, rollupsmachine.ErrCycleLimitExceeded):
-		return model.InputStatusCycleLimitExceeded, nil
+		return InputCompletionStatus_CycleLimitExceeded, nil
 	case errors.Is(err, rollupsmachine.ErrPayloadLengthLimitExceeded):
-		return model.InputStatusPayloadLengthLimitExceeded, nil
+		return InputCompletionStatus_PayloadLengthLimitExceeded, nil
 	case errors.Is(err, cartesimachine.ErrCartesiMachine),
 		errors.Is(err, rollupsmachine.ErrProgress),
 		errors.Is(err, rollupsmachine.ErrSoftYield):

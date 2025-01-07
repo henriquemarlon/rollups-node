@@ -6,8 +6,10 @@ package evmreader
 import (
 	"cmp"
 	"context"
+	"strings"
 
 	. "github.com/cartesi/rollups-node/internal/model"
+	"github.com/cartesi/rollups-node/internal/repository"
 	"github.com/cartesi/rollups-node/pkg/contracts/iconsensus"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -15,7 +17,7 @@ import (
 
 func (r *Service) checkForClaimStatus(
 	ctx context.Context,
-	apps []application,
+	apps []appContracts,
 	mostRecentBlockNumber uint64,
 ) {
 
@@ -61,9 +63,14 @@ func (r *Service) checkForClaimStatus(
 	}
 }
 
+func getPreviousEpochsWithSubmittedClaims(ctx context.Context, er EvmReaderRepository, appAddress string, block uint64) ([]*Epoch, error) {
+	f := repository.EpochFilter{Status: Pointer(EpochStatus_ClaimSubmitted), BeforeBlock: Pointer(block)}
+	return er.ListEpochs(ctx, appAddress, f, repository.Pagination{})
+}
+
 func (r *Service) readAndUpdateClaims(
 	ctx context.Context,
-	apps []application,
+	apps []appContracts,
 	lastClaimCheck, mostRecentBlockNumber uint64,
 ) {
 
@@ -101,13 +108,13 @@ func (r *Service) readAndUpdateClaims(
 		// Check events against Epochs
 	APP_LOOP:
 		for app, claimAcceptances := range appClaimAcceptanceEventMap {
-
+			appHexAddress := strings.ToLower(app.Hex())
 			for _, claimAcceptance := range claimAcceptances {
 
 				// Get Previous Epochs with submitted claims, If is there any,
 				// Application is in an invalid State.
-				previousEpochs, err := r.repository.GetPreviousEpochsWithOpenClaims(
-					ctx, app, claimAcceptance.LastProcessedBlockNumber.Uint64())
+				previousEpochs, err := getPreviousEpochsWithSubmittedClaims(
+					ctx, r.repository, appHexAddress, claimAcceptance.LastProcessedBlockNumber.Uint64())
 				if err != nil {
 					r.Logger.Error("Error retrieving previous submitted claims",
 						"app", app,
@@ -124,10 +131,10 @@ func (r *Service) readAndUpdateClaims(
 
 				// Get the Epoch for the current Claim Acceptance Event
 				epoch, err := r.repository.GetEpoch(
-					ctx, calculateEpochIndex(
-						r.epochLengthCache[app],
+					ctx, app.Hex(), calculateEpochIndex(
+						r.epochLengthCache[appHexAddress],
 						claimAcceptance.LastProcessedBlockNumber.Uint64()),
-					app)
+				)
 				if err != nil {
 					r.Logger.Error("Error retrieving Epoch",
 						"app", app,
@@ -162,7 +169,7 @@ func (r *Service) readAndUpdateClaims(
 
 					continue APP_LOOP
 				}
-				if epoch.Status == EpochStatusClaimAccepted {
+				if epoch.Status == EpochStatus_ClaimAccepted {
 					r.Logger.Debug("Claim already accepted. Skipping",
 						"app", app,
 						"block", claimAcceptance.LastProcessedBlockNumber.Uint64(),
@@ -170,7 +177,7 @@ func (r *Service) readAndUpdateClaims(
 						"hash", epoch.ClaimHash)
 					continue
 				}
-				if epoch.Status != EpochStatusClaimSubmitted {
+				if epoch.Status != EpochStatus_ClaimSubmitted {
 					// this happens when running on latest. EvmReader can see the event before
 					// the claim is marked as submitted by the claimer.
 					r.Logger.Debug("Claim status is not submitted. Skipping for now",
@@ -186,13 +193,13 @@ func (r *Service) readAndUpdateClaims(
 					"app", app,
 					"lastBlock", epoch.LastBlock,
 					"hash", epoch.ClaimHash,
-					"epoch_id", epoch.Id,
+					"epochIndex", epoch.Index,
 					"last_claim_check_block", claimAcceptance.Raw.BlockNumber)
 
-				epoch.Status = EpochStatusClaimAccepted
+				epoch.Status = EpochStatus_ClaimAccepted
 				// Store epoch
-				err = r.repository.UpdateEpochs(
-					ctx, app, []*Epoch{epoch}, claimAcceptance.Raw.BlockNumber)
+				err = r.repository.UpdateEpochsClaimAccepted(
+					ctx, appHexAddress, []*Epoch{epoch}, claimAcceptance.Raw.BlockNumber)
 				if err != nil {
 					r.Logger.Error("Error storing claims", "app", app, "error", err)
 					continue
@@ -232,14 +239,14 @@ func (r *Service) readClaimsAcceptance(
 
 // keyByLastClaimCheck is a LastClaimCheck key extractor function intended
 // to be used with `indexApps` function, see indexApps()
-func keyByLastClaimCheck(app application) uint64 {
-	return app.LastClaimCheckBlock
+func keyByLastClaimCheck(app appContracts) uint64 {
+	return app.application.LastClaimCheckBlock
 }
 
 // keyByIConsensus is a IConsensus address key extractor function intended
 // to be used with `indexApps` function, see indexApps()
-func keyByIConsensus(app application) Address {
-	return app.IConsensusAddress
+func keyByIConsensus(app appContracts) string {
+	return app.application.IConsensusAddress
 }
 
 // sortByLastBlockNumber is a ClaimAcceptance's  by last block number sorting function.

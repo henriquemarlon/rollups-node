@@ -13,12 +13,11 @@ import (
 
 	"github.com/cartesi/rollups-node/internal/advancer/machines"
 	"github.com/cartesi/rollups-node/internal/config"
-	"github.com/cartesi/rollups-node/internal/services"
-
 	"github.com/cartesi/rollups-node/internal/inspect"
 	. "github.com/cartesi/rollups-node/internal/model"
-	"github.com/cartesi/rollups-node/internal/nodemachine"
 	"github.com/cartesi/rollups-node/internal/repository"
+	"github.com/cartesi/rollups-node/internal/repository/factory"
+	"github.com/cartesi/rollups-node/internal/services"
 	"github.com/cartesi/rollups-node/pkg/rollupsmachine/cartesimachine"
 	"github.com/cartesi/rollups-node/pkg/service"
 )
@@ -32,16 +31,15 @@ var (
 )
 
 type IAdvancerRepository interface {
-	// Only needs Id, Index, and RawData fields from the retrieved Inputs.
-	GetUnprocessedInputs(_ context.Context, apps []Address) (map[Address][]*Input, error)
-	StoreAdvanceResult(context.Context, *Input, *nodemachine.AdvanceResult) error
-	UpdateClosedEpochs(_ context.Context, app Address) error
+	ListInputs(ctx context.Context, nameOrAddress string, f repository.InputFilter, p repository.Pagination) ([]*Input, error)
+	StoreAdvanceResult(ctx context.Context, appID int64, ar *AdvanceResult) error
+	UpdateEpochsInputsProcessed(ctx context.Context, nameOrAddress string) error
 }
 
 type IAdvancerMachines interface {
-	GetAdvanceMachine(app Address) (machines.AdvanceMachine, bool)
+	GetAdvanceMachine(app string) (machines.AdvanceMachine, bool)
 	UpdateMachines(ctx context.Context) error
-	Apps() []Address
+	Apps() []string
 }
 
 type Service struct {
@@ -58,7 +56,7 @@ type CreateInfo struct {
 	AdvancerPollingInterval time.Duration
 	PostgresEndpoint        config.Redacted[string]
 	PostgresSslMode         bool
-	Repository              *repository.Database
+	Repository              repository.Repository
 	MachineServerVerbosity  config.Redacted[cartesimachine.ServerVerbosity]
 	Machines                *machines.Machines
 	MaxStartupTime          time.Duration
@@ -86,7 +84,7 @@ func Create(c *CreateInfo, s *Service) error {
 	return service.WithTimeout(c.MaxStartupTime, func() error {
 		if s.repository == nil {
 			if c.Repository == nil {
-				c.Repository, err = repository.Connect(s.Context, c.PostgresEndpoint.Value, s.Logger)
+				c.Repository, err = factory.NewRepositoryFromConnectionString(s.Context, c.PostgresEndpoint.Value)
 				if err != nil {
 					return err
 				}
@@ -148,6 +146,11 @@ func (v *Service) String() string {
 	return v.Name
 }
 
+func getUnprocessedInputs(ctx context.Context, mr IAdvancerRepository, appAddress string) ([]*Input, error) {
+	f := repository.InputFilter{Status: Pointer(InputCompletionStatus_None)}
+	return mr.ListInputs(ctx, appAddress, f, repository.Pagination{})
+}
+
 // Step steps the Advancer for one processing cycle.
 // It gets unprocessed inputs from the repository,
 // runs them through the cartesi machine,
@@ -161,25 +164,24 @@ func (advancer *Service) Step(ctx context.Context) error {
 
 	apps := advancer.machines.Apps()
 
-	// Gets the unprocessed inputs (of all apps) from the repository.
-	advancer.Logger.Debug("querying for unprocessed inputs")
-	inputs, err := advancer.repository.GetUnprocessedInputs(ctx, apps)
-	if err != nil {
-		return err
-	}
+	// Updates the status of the epochs.
+	for _, app := range apps {
+		// Gets the unprocessed inputs (of all apps) from the repository.
+		advancer.Logger.Debug("querying for unprocessed inputs")
 
-	// Processes each set of inputs.
-	for app, inputs := range inputs {
-		advancer.Logger.Debug(fmt.Sprintf("processing %d input(s) from %v", len(inputs), app))
-		err := advancer.process(ctx, app, inputs)
+		inputs, err := getUnprocessedInputs(ctx, advancer.repository, app)
 		if err != nil {
 			return err
 		}
-	}
 
-	// Updates the status of the epochs.
-	for _, app := range apps {
-		err := advancer.repository.UpdateClosedEpochs(ctx, app)
+		// Processes each set of inputs.
+		advancer.Logger.Debug(fmt.Sprintf("processing %d input(s) from %v", len(inputs), app))
+		err = advancer.process(ctx, app, inputs)
+		if err != nil {
+			return err
+		}
+
+		err = advancer.repository.UpdateEpochsInputsProcessed(ctx, app)
 		if err != nil {
 			return err
 		}
@@ -189,21 +191,20 @@ func (advancer *Service) Step(ctx context.Context) error {
 }
 
 // process sequentially processes inputs from the the application.
-func (advancer *Service) process(ctx context.Context, app Address, inputs []*Input) error {
+func (advancer *Service) process(ctx context.Context, app string, inputs []*Input) error {
 	// Asserts that the app has an associated machine.
 	machine, exists := advancer.machines.GetAdvanceMachine(app)
 	if !exists {
-		panic(fmt.Errorf("%w %s", ErrNoApp, app.String()))
+		panic(fmt.Errorf("%w %s", ErrNoApp, app))
 	}
 
-	// Asserts that there are inputs to process.
 	if len(inputs) <= 0 {
-		panic(ErrNoInputs)
+		return nil
 	}
 
 	// FIXME if theres a change in epoch id call update epochs
 	for _, input := range inputs {
-		advancer.Logger.Info("Processing input", "app", app, "id", input.Id, "index", input.Index)
+		advancer.Logger.Info("Processing input", "app", app, "index", input.Index)
 
 		// Sends the input to the cartesi machine.
 		res, err := machine.Advance(ctx, input.RawData, input.Index)
@@ -212,7 +213,7 @@ func (advancer *Service) process(ctx context.Context, app Address, inputs []*Inp
 		}
 
 		// Stores the result in the database.
-		err = advancer.repository.StoreAdvanceResult(ctx, input, res)
+		err = advancer.repository.StoreAdvanceResult(ctx, input.EpochApplicationID, res)
 		if err != nil {
 			return err
 		}

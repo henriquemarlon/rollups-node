@@ -5,7 +5,9 @@ x-env: &env
   CARTESI_BLOCKCHAIN_ID: 31337
   CARTESI_CONTRACTS_INPUT_BOX_ADDRESS: 0x593E5BCf894D6829Dd26D0810DA7F064406aebB6
   CARTESI_CONTRACTS_INPUT_BOX_DEPLOYMENT_BLOCK_NUMBER: 10
-  CARTESI_POSTGRES_ENDPOINT: postgres://postgres:password@database:5432/rollupsdb?sslmode=disable
+  CARTESI_CONTRACTS_APPLICATION_FACTORY_ADDRESS: 0xd7d4d184b82b1a4e08f304DDaB0A2A7a301C2620
+  CARTESI_CONTRACTS_SELF_HOSTED_APPLICATION_FACTORY_ADDRESS: 0xF925E1467DfCb1be6904bcF70621A974b5eA8708
+  CARTESI_DATABASE_CONNECTION: postgres://postgres:password@database:5432/rollupsdb?sslmode=disable
   CARTESI_AUTH_MNEMONIC: "test test test test test test test test test test test junk"
 
 services:
@@ -34,7 +36,7 @@ services:
 
   migration:
     image: cartesi/rollups-node:devel
-    command: cartesi-rollups-cli db upgrade -p postgres://postgres:password@database:5432/rollupsdb?sslmode=disable
+    command: cartesi-rollups-cli db upgrade
     depends_on:
       database:
         condition: service_healthy

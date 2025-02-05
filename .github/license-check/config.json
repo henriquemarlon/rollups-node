@@ -1,12 +1,12 @@
 [
   {
-    "include": ["**/*.go", "**/*.rs"],
+    "include": [
+      "**/*.go"
+    ],
     "exclude": [
-      "cmd/authority-claimer/target/**",
+      "internal/repository/postgres/db/**",
       "pkg/contracts/**",
-      "pkg/readerclient/generated.go",
-      "pkg/inspectclient/generated.go",
-      "rollups-contracts/**"
+      "pkg/inspectclient/generated.go"
     ],
     "license": ".github/license-check/header.txt"
   }

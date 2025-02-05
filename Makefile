@@ -33,6 +33,23 @@ else
 PREFIX ?= /usr
 endif
 
+BIN_RUNTIME_PATH= $(PREFIX)/bin
+DOC_RUNTIME_PATH= $(PREFIX)/doc/cartesi-rollups-node
+
+BIN_INSTALL_PATH= $(abspath $(DESTDIR)$(BIN_RUNTIME_PATH))
+DOC_INSTALL_PATH= $(abspath $(DESTDIR)$(DOC_RUNTIME_PATH))
+
+DEB_ARCH?= $(shell dpkg --print-architecture 2>/dev/null || echo amd64)
+DEB_FILENAME= cartesi-rollups-node-v$(ROLLUPS_NODE_VERSION)_$(DEB_ARCH).deb
+DEB_PACKAGER_IMG ?= cartesi/rollups-node:debian-packager
+
+# Docker image platform
+BUILD_PLATFORM ?=
+
+ifneq ($(BUILD_PLATFORM),)
+DOCKER_PLATFORM=--platform $(BUILD_PLATFORM)
+endif
+
 # Go artifacts
 GO_ARTIFACTS := cartesi-rollups-node cartesi-rollups-cli cartesi-rollups-evm-reader cartesi-rollups-advancer cartesi-rollups-validator cartesi-rollups-claimer
 
@@ -46,10 +63,8 @@ CARTESI_TEST_MACHINE_IMAGES_PATH:= $(PREFIX)/share/cartesi-machine/images/
 export CARTESI_TEST_MACHINE_IMAGES_PATH
 
 GO_BUILD_PARAMS := -ldflags "-s -w -X 'github.com/cartesi/rollups-node/internal/version.BuildVersion=$(ROLLUPS_NODE_VERSION)' -r $(PREFIX)/lib"
-CARGO_BUILD_PARAMS := --release
 ifeq ($(BUILD_TYPE),debug)
 	GO_BUILD_PARAMS += -gcflags "all=-N -l"
-	CARGO_BUILD_PARAMS =
 endif
 
 GO_TEST_PACKAGES ?= ./...
@@ -132,7 +147,7 @@ generate-db: ## Generate repository/db with Jet
 # Clean
 # =============================================================================
 
-clean: clean-go clean-contracts clean-docs clean-devnet-files clean-dapps ## Clean all artifacts
+clean: clean-go clean-contracts clean-docs clean-devnet-files clean-dapps clean-test-dependencies clean-debian-packages ## Clean all artifacts
 
 clean-go: ## Clean Go artifacts
 	@echo "Cleaning Go artifacts"
@@ -145,27 +160,35 @@ clean-contracts: ## Clean contract artifacts
 
 clean-docs: ## Clean the documentation
 	@echo "Cleaning the documentation"
-	@rm -rf docs/cli docs/node docs/evm-reader docs/advancer docs/validator
+	@rm -rf docs/cli docs/node docs/evm-reader docs/advancer docs/validator docs/config.md
 
 clean-devnet-files: ## Clean the devnet files
 	@echo "Cleaning devnet files"
 	@rm -f deployment.json anvil_state.json
 
+clean-debian-packages:
+	@echo "Cleaning debian package"
+	@rm -f cartesi-rollups-node-v*.deb
+
 clean-dapps: ## Clean the dapps
 	@echo "Cleaning dapps"
 	@rm -rf applications
 
+clean-test-dependencies: ## Clean the test dependencies
+	@echo "Cleaning test dependencies"
+	@rm -rf $(DOWNLOADS_DIR)
+
 # =============================================================================
 # Tests
 # =============================================================================
-test: unit-test-go ## Execute all tests
+test: unit-test ## Execute all tests
 
-unit-test-go: deployment.json ## Execute go unit tests
+unit-test: ## Execute go unit tests
 	@echo "Running go unit tests"
 	@go clean -testcache
 	@go test -p 1 $(GO_BUILD_PARAMS) $(GO_TEST_PACKAGES)
 
-e2e-test: ## Execute e2e tests
+integration-test: ## Execute e2e tests
 	@echo "Running end-to-end tests"
 	@go test -count=1 ./test --tags=endtoendtests
 
@@ -179,6 +202,21 @@ applications/echo-dapp: ## Create echo-dapp test application
 deploy-echo-dapp: applications/echo-dapp ## Deploy echo-dapp test application
 	@echo "Deploying echo-dapp test application"
 	@./cartesi-rollups-cli app deploy -n echo-dapp -t applications/echo-dapp/ -v
+
+# Temporary test dependencies target while we are not using distribution packages
+DOWNLOADS_DIR = test/downloads
+CARTESI_TEST_MACHINE_IMAGES = $(DOWNLOADS_DIR)/linux.bin
+$(CARTESI_TEST_MACHINE_IMAGES):
+	@mkdir -p $(DOWNLOADS_DIR)
+	@wget -nc -i test/dependencies -P $(DOWNLOADS_DIR)
+	@shasum -ca 256 test/dependencies.sha256
+	@cd $(DOWNLOADS_DIR) && ln -s rootfs-tools-v0.16.1.ext2 rootfs.ext2
+	@cd $(DOWNLOADS_DIR) && ln -s linux-6.5.13-ctsi-1-v0.20.0.bin linux.bin
+
+download-test-dependencies: | $(CARTESI_TEST_MACHINE_IMAGES)
+
+dependencies.sha256:
+	@shasum -a 256 $(DOWNLOADS_DIR)/rootfs-tools* $(DOWNLOADS_DIR)/linux-*.bin > $@
 
 # =============================================================================
 # Static Analysis
@@ -211,10 +249,17 @@ docs: ## Generate the documentation
 # Docker
 # =============================================================================
 devnet: clean-contracts ## Build docker devnet image
-	@docker build -t cartesi/rollups-node-devnet:$(IMAGE_TAG) -f test/devnet/Dockerfile .
+	@docker build $(DOCKER_PLATFORM) -t cartesi/rollups-node-devnet:$(IMAGE_TAG) -f test/devnet/Dockerfile .
 
 image: ## Build the docker images using bake
-	@docker build -t cartesi/rollups-node:$(IMAGE_TAG) .
+	@docker build $(DOCKER_PLATFORM) -t cartesi/rollups-node:$(IMAGE_TAG) .
+
+tester-image: ## Build the docker images using bake
+	@docker build $(DOCKER_PLATFORM) --target=go-builder -t cartesi/rollups-node:tester .
+
+debian-packager: ## Build debian packager image
+	@echo "Building debian packager image $(DEB_PACKAGER_IMG) $(BUILD_PLATFORM)"
+	@docker build $(DOCKER_PLATFORM) --target debian-packager -t $(DEB_PACKAGER_IMG) .
 
 run-with-compose: ## Run the node with the anvil devnet
 	@docker compose up
@@ -224,7 +269,7 @@ start-devnet: ## Run the anvil devnet docker container
 	@docker run --rm --name devnet -p 8545:8545 -d cartesi/rollups-node-devnet:$(IMAGE_TAG)
 	@$(MAKE) copy-devnet-files
 
-copy-devnet-files deployment.json: ## Copy the devnet files to the host
+copy-devnet-files deployment.json: ## Copy the devnet files to the host (it must be running)
 	@echo "Copying devnet files"
 	@docker cp devnet:/usr/share/devnet/deployment.json deployment.json
 	@docker cp devnet:/usr/share/devnet/anvil_state.json anvil_state.json
@@ -251,7 +296,48 @@ restart-devnet: ## Restart the anvil devnet docker container
 shutdown-compose: ## Remove the containers and volumes from previous compose run
 	@docker compose down -v
 
+unit-test-with-compose: $(CARTESI_TEST_MACHINE_IMAGES) ## Run unit tests using docker compose with auto-shutdown
+	@trap 'docker compose -f test/compose/compose.test.yaml down -v || true' EXIT && \
+		docker compose -f test/compose/compose.test.yaml run --remove-orphans unit-test
+
+#integration-test-with-compose: $(CARTESI_TEST_MACHINE_IMAGES) ## Run integration tests using docker compose with auto-shutdown
+#	@trap 'docker compose -f test/compose/compose.test.yaml down -v || true' EXIT && \
+#		docker compose -f test/compose/compose.test.yaml run integration-test
+
+test-with-compose: ## Run all tests using docker compose with auto-shutdown
+	@$(MAKE) unit-test-with-compose
+#	@$(MAKE) integration-test-with-compose
+
+clean-test-compose-resources: ## Clean up compose resources after some unexpected test failure
+	@echo "Cleaning up Docker Compose resources..."
+	@docker compose -f test/compose/compose.test.yaml down -v || true
+
 help: ## Show help for each of the Makefile recipes
 	@grep "##" $(MAKEFILE_LIST) | grep -v grep | sed -e 's/:.*##\(.*\)/:\n\t\1\n/'
+
+version: ## Show the current version
+	@echo $(ROLLUPS_NODE_VERSION)
+
+# =============================================================================
+# Install
+# =============================================================================
+install: $(GO_ARTIFACTS) ## Install all Go artifacts
+	@echo "Installing Go artifacts to $(BIN_INSTALL_PATH)"
+	@mkdir -m 0755 -p $(BIN_INSTALL_PATH)
+	@for artifact in $(GO_ARTIFACTS); do \
+		install -m0755 $$artifact $(BIN_INSTALL_PATH)/; \
+	done
+
+copy-debian-package: ## Copy debian package from debian packager image
+	@echo "Copying debian package from image $(DEB_PACKAGER_IMG) $(BUILD_PLATFORM)"
+	@docker create --name debian-packager $(DOCKER_PLATFORM) $(DEB_PACKAGER_IMG)
+	@docker cp debian-packager:/build/cartesi/go/rollups-node/$(DEB_FILENAME) .
+	@docker rm debian-packager > /dev/null
+
+build-debian-package: install
+	mkdir -p $(DESTDIR)/DEBIAN $(DOC_INSTALL_PATH)
+	install -m0644 LICENSE $(DOC_INSTALL_PATH)/copyright
+	sed 's|ARG_VERSION|$(ROLLUPS_NODE_VERSION)|g;s|ARG_ARCH|$(DEB_ARCH)|g' control.template > $(DESTDIR)/DEBIAN/control
+	dpkg-deb -Zxz --root-owner-group --build $(DESTDIR) $(DEB_FILENAME)
 
 .PHONY: build build-go clean clean-go test unit-test-go e2e-test lint fmt vet escape md-lint devnet image run-with-compose shutdown-compose help docs $(GO_ARTIFACTS)

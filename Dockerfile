@@ -37,11 +37,11 @@ FROM common-env AS go-installer
 RUN <<EOF
     set -e
     ARCH=$(dpkg --print-architecture)
-    wget -O /tmp/go.tar.gz "https://go.dev/dl/go1.22.7.linux-${ARCH}.tar.gz"
+    wget -O /tmp/go.tar.gz "https://go.dev/dl/go1.23.6.linux-${ARCH}.tar.gz"
     sha256sum /tmp/go.tar.gz
     case "$ARCH" in
-        amd64) echo "fc5d49b7a5035f1f1b265c17aa86e9819e6dc9af8260ad61430ee7fbe27881bb  /tmp/go.tar.gz" | sha256sum --check ;;
-        arm64) echo "ed695684438facbd7e0f286c30b7bc2411cfc605516d8127dc25c62fe5b03885  /tmp/go.tar.gz" | sha256sum --check ;;
+        amd64) echo "9379441ea310de000f33a4dc767bd966e72ab2826270e038e78b2c53c2e7802d  /tmp/go.tar.gz" | sha256sum --check ;;
+        arm64) echo "561c780e8f4a8955d32bf72e46af0b5ee5e0debe1e4633df9a03781878219202  /tmp/go.tar.gz" | sha256sum --check ;;
         *) echo "unsupported architecture: $ARCH"; exit 1 ;;
     esac
     tar -C /opt -xzf /tmp/go.tar.gz
@@ -85,7 +85,19 @@ ARG GO_BUILD_PATH
 # Build application.
 COPY --chown=cartesi:cartesi . ${GO_BUILD_PATH}/rollups-node/
 
-RUN cd ${GO_BUILD_PATH}/rollups-node && make build-go
+WORKDIR ${GO_BUILD_PATH}/rollups-node
+
+RUN make build-go
+
+# =============================================================================
+# STAGE: debian-packager
+#
+# This stage packages the node binaries into a Debian package.
+# =============================================================================
+
+FROM go-builder AS debian-packager
+
+RUN make build-debian-package DESTDIR=$PWD/_install
 
 # =============================================================================
 # STAGE: rollups-node
@@ -100,8 +112,13 @@ RUN cd ${GO_BUILD_PATH}/rollups-node && make build-go
 FROM cartesi/machine-emulator:${EMULATOR_VERSION} AS rollups-node
 
 ARG NODE_RUNTIME_DIR=/var/lib/cartesi-rollups-node
+ARG GO_BUILD_PATH
 
 USER root
+
+COPY --from=debian-packager \
+    ${GO_BUILD_PATH}/rollups-node/cartesi-rollups-node-v*.deb \
+    cartesi-rollups-node.deb
 
 # Download system dependencies required at runtime.
 ARG DEBIAN_FRONTEND=noninteractive
@@ -111,15 +128,12 @@ RUN <<EOF
     apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
-        procps
-    rm -rf /var/lib/apt/lists/*
+        procps \
+        ./cartesi-rollups-node.deb
+    rm -rf /var/lib/apt/lists/* cartesi-rollups-node.deb
     mkdir -p ${NODE_RUNTIME_DIR}/snapshots ${NODE_RUNTIME_DIR}/data
     chown -R cartesi:cartesi ${NODE_RUNTIME_DIR}
 EOF
-
-# Copy Go binary.
-ARG GO_BUILD_PATH
-COPY --from=go-builder ${GO_BUILD_PATH}/rollups-node/cartesi-rollups-* /usr/bin
 
 # Set user to low-privilege.
 USER cartesi

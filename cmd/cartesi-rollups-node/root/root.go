@@ -34,8 +34,10 @@ var (
 	inputBoxBlockNumber    uint64
 	enableInputReader      bool
 	enableInspect          bool
+	enableJsonrpc          bool
 	enableSubmission       bool
 	enableMachineHashCheck bool
+	jsonrpcApiAddress      string
 	inspectAddress         string
 	telemetryAddress       string
 	machinelogLevel        string
@@ -59,6 +61,9 @@ func init() {
 
 	Cmd.Flags().Uint64Var(&inputBoxBlockNumber, "inputbox-block-number", 0, "Input Box deployment block number")
 	viper.BindPFlag(config.CONTRACTS_INPUT_BOX_DEPLOYMENT_BLOCK_NUMBER, Cmd.Flags().Lookup("inputbox-block-number"))
+
+	Cmd.Flags().StringVar(&jsonrpcApiAddress, "jsonrpc-address", ":10011", "Jsonrpc API service address and port")
+	viper.BindPFlag(config.JSONRPC_API_ADDRESS, Cmd.Flags().Lookup("jsonrpc-address"))
 
 	Cmd.Flags().StringVar(&inspectAddress, "inspect-address", ":10012", "Inspect service address and port")
 	viper.BindPFlag(config.INSPECT_ADDRESS, Cmd.Flags().Lookup("inspect-address"))
@@ -98,6 +103,9 @@ func init() {
 
 	Cmd.Flags().BoolVar(&enableInspect, "inspect-enabled", true, "Enable or disable the inspect service")
 	viper.BindPFlag(config.FEATURE_INSPECT_ENABLED, Cmd.Flags().Lookup("inspect-enabled"))
+
+	Cmd.Flags().BoolVar(&enableJsonrpc, "jsonrpc-enabled", true, "Enable or disable the jsonrpc api service")
+	viper.BindPFlag(config.FEATURE_JSONRPC_API_ENABLED, Cmd.Flags().Lookup("jsonrpc-enabled"))
 
 	Cmd.Flags().BoolVar(&enableMachineHashCheck, "machine-hash-check", true, "Enable or disable machine hash check (DO NOT USE IN PRODUCTION)")
 	viper.BindPFlag(config.FEATURE_MACHINE_HASH_CHECK_ENABLED, Cmd.Flags().Lookup("machine-hash-check"))

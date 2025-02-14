@@ -43,8 +43,10 @@ const (
 	FEATURE_CLAIM_SUBMISSION_ENABLED                  = "CARTESI_FEATURE_CLAIM_SUBMISSION_ENABLED"
 	FEATURE_INPUT_READER_ENABLED                      = "CARTESI_FEATURE_INPUT_READER_ENABLED"
 	FEATURE_INSPECT_ENABLED                           = "CARTESI_FEATURE_INSPECT_ENABLED"
+	FEATURE_JSONRPC_API_ENABLED                       = "CARTESI_FEATURE_JSONRPC_API_ENABLED"
 	FEATURE_MACHINE_HASH_CHECK_ENABLED                = "CARTESI_FEATURE_MACHINE_HASH_CHECK_ENABLED"
 	INSPECT_ADDRESS                                   = "CARTESI_INSPECT_ADDRESS"
+	JSONRPC_API_ADDRESS                               = "CARTESI_JSONRPC_API_ADDRESS"
 	TELEMETRY_ADDRESS                                 = "CARTESI_TELEMETRY_ADDRESS"
 	LOG_COLOR                                         = "CARTESI_LOG_COLOR"
 	LOG_LEVEL                                         = "CARTESI_LOG_LEVEL"
@@ -107,12 +109,18 @@ type Config struct {
 	// If set to false, the node will not start the inspect service.
 	FeatureInspectEnabled bool `mapstructure:"CARTESI_FEATURE_INSPECT_ENABLED"`
 
+	// If set to false, the node will not start the jsonrpc api service.
+	FeatureJsonrpcApiEnabled bool `mapstructure:"CARTESI_FEATURE_JSONRPC_API_ENABLED"`
+
 	// If set to false, the node will *not* check whether the Cartesi machine hash from
 	// the snapshot matches the hash in the Application contract.
 	FeatureMachineHashCheckEnabled bool `mapstructure:"CARTESI_FEATURE_MACHINE_HASH_CHECK_ENABLED"`
 
 	// HTTP address for inspect.
 	InspectAddress string `mapstructure:"CARTESI_INSPECT_ADDRESS"`
+
+	// HTTP address for the jsonrpc api.
+	JsonrpcApiAddress string `mapstructure:"CARTESI_JSONRPC_API_ADDRESS"`
 
 	// HTTP address for telemetry service.
 	TelemetryAddress string `mapstructure:"CARTESI_TELEMETRY_ADDRESS"`
@@ -198,9 +206,13 @@ func SetDefaults() {
 
 	viper.SetDefault(FEATURE_INSPECT_ENABLED, "true")
 
+	viper.SetDefault(FEATURE_JSONRPC_API_ENABLED, "true")
+
 	viper.SetDefault(FEATURE_MACHINE_HASH_CHECK_ENABLED, "true")
 
 	viper.SetDefault(INSPECT_ADDRESS, ":10012")
+
+	viper.SetDefault(JSONRPC_API_ADDRESS, ":10011")
 
 	// no default for CARTESI_TELEMETRY_ADDRESS
 
@@ -303,12 +315,22 @@ func Load() (*Config, error) {
 		return nil, err
 	}
 
+	cfg.FeatureJsonrpcApiEnabled, err = GetFeatureJsonrpcApiEnabled()
+	if err != nil && err != ErrNotDefined {
+		return nil, err
+	}
+
 	cfg.FeatureMachineHashCheckEnabled, err = GetFeatureMachineHashCheckEnabled()
 	if err != nil && err != ErrNotDefined {
 		return nil, err
 	}
 
 	cfg.InspectAddress, err = GetInspectAddress()
+	if err != nil && err != ErrNotDefined {
+		return nil, err
+	}
+
+	cfg.JsonrpcApiAddress, err = GetJsonrpcApiAddress()
 	if err != nil && err != ErrNotDefined {
 		return nil, err
 	}
@@ -669,6 +691,19 @@ func GetFeatureInspectEnabled() (bool, error) {
 	return notDefinedbool(), ErrNotDefined
 }
 
+// GetFeatureJsonrpcApiEnabled returns the value for the environment variable CARTESI_FEATURE_JSONRPC_API_ENABLED.
+func GetFeatureJsonrpcApiEnabled() (bool, error) {
+	s := viper.GetString(FEATURE_JSONRPC_API_ENABLED)
+	if s != "" {
+		v, err := toBool(s)
+		if err != nil {
+			return v, fmt.Errorf("failed to parse %s: %w", FEATURE_JSONRPC_API_ENABLED, err)
+		}
+		return v, nil
+	}
+	return notDefinedbool(), ErrNotDefined
+}
+
 // GetFeatureMachineHashCheckEnabled returns the value for the environment variable CARTESI_FEATURE_MACHINE_HASH_CHECK_ENABLED.
 func GetFeatureMachineHashCheckEnabled() (bool, error) {
 	s := viper.GetString(FEATURE_MACHINE_HASH_CHECK_ENABLED)
@@ -689,6 +724,19 @@ func GetInspectAddress() (string, error) {
 		v, err := toString(s)
 		if err != nil {
 			return v, fmt.Errorf("failed to parse %s: %w", INSPECT_ADDRESS, err)
+		}
+		return v, nil
+	}
+	return notDefinedstring(), ErrNotDefined
+}
+
+// GetJsonrpcApiAddress returns the value for the environment variable CARTESI_JSONRPC_API_ADDRESS.
+func GetJsonrpcApiAddress() (string, error) {
+	s := viper.GetString(JSONRPC_API_ADDRESS)
+	if s != "" {
+		v, err := toString(s)
+		if err != nil {
+			return v, fmt.Errorf("failed to parse %s: %w", JSONRPC_API_ADDRESS, err)
 		}
 		return v, nil
 	}

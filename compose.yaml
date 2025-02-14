@@ -59,7 +59,9 @@ services:
     networks:
       - devnet
     ports:
-      - "10001:10001" # Supervisor
+      - "10000:10000" # Supervisor
+      - "10011:10011" # Jsonrpc API service
+      - "10012:10012" # Inspect Service
     environment:
       <<: *env
 

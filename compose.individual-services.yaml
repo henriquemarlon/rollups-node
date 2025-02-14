@@ -57,7 +57,7 @@ services:
     networks:
       - devnet
     ports:
-      - "10000:10000" # Supervisor
+      - "10001:10001" # Supervisor
     environment:
       <<: *env
 
@@ -74,7 +74,8 @@ services:
     networks:
       - devnet
     ports:
-      - "10001:10001" # Supervisor
+      - "10002:10002" # Supervisor
+      - "10012:10012" # Inspect Service
     environment:
       <<: *env
 
@@ -87,7 +88,7 @@ services:
     networks:
       - devnet
     ports:
-      - "10002:10002" # Supervisor
+      - "10003:10003" # Supervisor
     environment:
       <<: *env
 
@@ -102,11 +103,23 @@ services:
     networks:
       - devnet
     ports:
-      - "10003:10003" # Supervisor
-    restart: "on-failure"
+      - "10004:10004" # Supervisor
     environment:
       <<: *env
 
+  jsonrpc-api:
+    image: cartesi/rollups-node:devel
+    command: cartesi-rollups-jsonrpc-api
+    depends_on:
+      database:
+        condition: service_healthy
+    networks:
+      - devnet
+    ports:
+      - "10005:10005" # Supervisor
+      - "10011:10011" # Jsonrpc API service
+    environment:
+      <<: *env
 volumes:
   node_data:
 

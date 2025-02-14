@@ -14,6 +14,7 @@ import (
 	"github.com/cartesi/rollups-node/internal/claimer"
 	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/internal/evmreader"
+	"github.com/cartesi/rollups-node/internal/jsonrpc"
 	"github.com/cartesi/rollups-node/internal/repository"
 	"github.com/cartesi/rollups-node/internal/validator"
 
@@ -87,6 +88,13 @@ func createServices(ctx context.Context, c *CreateInfo, s *Service) error {
 	go func() {
 		ch <- newClaimer(ctx, c, s)
 	}()
+
+	if c.Config.FeatureJsonrpcApiEnabled {
+		numChildren++
+		go func() {
+			ch <- newJsonrpc(ctx, c, s)
+		}()
+	}
 
 	for range numChildren {
 		select {
@@ -229,4 +237,26 @@ func newClaimer(ctx context.Context, c *CreateInfo, s *Service) service.IService
 		os.Exit(1)
 	}
 	return claimerService
+}
+
+func newJsonrpc(ctx context.Context, c *CreateInfo, s *Service) service.IService {
+	jsonrpcArgs := jsonrpc.CreateInfo{
+		CreateInfo: service.CreateInfo{
+			Name:                 "jsonrpc",
+			LogLevel:             c.Config.LogLevel,
+			LogColor:             c.Config.LogColor,
+			EnableSignalHandling: false,
+			TelemetryCreate:      false,
+			ServeMux:             s.ServeMux,
+		},
+		Repository: c.Repository,
+		Config:     c.Config,
+	}
+
+	jsonrpcService, err := jsonrpc.Create(ctx, &jsonrpcArgs)
+	if err != nil {
+		s.Logger.Error("Fatal", "error", err)
+		os.Exit(1)
+	}
+	return jsonrpcService
 }

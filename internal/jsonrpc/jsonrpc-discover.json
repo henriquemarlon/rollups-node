@@ -1,0 +1,941 @@
+{
+	"openrpc": "1.0.0",
+	"info": {
+		"title": "Cartesi Rollups Node API",
+		"version": "2.0.0",
+		"description": "A JSON-RPC API for reading rollups data. It provides information about applications, epochs, inputs, outputs, and reports in a read-only fashion."
+	},
+	"methods": [
+		{
+			"name": "cartesi_listApplications",
+			"summary": "List all applications",
+			"description": "Returns a paginated list of all applications.",
+			"params": [
+				{
+					"name": "limit",
+					"description": "The maximum number of applications to return per page.",
+					"schema": {
+						"type": "integer",
+						"minimum": 1,
+						"default": 50
+					}
+				},
+				{
+					"name": "offset",
+					"description": "The starting point for the list of applications to return.",
+					"schema": {
+						"type": "integer",
+						"minimum": 0,
+						"default": 0
+					}
+				}
+			],
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/ApplicationListResult"
+				}
+			}
+		},
+		{
+			"name": "cartesi_getApplication",
+			"summary": "Get an application",
+			"description": "Fetches a single application by its name or address.",
+			"params": [
+				{
+					"name": "application",
+					"description": "The application's name or hex encoded address.",
+					"schema": {
+						"type": "string"
+					},
+					"required": true
+				}
+			],
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/ApplicationGetResult"
+				}
+			}
+		},
+		{
+			"name": "cartesi_listEpochs",
+			"summary": "List epochs",
+			"description": "Returns a paginated list of epochs for the specified application. Can filter by epoch status.",
+			"params": [
+				{
+					"name": "application",
+					"description": "The application's name or hex encoded address.",
+					"schema": {
+						"type": "string"
+					},
+					"required": true
+				},
+				{
+					"name": "status",
+					"description": "Filter epochs by status.",
+					"schema": {
+						"$ref": "#/components/schemas/EpochStatus"
+					},
+					"required": false
+				},
+				{
+					"name": "limit",
+					"description": "The maximum number of epochs to return per page.",
+					"schema": {
+						"type": "integer",
+						"minimum": 1,
+						"default": 50
+					}
+				},
+				{
+					"name": "offset",
+					"description": "The starting point for the list of epochs to return.",
+					"schema": {
+						"type": "integer",
+						"minimum": 0,
+						"default": 0
+					}
+				}
+			],
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/EpochListResult"
+				}
+			}
+		},
+		{
+			"name": "cartesi_getEpoch",
+			"summary": "Get a specific epoch",
+			"description": "Fetches a single epoch by application and index.",
+			"params": [
+				{
+					"name": "application",
+					"description": "The application's name or hex encoded address.",
+					"schema": {
+						"type": "string"
+					},
+					"required": true
+				},
+				{
+					"name": "index",
+					"description": "The index of the epoch to be retrieved.",
+					"schema": {
+						"type": "string"
+					},
+					"required": true
+				}
+			],
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/EpochGetResult"
+				}
+			}
+		},
+		{
+			"name": "cartesi_listInputs",
+			"summary": "Retrieve a List of Inputs",
+			"description": "Returns a paginated list of inputs, with options to filter by epoch index or input sender.",
+			"params": [
+				{
+					"name": "application",
+					"description": "The application's name or hex encoded address.",
+					"schema": {
+						"type": "string"
+					},
+					"required": true
+				},
+				{
+					"name": "epoch_index",
+					"description": "Filter inputs by a specific epoch index.",
+					"schema": {
+						"type": "string"
+					},
+					"required": false
+				},
+				{
+					"name": "sender",
+					"description": "Filter inputs by the sender's address, extracted from raw data.",
+					"schema": {
+						"type": "string",
+						"format": "byte"
+					},
+					"required": false
+				},
+				{
+					"name": "limit",
+					"description": "The maximum number of inputs to return per page.",
+					"schema": {
+						"type": "integer",
+						"minimum": 1,
+						"default": 50
+					}
+				},
+				{
+					"name": "offset",
+					"description": "The starting point for the list of inputs to return.",
+					"schema": {
+						"type": "integer",
+						"minimum": 0,
+						"default": 0
+					}
+				},
+				{
+					"name": "decode",
+					"description": "Determines if the input should be ABI decoded. If set to true, the input data will be returned in a decoded format.",
+					"schema": {
+						"type": "boolean",
+						"default": false
+					},
+					"required": false
+				}
+			],
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/InputListResult"
+				}
+			}
+		},
+		{
+			"name": "cartesi_getInput",
+			"summary": "Retrieve a specific input",
+			"description": "Retrieves a single input from the application using the specified input_index.",
+			"params": [
+				{
+					"name": "application",
+					"description": "The application's name or hex encoded address.",
+					"schema": {
+						"type": "string"
+					},
+					"required": true
+				},
+				{
+					"name": "input_index",
+					"description": "The index of the input to be retrieved.",
+					"schema": {
+						"type": "string"
+					},
+					"required": true
+				},
+				{
+					"name": "decode",
+					"description": "Determines if the input should be ABI decoded. If set to true, the input data will be returned in a decoded format.",
+					"schema": {
+						"type": "boolean",
+						"default": false
+					},
+					"required": false
+				}
+			],
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/InputGetResult"
+				}
+			}
+		},
+		{
+			"name": "cartesi_getProcessedInputCount",
+			"summary": "Retrieve the number of inputs processed by the application",
+			"description": "Return a integer with the amount of inputs already processed by the application.",
+			"params": [
+				{
+					"name": "application",
+					"description": "The application's name or hex encoded address.",
+					"schema": {
+						"type": "string"
+					},
+					"required": true
+				}
+			],
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/ProcessedInputCountResult"
+				}
+			}
+		},
+		{
+			"name": "cartesi_listOutputs",
+			"summary": "Retrieve a List of Outputs",
+			"description": "Returns a paginated list of outputs, with options to filter by epoch index, input index, output type and voucher address.",
+			"params": [
+				{
+					"name": "application",
+					"description": "The application's name or hex encoded address.",
+					"schema": {
+						"type": "string"
+					},
+					"required": true
+				},
+				{
+					"name": "epoch_index",
+					"description": "Filter outputs by a specific epoch index.",
+					"schema": {
+						"type": "string"
+					},
+					"required": false
+				},
+				{
+					"name": "input_index",
+					"description": "Filter outputs by a specific input index.",
+					"schema": {
+						"type": "string"
+					},
+					"required": false
+				},
+				{
+					"name": "output_type",
+					"description": "Filter outputs by output type (first 4 bytes of raw data).",
+					"schema": {
+						"type": "string",
+						"format": "byte"
+					},
+					"required": false
+				},
+				{
+					"name": "voucher_address",
+					"description": "Filter outputs by the voucher address, extracted from raw data.",
+					"schema": {
+						"type": "string",
+						"format": "byte"
+					},
+					"required": false
+				},
+				{
+					"name": "limit",
+					"description": "The maximum number of outputs to return per page.",
+					"schema": {
+						"type": "integer",
+						"minimum": 1,
+						"default": 50
+					},
+					"required": false
+				},
+				{
+					"name": "offset",
+					"description": "The starting point for the list of outputs to return.",
+					"schema": {
+						"type": "integer",
+						"minimum": 0,
+						"default": 0
+					},
+					"required": false
+				},
+				{
+					"name": "decode",
+					"description": "Determines if the output should be ABI decoded. If set to true, the output data will be returned in a decoded format.",
+					"schema": {
+						"type": "boolean",
+						"default": false
+					},
+					"required": false
+				}
+			],
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/OutputListResult"
+				}
+			}
+		},
+		{
+			"name": "cartesi_getOutput",
+			"summary": "Retrieve a Specific Output",
+			"description": "Retrieves a single output from the application using the specified output_index. Can include ABI decoded data if requested.",
+			"params": [
+				{
+					"name": "application",
+					"description": "The application's name or hex encoded address.",
+					"schema": {
+						"type": "string"
+					},
+					"required": true
+				},
+				{
+					"name": "output_index",
+					"description": "The index of the output to be retrieved.",
+					"schema": {
+						"type": "string"
+					},
+					"required": true
+				},
+				{
+					"name": "decode",
+					"description": "Determines if the output should be ABI decoded. If set to true, the output data will be returned in a decoded format.",
+					"schema": {
+						"type": "boolean",
+						"default": false
+					},
+					"required": false
+				}
+			],
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/OutputGetResult"
+				}
+			}
+		},
+		{
+			"name": "cartesi_listReports",
+			"summary": "List reports",
+			"description": "Returns a paginated list of reports for a given application. Optionally filters by epoch_index and input_index.",
+			"params": [
+				{
+					"name": "application",
+					"description": "The application's name or hex encoded address.",
+					"schema": {
+						"type": "string"
+					},
+					"required": true
+				},
+				{
+					"name": "epoch_index",
+					"description": "Optional filter by epoch index.",
+					"schema": {
+						"type": "string"
+					},
+					"required": false
+				},
+				{
+					"name": "input_index",
+					"description": "Optional filter by input index.",
+					"schema": {
+						"type": "string"
+					},
+					"required": false
+				},
+				{
+					"name": "limit",
+					"schema": {
+						"type": "integer",
+						"minimum": 1,
+						"default": 50
+					},
+					"required": false
+				},
+				{
+					"name": "offset",
+					"schema": {
+						"type": "integer",
+						"minimum": 0,
+						"default": 0
+					},
+					"required": false
+				}
+			],
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/ReportListResult"
+				}
+			}
+		},
+		{
+			"name": "cartesi_getReport",
+			"summary": "Get a specific report",
+			"description": "Fetches a single report by application, epoch_index, input_index, and report_index.",
+			"params": [
+				{
+					"name": "application",
+					"description": "The application's name or hex encoded address.",
+					"schema": {
+						"type": "string"
+					},
+					"required": true
+				},
+				{
+					"name": "report_index",
+					"schema": {
+						"type": "string"
+					},
+					"required": true
+				}
+			],
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/ReportGetResult"
+				}
+			}
+		}
+	],
+	"components": {
+		"schemas": {
+			"Pagination": {
+				"type": "object",
+				"properties": {
+					"total_count": {
+						"type": "integer"
+					},
+					"limit": {
+						"type": "integer"
+					},
+					"offset": {
+						"type": "integer"
+					}
+				}
+			},
+			"Application": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "integer"
+					},
+					"name": {
+						"type": "string"
+					},
+					"iapplication_address": {
+						"type": "string",
+						"format": "byte"
+					},
+					"iconsensus_address": {
+						"type": "string",
+						"format": "byte"
+					},
+					"template_hash": {
+						"type": "string",
+						"format": "byte"
+					},
+					"template_uri": {
+						"type": "string"
+					},
+					"epoch_length": {
+						"type": "integer"
+					},
+					"state": {
+						"type": "string"
+					},
+					"reason": {
+						"type": "string"
+					},
+					"last_processed_block": {
+						"type": "string"
+					},
+					"last_claim_check_block": {
+						"type": "string"
+					},
+					"last_output_check_block": {
+						"type": "string"
+					},
+					"processed_inputs": {
+						"type": "integer"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time"
+					}
+				}
+			},
+			"ApplicationListResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/Application"
+						}
+					},
+					"pagination": {
+						"$ref": "#/components/schemas/Pagination"
+					}
+				}
+			},
+			"ApplicationGetResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"$ref": "#/components/schemas/Application"
+					}
+				}
+			},
+			"EpochStatus": {
+				"type": "string",
+				"enum": [
+					"OPEN",
+					"CLOSED",
+					"INPUTS_PROCESSED",
+					"CLAIM_COMPUTED",
+					"CLAIM_SUBMITTED",
+					"CLAIM_ACCEPTED",
+					"CLAIM_REJECTED"
+				]
+			},
+			"Epoch": {
+				"type": "object",
+				"properties": {
+					"application_id": {
+						"type": "integer"
+					},
+					"index": {
+						"type": "string"
+					},
+					"first_block": {
+						"type": "string"
+					},
+					"last_block": {
+						"type": "string"
+					},
+					"claim_hash": {
+						"type": "string",
+						"format": "byte",
+						"nullable": true
+					},
+					"claim_transaction_hash": {
+						"type": "string",
+						"format": "byte",
+						"nullable": true
+					},
+					"status": {
+						"$ref": "#/components/schemas/EpochStatus"
+					},
+					"virtual_index": {
+						"type": "string"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time"
+					}
+				}
+			},
+			"EpochListResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/Epoch"
+						}
+					},
+					"pagination": {
+						"$ref": "#/components/schemas/Pagination"
+					}
+				}
+			},
+			"EpochGetResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"$ref": "#/components/schemas/Epoch"
+					}
+				}
+			},
+			"InputCompletionStatus": {
+				"type": "string",
+				"enum": [
+					"NONE",
+					"ACCEPTED",
+					"REJECTED",
+					"EXCEPTION",
+					"MACHINE_HALTED",
+					"OUTPUTS_LIMIT_EXCEEDED",
+					"CYCLE_LIMIT_EXCEEDED",
+					"TIME_LIMIT_EXCEEDED",
+					"PAYLOAD_LENGTH_LIMIT_EXCEEDED"
+				]
+			},
+			"Input": {
+				"type": "object",
+				"properties": {
+					"epoch_application_id": {
+						"type": "integer"
+					},
+					"epoch_index": {
+						"type": "string"
+					},
+					"index": {
+						"type": "string"
+					},
+					"block_number": {
+						"type": "string"
+					},
+					"raw_data": {
+						"type": "string",
+						"format": "byte"
+					},
+					"decoded_data": {
+						"$ref": "#/components/schemas/EvmAdvance",
+						"nullable": true
+					},
+					"status": {
+						"$ref": "#/components/schemas/InputCompletionStatus"
+					},
+					"machine_hash": {
+						"type": "string",
+						"format": "byte",
+						"nullable": true
+					},
+					"outputs_hash": {
+						"type": "string",
+						"format": "byte",
+						"nullable": true
+					},
+					"transaction_reference": {
+						"type": "string",
+						"format": "byte"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time"
+					}
+				}
+			},
+			"EvmAdvance": {
+				"type": "object",
+				"properties": {
+					"chainId": {
+						"type": "string"
+					},
+					"appContract": {
+						"type": "string"
+					},
+					"msgSender": {
+						"type": "string"
+					},
+					"blockNumber": {
+						"type": "string"
+					},
+					"blockTimestamp": {
+						"type": "string"
+					},
+					"prevRandao": {
+						"type": "string"
+					},
+					"index": {
+						"type": "string"
+					},
+					"payload": {
+						"type": "string"
+					}
+				}
+			},
+			"InputListResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/Input"
+						}
+					},
+					"pagination": {
+						"$ref": "#/components/schemas/Pagination"
+					}
+				}
+			},
+			"InputGetResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"$ref": "#/components/schemas/Input"
+					}
+				}
+			},
+			"ProcessedInputCountResult": {
+				"type": "object",
+				"properties": {
+					"processed_inputs": {
+						"type": "integer"
+					}
+				}
+			},
+			"Output": {
+				"type": "object",
+				"properties": {
+					"input_epoch_application_id": {
+						"type": "integer"
+					},
+					"input_index": {
+						"type": "string"
+					},
+					"index": {
+						"type": "string"
+					},
+					"raw_data": {
+						"type": "string",
+						"format": "byte"
+					},
+					"decoded_data": {
+						"$ref": "#/components/schemas/DecodedOutput",
+						"nullable": true
+					},
+					"hash": {
+						"type": "string",
+						"format": "byte",
+						"nullable": true
+					},
+					"output_hashes_siblings": {
+						"type": "array",
+						"items": {
+							"type": "string",
+							"format": "byte"
+						}
+					},
+					"execution_transaction_hash": {
+						"type": "string",
+						"format": "byte",
+						"nullable": true
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time"
+					}
+				}
+			},
+			"Notice": {
+				"type": "object",
+				"properties": {
+					"index": {
+						"type": "integer"
+					},
+					"type": {
+						"type": "string"
+					},
+					"payload": {
+						"type": "string"
+					}
+				}
+			},
+			"Voucher": {
+				"type": "object",
+				"properties": {
+					"index": {
+						"type": "integer"
+					},
+					"type": {
+						"type": "string"
+					},
+					"destination": {
+						"type": "string"
+					},
+					"value": {
+						"type": "string"
+					},
+					"payload": {
+						"type": "string"
+					}
+				}
+			},
+			"DelegateCallVoucher": {
+				"type": "object",
+				"properties": {
+					"index": {
+						"type": "integer"
+					},
+					"type": {
+						"type": "string"
+					},
+					"destination": {
+						"type": "string"
+					},
+					"payload": {
+						"type": "string"
+					}
+				}
+			},
+			"DecodedOutput": {
+				"oneOf": [
+					{
+						"$ref": "#/components/schemas/Notice"
+					},
+					{
+						"$ref": "#/components/schemas/Voucher"
+					},
+					{
+						"$ref": "#/components/schemas/DelegateCallVoucher"
+					}
+				]
+			},
+			"OutputListResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/Output"
+						}
+					},
+					"pagination": {
+						"$ref": "#/components/schemas/Pagination"
+					}
+				}
+			},
+			"OutputGetResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"$ref": "#/components/schemas/Output"
+					}
+				}
+			},
+			"Report": {
+				"type": "object",
+				"properties": {
+					"input_epoch_application_id": {
+						"type": "integer"
+					},
+					"input_index": {
+						"type": "string"
+					},
+					"index": {
+						"type": "string"
+					},
+					"raw_data": {
+						"type": "string",
+						"format": "byte"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time"
+					}
+				}
+			},
+			"ReportListResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/Report"
+						}
+					},
+					"pagination": {
+						"$ref": "#/components/schemas/Pagination"
+					}
+				}
+			},
+			"ReportGetResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"$ref": "#/components/schemas/Report"
+					}
+				}
+			}
+		}
+	}
+}

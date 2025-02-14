@@ -37,6 +37,12 @@ go-type = "bool"
 description = """
 If set to false, the node will not start the inspect service."""
 
+[features.CARTESI_FEATURE_JSONRPC_API_ENABLED]
+default = "true"
+go-type = "bool"
+description = """
+If set to false, the node will not start the jsonrpc api service."""
+
 [features.CARTESI_FEATURE_MACHINE_HASH_CHECK_ENABLED]
 default = "true"
 go-type = "bool"
@@ -257,6 +263,12 @@ HTTP address for telemetry service."""
 #
 # HTTP
 #
+
+[http.CARTESI_JSONRPC_API_ADDRESS]
+default = ":10011"
+go-type = "string"
+description = """
+HTTP address for the jsonrpc api."""
 
 [http.CARTESI_INSPECT_ADDRESS]
 default = ":10012"

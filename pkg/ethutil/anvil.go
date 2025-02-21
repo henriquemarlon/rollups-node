@@ -8,17 +8,16 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
-func CreateAnvilSnapshotAndDeployApp(ctx context.Context, blockchainHttpEndpoint string, factoryAddr common.Address, templateHash string) (common.Address, func(), error) {
+func CreateAnvilSnapshotAndDeployApp(ctx context.Context, client *ethclient.Client, factoryAddr common.Address, templateHash common.Hash) (common.Address, func(), error) {
 	var contractAddr common.Address
-	// Connect to Anvil (replace with appropriate RPC URL)
-	client, err := ethclient.Dial(blockchainHttpEndpoint)
-	if err != nil {
-		return contractAddr, nil, fmt.Errorf("failed to connect to Anvil: %w", err)
+	if client == nil {
+		return contractAddr, nil, fmt.Errorf("ethclient Client is nil")
 	}
 
 	// Create a snapshot of the current state
@@ -27,16 +26,27 @@ func CreateAnvilSnapshotAndDeployApp(ctx context.Context, blockchainHttpEndpoint
 		return contractAddr, nil, fmt.Errorf("failed to create snapshot: %w", err)
 	}
 
-	signer, err := NewMnemonicSigner(ctx, client, FoundryMnemonic, 0)
+	chainId, err := client.ChainID(ctx)
 	if err != nil {
 		_ = RevertToAnvilSnapshot(client.Client(), snapshotID)
-		return contractAddr, nil, fmt.Errorf("failed to create signer: %w", err)
+		return contractAddr, nil, fmt.Errorf("failed to retrieve chainID from Anvil: %w", err)
 	}
 
-	owner := signer.Account()
+	privateKey, err := MnemonicToPrivateKey(FoundryMnemonic, 0)
+	if err != nil {
+		_ = RevertToAnvilSnapshot(client.Client(), snapshotID)
+		return contractAddr, nil, fmt.Errorf("failed to create privateKey: %w", err)
+	}
+
+	txOpts, err := bind.NewKeyedTransactorWithChainID(privateKey, chainId)
+	if err != nil {
+		_ = RevertToAnvilSnapshot(client.Client(), snapshotID)
+		return contractAddr, nil, fmt.Errorf("failed to create TransactOpts: %w", err)
+	}
+
 	salt := "0000000000000000000000000000000000000000000000000000000000000000"
 	// Deploy the application contract
-	contractAddr, err = DeploySelfHostedApplication(ctx, client, signer, factoryAddr, owner,
+	contractAddr, err = DeploySelfHostedApplication(ctx, client, txOpts, factoryAddr, txOpts.From,
 		templateHash, salt)
 	if err != nil {
 		_ = RevertToAnvilSnapshot(client.Client(), snapshotID)
@@ -77,53 +87,18 @@ func RevertToAnvilSnapshot(rpcClient *rpc.Client, snapshotID string) error {
 	return nil
 }
 
-// Advances the Devnet timestamp
-func AdvanceDevnetTime(ctx context.Context,
-	blockchainHttpEndpoint string,
-	timeInSeconds int,
-) error {
-	client, err := rpc.DialContext(ctx, blockchainHttpEndpoint)
-	if err != nil {
-		return err
-	}
-	defer client.Close()
-	return client.CallContext(ctx, nil, "evm_increaseTime", timeInSeconds)
-
-}
-
-// Sets the timestamp for the next block at Devnet
-func SetNextDevnetBlockTimestamp(
-	ctx context.Context,
-	blockchainHttpEndpoint string,
-	timestamp int64,
-) error {
-
-	client, err := rpc.DialContext(ctx, blockchainHttpEndpoint)
-	if err != nil {
-		return err
-	}
-	defer client.Close()
-	return client.CallContext(ctx, nil, "evm_setNextBlockTimestamp", timestamp)
-}
-
 // Mines a new block
 func MineNewBlock(
 	ctx context.Context,
-	blockchainHttpEndpoint string,
+	client *ethclient.Client,
 ) (uint64, error) {
-	client, err := rpc.DialContext(ctx, blockchainHttpEndpoint)
+	if client == nil {
+		return 0, fmt.Errorf("MineNewBlock: client is nil")
+	}
+	rpcClient := client.Client()
+	err := rpcClient.CallContext(ctx, nil, "evm_mine")
 	if err != nil {
 		return 0, err
 	}
-	defer client.Close()
-	err = client.CallContext(ctx, nil, "evm_mine")
-	if err != nil {
-		return 0, err
-	}
-	ethClient, err := ethclient.DialContext(ctx, blockchainHttpEndpoint)
-	if err != nil {
-		return 0, err
-	}
-	defer ethClient.Close()
-	return ethClient.BlockNumber(ctx)
+	return client.BlockNumber(ctx)
 }

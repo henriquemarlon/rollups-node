@@ -9,8 +9,11 @@ import (
 
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
-	cmdcommon "github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/common"
+	"github.com/cartesi/rollups-node/internal/config"
+	"github.com/cartesi/rollups-node/internal/config/auth"
+	"github.com/cartesi/rollups-node/internal/repository/factory"
 	"github.com/cartesi/rollups-node/pkg/ethutil"
 )
 
@@ -25,51 +28,26 @@ const examples = `# Executes voucher/output with index 5:
 cartesi-rollups-cli execute -n echo-dapp --output-index 5`
 
 var (
-	name        string
-	address     string
-	outputIndex uint64
-	ethEndpoint string
-	mnemonic    string
-	account     uint32
+	name                   string
+	address                string
+	outputIndex            uint64
+	blockchainHttpEndpoint string
+	databaseConnection     string
 )
 
 func init() {
-	Cmd.Flags().StringVarP(
-		&name,
-		"name",
-		"n",
-		"",
-		"Application name",
-	)
+	Cmd.Flags().StringVarP(&name, "name", "n", "", "Application name")
 
-	Cmd.Flags().StringVarP(
-		&address,
-		"address",
-		"a",
-		"",
-		"Application contract address",
-	)
+	Cmd.Flags().StringVarP(&address, "address", "a", "", "Application contract address")
 
-	Cmd.Flags().StringVarP(
-		&cmdcommon.PostgresEndpoint,
-		"postgres-endpoint",
-		"p",
-		"postgres://postgres:password@localhost:5432/rollupsdb?sslmode=disable",
-		"Postgres endpoint",
-	)
-
-	Cmd.Flags().Uint64Var(&outputIndex, "output-index", 0,
-		"index of the output")
+	Cmd.Flags().Uint64Var(&outputIndex, "output-index", 0, "Index of the output")
 	cobra.CheckErr(Cmd.MarkFlagRequired("output-index"))
 
-	Cmd.Flags().StringVar(&ethEndpoint, "eth-endpoint", "http://localhost:8545",
-		"ethereum node JSON-RPC endpoint")
+	Cmd.Flags().StringVar(&databaseConnection, "database-connection", "", "Database connection string in the URL format\n(eg.: 'postgres://user:password@hostname:port/database') ")
+	viper.BindPFlag(config.DATABASE_CONNECTION, Cmd.Flags().Lookup("database-connection"))
 
-	Cmd.Flags().StringVar(&mnemonic, "mnemonic", ethutil.FoundryMnemonic,
-		"mnemonic used to sign the transaction")
-
-	Cmd.Flags().Uint32Var(&account, "account", 0,
-		"account index used to sign the transaction (default: 0)")
+	Cmd.Flags().StringVar(&blockchainHttpEndpoint, "blockchain-http-endpoint", "", "Blockchain HTTP endpoint")
+	viper.BindPFlag(config.BLOCKCHAIN_HTTP_ENDPOINT, Cmd.Flags().Lookup("blockchain-http-endpoint"))
 
 	Cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		if name == "" && address == "" {
@@ -78,16 +56,22 @@ func init() {
 		if name != "" && address != "" {
 			return fmt.Errorf("only one of 'name' or 'address' can be specified")
 		}
-		return cmdcommon.PersistentPreRun(cmd, args)
+		return nil
 	}
 }
 
 func run(cmd *cobra.Command, args []string) {
 	ctx := cmd.Context()
 
-	if cmdcommon.Repository == nil {
-		panic("Database was not initialized")
-	}
+	dsn, err := config.GetDatabaseConnection()
+	cobra.CheckErr(err)
+
+	ethEndpoint, err := config.GetBlockchainHttpEndpoint()
+	cobra.CheckErr(err)
+
+	repo, err := factory.NewRepositoryFromConnectionString(ctx, dsn.String())
+	cobra.CheckErr(err)
+	defer repo.Close()
 
 	var nameOrAddress string
 	if cmd.Flags().Changed("name") {
@@ -96,7 +80,7 @@ func run(cmd *cobra.Command, args []string) {
 		nameOrAddress = address
 	}
 
-	output, err := cmdcommon.Repository.GetOutput(ctx, nameOrAddress, outputIndex)
+	output, err := repo.GetOutput(ctx, nameOrAddress, outputIndex)
 	cobra.CheckErr(err)
 
 	if output == nil {
@@ -104,7 +88,7 @@ func run(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	app, err := cmdcommon.Repository.GetApplication(ctx, nameOrAddress)
+	app, err := repo.GetApplication(ctx, nameOrAddress)
 	cobra.CheckErr(err)
 
 	if len(output.OutputHashesSiblings) == 0 {
@@ -112,18 +96,21 @@ func run(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	client, err := ethclient.DialContext(ctx, ethEndpoint)
+	client, err := ethclient.DialContext(ctx, ethEndpoint.String())
 	cobra.CheckErr(err)
 
-	signer, err := ethutil.NewMnemonicSigner(ctx, client, mnemonic, account)
+	chainId, err := client.ChainID(ctx)
 	cobra.CheckErr(err)
 
-	fmt.Printf("Executing voucher app: %v (%v) output_index: %v with account: %v\n", app.Name, app.IApplicationAddress, outputIndex, signer.Account())
+	txOpts, err := auth.GetTransactOpts(chainId)
+	cobra.CheckErr(err)
+
+	fmt.Printf("Executing voucher app: %v (%v) output_index: %v with account: %v\n", app.Name, app.IApplicationAddress, outputIndex, txOpts.From)
 	txHash, err := ethutil.ExecuteOutput(
 		ctx,
 		client,
+		txOpts,
 		app.IApplicationAddress,
-		signer,
 		outputIndex,
 		output.RawData,
 		output.OutputHashesSiblings,

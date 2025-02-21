@@ -9,13 +9,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/internal/merkle"
 	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/repository"
-	"github.com/cartesi/rollups-node/internal/repository/factory"
 	"github.com/cartesi/rollups-node/pkg/service"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -28,38 +26,32 @@ type Service struct {
 
 type CreateInfo struct {
 	service.CreateInfo
-	PostgresEndpoint config.Redacted[string]
-	Repository       ValidatorRepository
-	PollingInterval  time.Duration
-	MaxStartupTime   time.Duration
+
+	Config config.Config
+
+	Repository repository.Repository
 }
 
-func (c *CreateInfo) LoadEnv() {
-	c.PostgresEndpoint.Value = config.GetPostgresEndpoint()
-	c.PollInterval = config.GetValidatorPollingInterval()
-	c.LogLevel = service.LogLevel(config.GetLogLevel())
-	c.LogPretty = config.GetLogPrettyEnabled()
-	c.MaxStartupTime = config.GetMaxStartupTime()
-}
-
-func Create(c *CreateInfo, s *Service) error {
+func Create(ctx context.Context, c *CreateInfo) (*Service, error) {
 	var err error
-
-	err = service.Create(&c.CreateInfo, &s.Service)
-	if err != nil {
-		return err
+	if err = ctx.Err(); err != nil {
+		return nil, err // This returns context.Canceled or context.DeadlineExceeded.
 	}
 
-	return service.WithTimeout(c.MaxStartupTime, func() error {
-		if c.Repository == nil {
-			c.Repository, err = factory.NewRepositoryFromConnectionString(s.Context, c.PostgresEndpoint.Value)
-			if err != nil {
-				return err
-			}
-		}
-		s.repository = c.Repository
-		return nil
-	})
+	s := &Service{}
+	c.CreateInfo.Impl = s
+
+	err = service.Create(ctx, &c.CreateInfo, &s.Service)
+	if err != nil {
+		return nil, err
+	}
+
+	s.repository = c.Repository
+	if s.repository == nil {
+		return nil, fmt.Errorf("repository on validator service Create is nil")
+	}
+
+	return s, nil
 }
 
 func (s *Service) Alive() bool     { return true }
@@ -75,10 +67,6 @@ func (s *Service) Stop(b bool) []error {
 	return nil
 }
 
-func (s *Service) Start(context context.Context, ready chan<- struct{}) error {
-	ready <- struct{}{}
-	return s.Serve()
-}
 func (v *Service) String() string {
 	return v.Name
 }

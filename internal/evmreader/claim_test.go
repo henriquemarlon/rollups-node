@@ -468,14 +468,11 @@ func (s *EvmReaderSuite) TestCheckClaimFails() {
 			defaultBlock:            DefaultBlock_Latest,
 			contractFactory:         contractFactory,
 			hasEnabledApps:          true,
+			inputReaderEnabled:      true,
 		}
-		Create(&CreateInfo{
-			MaxStartupTime: 5 * time.Second,
-			CreateInfo: service.CreateInfo{
-				Name: "evm-reader",
-				Impl: &evmReader,
-			},
-		}, &evmReader)
+		serviceArgs := &service.CreateInfo{Name: "evm-reader", Impl: &evmReader}
+		err := service.Create(ctx, serviceArgs, &evmReader.Service)
+		s.Require().Nil(err)
 
 		// Prepare Claims Acceptance Events
 

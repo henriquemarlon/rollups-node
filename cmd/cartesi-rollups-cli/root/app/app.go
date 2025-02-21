@@ -7,29 +7,30 @@ import (
 	"github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/app/deploy"
 	"github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/app/list"
 	"github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/app/register"
+	"github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/app/remove"
 	"github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/app/status"
-	"github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/common"
+	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var Cmd = &cobra.Command{
-	Use:               "app",
-	Short:             "Application management related commands",
-	PersistentPreRunE: common.PersistentPreRun,
+	Use:   "app",
+	Short: "Application management related commands",
 }
+
+var (
+	databaseConnection string
+)
 
 func init() {
 
-	Cmd.PersistentFlags().StringVarP(
-		&common.PostgresEndpoint,
-		"postgres-endpoint",
-		"p",
-		"postgres://postgres:password@localhost:5432/rollupsdb?sslmode=disable",
-		"Postgres endpoint",
-	)
+	Cmd.Flags().StringVar(&databaseConnection, "database-connection", "", "Database connection string in the URL format\n(eg.: 'postgres://user:password@hostname:port/database') ")
+	viper.BindPFlag(config.DATABASE_CONNECTION, Cmd.Flags().Lookup("database-connection"))
 
 	Cmd.AddCommand(register.Cmd)
 	Cmd.AddCommand(deploy.Cmd)
 	Cmd.AddCommand(list.Cmd)
 	Cmd.AddCommand(status.Cmd)
+	Cmd.AddCommand(remove.Cmd)
 }

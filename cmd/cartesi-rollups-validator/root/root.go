@@ -4,55 +4,91 @@
 package root
 
 import (
+	"context"
+
+	"github.com/cartesi/rollups-node/internal/config"
+	"github.com/cartesi/rollups-node/internal/repository/factory"
 	"github.com/cartesi/rollups-node/internal/validator"
+	"github.com/cartesi/rollups-node/internal/version"
 	"github.com/cartesi/rollups-node/pkg/service"
+
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
-const CMD_NAME = "validator"
+const serviceName = "validator"
 
 var (
-	buildVersion     = "devel"
-	validatorService = validator.Service{}
-	createInfo       = validator.CreateInfo{
-		CreateInfo: service.CreateInfo{
-			Name:                 "validator",
-			EnableSignalHandling: true,
-			TelemetryCreate:      true,
-			TelemetryAddress:     ":10003",
-			Impl:                 &validatorService,
-		},
-	}
+	logLevel           string
+	logColor           bool
+	databaseConnection string
+	pollInterval       string
+	maxStartupTime     string
+	telemetryAddress   string
+	cfg                *config.Config
 )
 
 var Cmd = &cobra.Command{
-	Use:   createInfo.Name,
-	Short: "Runs Validator",
-	Long:  "Runs Validator in standalone mode",
-	Run:   run,
+	Use:     "cartesi-rollups-" + serviceName,
+	Short:   "Runs cartesi-rollups-" + serviceName,
+	Long:    "Runs cartesi-rollups-" + serviceName + " in standalone mode",
+	Run:     run,
+	Version: version.BuildVersion,
 }
 
 func init() {
-	createInfo.LoadEnv()
-	Cmd.Flags().StringVar(&createInfo.TelemetryAddress,
-		"telemetry-address", createInfo.TelemetryAddress,
-		"health check and metrics address and port")
-	Cmd.Flags().DurationVar(&createInfo.PollInterval,
-		"poll-interval", createInfo.PollInterval,
-		"poll interval")
-	Cmd.Flags().Var(&createInfo.LogLevel,
-		"log-level",
-		"log level: debug, info, warn or error")
-	Cmd.Flags().BoolVar(&createInfo.LogPretty,
-		"log-color", createInfo.LogPretty,
-		"tint the logs (colored output)")
-	Cmd.Flags().StringVar(&createInfo.PostgresEndpoint.Value,
-		"postgres-endpoint", createInfo.PostgresEndpoint.Value,
-		"Postgres endpoint")
+	Cmd.Flags().StringVar(&telemetryAddress, "telemetry-address", ":10003", "Health check and metrics address and port")
+	viper.BindPFlag(config.TELEMETRY_ADDRESS, Cmd.Flags().Lookup("telemetry-address"))
+
+	Cmd.Flags().StringVar(&logLevel, "log-level", "info", "Log level: debug, info, warn or error")
+	viper.BindPFlag(config.LOG_LEVEL, Cmd.Flags().Lookup("log-level"))
+
+	Cmd.Flags().BoolVar(&logColor, "log-color", true, "Tint the logs (colored output)")
+	viper.BindPFlag(config.LOG_COLOR, Cmd.Flags().Lookup("log-color"))
+
+	Cmd.Flags().StringVar(&databaseConnection, "database-connection", "", "Database connection string in the URL format\n(eg.: 'postgres://user:password@hostname:port/database') ")
+	viper.BindPFlag(config.DATABASE_CONNECTION, Cmd.Flags().Lookup("database-connection"))
+
+	Cmd.Flags().StringVar(&pollInterval, "poll-interval", "7", "Poll interval")
+	viper.BindPFlag(config.VALIDATOR_POLLING_INTERVAL, Cmd.Flags().Lookup("poll-interval"))
+
+	Cmd.Flags().StringVar(&maxStartupTime, "max-startup-time", "15", "Maximum startup time in seconds")
+	viper.BindPFlag(config.MAX_STARTUP_TIME, Cmd.Flags().Lookup("max-startup-time"))
+
+	// TODO: validate on preRunE
+	Cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		var err error
+		cfg, err = config.Load()
+		if err != nil {
+			return err
+		}
+		return nil
+	}
 }
 
 func run(cmd *cobra.Command, args []string) {
-	cobra.CheckErr(validator.Create(&createInfo, &validatorService))
-	validatorService.CreateDefaultHandlers("")
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.MaxStartupTime)
+	defer cancel()
+
+	createInfo := validator.CreateInfo{
+		CreateInfo: service.CreateInfo{
+			Name:                 serviceName,
+			LogLevel:             cfg.LogLevel,
+			LogColor:             cfg.LogColor,
+			EnableSignalHandling: true,
+			TelemetryCreate:      true,
+			TelemetryAddress:     cfg.TelemetryAddress,
+			PollInterval:         cfg.ValidatorPollingInterval,
+		},
+		Config: *cfg,
+	}
+	var err error
+	createInfo.Repository, err = factory.NewRepositoryFromConnectionString(ctx, cfg.DatabaseConnection.String())
+	cobra.CheckErr(err)
+	defer createInfo.Repository.Close()
+
+	validatorService, err := validator.Create(ctx, &createInfo)
+	cobra.CheckErr(err)
+
 	cobra.CheckErr(validatorService.Serve())
 }

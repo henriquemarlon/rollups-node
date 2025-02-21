@@ -5,7 +5,6 @@ package validator
 
 import (
 	"context"
-	"log/slog"
 	"math/big"
 	"testing"
 	"time"
@@ -29,7 +28,7 @@ type ValidatorRepositoryIntegrationSuite struct {
 	suite.Suite
 	ctx              context.Context
 	cancel           context.CancelFunc
-	validator        validator.Service
+	validator        *validator.Service
 	repository       repository.Repository
 	postgresEndpoint config.Redacted[string]
 }
@@ -42,8 +41,7 @@ func (s *ValidatorRepositoryIntegrationSuite) SetupSuite() {
 	s.ctx, s.cancel = context.WithTimeout(context.Background(), testTimeout)
 
 	var err error
-	// build database URL
-	s.postgresEndpoint.Value, err = db.GetPostgresTestEndpoint()
+	s.postgresEndpoint.Value, err = db.GetTestDatabaseEndpoint()
 	s.Require().Nil(err)
 
 	err = db.SetupTestPostgres(s.postgresEndpoint.Value)
@@ -58,21 +56,18 @@ func (s *ValidatorRepositoryIntegrationSuite) SetupSubTest() {
 	err = db.SetupTestPostgres(s.postgresEndpoint.Value)
 	s.Require().Nil(err)
 
-	c := validator.CreateInfo{
+	serviceArgs := validator.CreateInfo{
 		CreateInfo: service.CreateInfo{
-			Name:     "validator",
-			Impl:     &s.validator,
-			LogLevel: service.LogLevel(slog.LevelDebug),
+			Name: "validator",
 		},
-		Repository:     s.repository,
-		MaxStartupTime: 1 * time.Second,
+		Repository: s.repository,
 	}
-	s.Require().Nil(validator.Create(&c, &s.validator))
+	s.validator, err = validator.Create(context.Background(), &serviceArgs)
+	s.Require().Nil(err)
 }
 
 func (s *ValidatorRepositoryIntegrationSuite) TearDownSubTest() {
-	// FIXME add close method
-	//s.repository.Close()
+	s.repository.Close()
 }
 
 func (s *ValidatorRepositoryIntegrationSuite) TearDownSuite() {

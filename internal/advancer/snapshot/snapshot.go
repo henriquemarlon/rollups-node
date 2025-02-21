@@ -6,71 +6,12 @@
 package snapshot
 
 import (
-	"errors"
 	"fmt"
-	"io/fs"
-	"log/slog"
 	"os"
-	"os/exec"
 	"path"
-	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
 )
-
-const SNAPSHOT_CONTAINER_PATH = "/usr/share/cartesi/snapshot"
-
-func runCommand(logger *slog.Logger, name string, args ...string) error {
-	logger.Debug("Running command", "name", name, "args", strings.Join(args, " "))
-	cmd := exec.Command(name, args...)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("'%v %v' failed with %w: %v",
-			name, strings.Join(args, " "), err, string(output),
-		)
-	}
-	return nil
-}
-
-func fileExists(filePath string) bool {
-	_, err := os.Stat(filePath)
-
-	// Check if the file exists by examining the error returned by os.Stat
-	return !errors.Is(err, fs.ErrNotExist)
-}
-
-func Save(logger *slog.Logger, destDir string) error {
-
-	// Remove previous snapshot dir
-	if fileExists(destDir) {
-		logger.Info("Removing previous snapshot")
-		err := os.RemoveAll(destDir)
-		if err != nil {
-			return err
-		}
-	}
-
-	err := runCommand(logger, "cartesi-machine", "--ram-length=128Mi", "--store="+destDir,
-		"--", "ioctl-echo-loop --vouchers=1 --notices=1 --reports=1 --verbose=1")
-	if err != nil {
-		return err
-	}
-
-	logger.Info("Cartesi machine snapshot saved on",
-		"destination-dir", destDir)
-	return nil
-}
-
-func CreateDefaultMachineSnapshot(logger *slog.Logger) (string, error) {
-	tmpDir, err := os.MkdirTemp("", "")
-	if err != nil {
-		return "", err
-	}
-	if err = Save(logger, tmpDir); err != nil {
-		return "", err
-	}
-	return tmpDir, nil
-}
 
 // Reads the Cartesi Machine hash from machineDir. Returns it as a hex string or
 // an error

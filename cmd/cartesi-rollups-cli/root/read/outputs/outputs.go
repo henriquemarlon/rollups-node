@@ -14,9 +14,10 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/spf13/cobra"
 
-	cmdcommon "github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/common"
+	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/repository"
+	"github.com/cartesi/rollups-node/internal/repository/factory"
 	"github.com/cartesi/rollups-node/pkg/contracts/outputs"
 )
 
@@ -128,9 +129,12 @@ func decodeOutputData(output *model.Output, parsedAbi *abi.ABI) (interface{}, er
 func run(cmd *cobra.Command, args []string) {
 	ctx := cmd.Context()
 
-	if cmdcommon.Repository == nil {
-		panic("Repository was not initialized")
-	}
+	dsn, err := config.GetDatabaseConnection()
+	cobra.CheckErr(err)
+
+	repo, err := factory.NewRepositoryFromConnectionString(ctx, dsn.String())
+	cobra.CheckErr(err)
+	defer repo.Close()
 
 	var nameOrAddress string
 	pFlags := cmd.Flags()
@@ -146,7 +150,7 @@ func run(cmd *cobra.Command, args []string) {
 			fmt.Fprintf(os.Stderr, "Error: Only one of 'output-index' or 'input-index' can be used at a time.\n")
 			os.Exit(1)
 		}
-		output, err := cmdcommon.Repository.GetOutput(ctx, nameOrAddress, outputIndex)
+		output, err := repo.GetOutput(ctx, nameOrAddress, outputIndex)
 		cobra.CheckErr(err)
 		if decodeOutput {
 			parsedAbi, err := outputs.OutputsMetaData.GetAbi()
@@ -167,12 +171,12 @@ func run(cmd *cobra.Command, args []string) {
 		if cmd.Flags().Changed("input-index") {
 			f := repository.OutputFilter{InputIndex: &inputIndex}
 			p := repository.Pagination{}
-			outputList, err = cmdcommon.Repository.ListOutputs(ctx, nameOrAddress, f, p)
+			outputList, err = repo.ListOutputs(ctx, nameOrAddress, f, p)
 			cobra.CheckErr(err)
 		} else {
 			f := repository.OutputFilter{}
 			p := repository.Pagination{}
-			outputList, err = cmdcommon.Repository.ListOutputs(ctx, nameOrAddress, f, p)
+			outputList, err = repo.ListOutputs(ctx, nameOrAddress, f, p)
 			cobra.CheckErr(err)
 		}
 		if decodeOutput {

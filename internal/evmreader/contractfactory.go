@@ -24,7 +24,6 @@ func NewEvmReaderContractFactory(
 	ethClient *ethclient.Client,
 	maxRetries uint64,
 	maxDelay time.Duration,
-
 ) *EvmReaderContractFactory {
 	return &EvmReaderContractFactory{
 		ethClient:       ethClient,

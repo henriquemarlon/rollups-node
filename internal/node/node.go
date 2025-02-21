@@ -4,11 +4,9 @@
 package node
 
 import (
+	"context"
 	"fmt"
-	"log/slog"
-	"net/http"
 	"os"
-	"time"
 
 	"github.com/cartesi/rollups-node/pkg/service"
 
@@ -16,9 +14,7 @@ import (
 	"github.com/cartesi/rollups-node/internal/claimer"
 	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/internal/evmreader"
-	"github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/repository"
-	"github.com/cartesi/rollups-node/internal/repository/factory"
 	"github.com/cartesi/rollups-node/internal/validator"
 
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -26,13 +22,13 @@ import (
 
 type CreateInfo struct {
 	service.CreateInfo
-	model.NodeConfig[model.NodeConfigValue]
 
-	BlockchainHttpEndpoint config.Redacted[string]
-	BlockchainID           uint64
-	PostgresEndpoint       config.Redacted[string]
-	EnableClaimSubmission  bool
-	MaxStartupTime         time.Duration
+	Config config.Config
+
+	ClaimerClient  *ethclient.Client
+	ReaderClient   *ethclient.Client
+	ReaderWSClient *ethclient.Client
+	Repository     repository.Repository
 }
 
 type Service struct {
@@ -43,89 +39,63 @@ type Service struct {
 	Repository repository.Repository
 }
 
-func (c *CreateInfo) LoadEnv() {
-	c.BlockchainHttpEndpoint = config.Redacted[string]{config.GetBlockchainHttpEndpoint()}
-	c.BlockchainID = config.GetBlockchainId()
-	c.EnableClaimSubmission = config.GetFeatureClaimSubmissionEnabled()
-	c.PostgresEndpoint = config.Redacted[string]{config.GetPostgresEndpoint()}
-	c.MaxStartupTime = config.GetMaxStartupTime()
-	c.LogLevel = service.LogLevel(config.GetLogLevel())
-	c.LogPretty = config.GetLogPrettyEnabled()
-}
-
-func Create(c *CreateInfo, s *Service) error {
+func Create(ctx context.Context, c *CreateInfo) (*Service, error) {
 	var err error
 
-	err = service.Create(&c.CreateInfo, &s.Service)
-	if err != nil {
-		return err
+	if err = ctx.Err(); err != nil {
+		return nil, err // This returns context.Canceled or context.DeadlineExceeded.
 	}
 
-	err = service.WithTimeout(c.MaxStartupTime, func() error {
-		// database connection
-		s.Repository, err = factory.NewRepositoryFromConnectionString(s.Context, c.PostgresEndpoint.Value)
-		if err != nil {
-			return err
-		}
+	s := &Service{}
+	c.CreateInfo.Impl = s
 
-		// blockchain connection + chainID check
-		s.Client, err = ethclient.Dial(c.BlockchainHttpEndpoint.Value)
-		if err != nil {
-			return err
-		}
-		chainID, err := s.Client.ChainID(s.Context)
-		if err != nil {
-			return err
-		}
-		if c.BlockchainID != chainID.Uint64() {
-			return fmt.Errorf(
-				"chainId mismatch; got: %v, expected: %v",
-				chainID,
-				c.BlockchainID,
-			)
-		}
-		return nil
-	})
+	err = service.Create(ctx, &c.CreateInfo, &s.Service)
+	if err != nil {
+		return nil, err
+	}
 
+	s.Logger.Debug("Creating services", "config", c.Config)
+
+	err = createServices(ctx, c, s)
 	if err != nil {
 		s.Logger.Error(fmt.Sprint(err))
-		return err
+		return nil, err
 	}
-	return createServices(c, s)
+	return s, nil
 }
 
-func createServices(c *CreateInfo, s *Service) error {
+func createServices(ctx context.Context, c *CreateInfo, s *Service) error {
 	ch := make(chan service.IService)
-	deadline := time.After(c.MaxStartupTime)
 	numChildren := 0
 
 	numChildren++
 	go func() {
-		ch <- newEVMReader(c, s.Logger, s.Repository, s.ServeMux)
+		ch <- newEVMReader(ctx, c, s)
 	}()
 
 	numChildren++
 	go func() {
-		ch <- newAdvancer(c, s.Logger, s.Repository, s.ServeMux)
+		ch <- newAdvancer(ctx, c, s)
 	}()
 
 	numChildren++
 	go func() {
-		ch <- newValidator(c, s.Logger, s.Repository, s.ServeMux)
+		ch <- newValidator(ctx, c, s)
 	}()
 
 	numChildren++
 	go func() {
-		ch <- newClaimer(c, s.Logger, s.Repository, s.ServeMux)
+		ch <- newClaimer(ctx, c, s)
 	}()
 
 	for range numChildren {
 		select {
 		case child := <-ch:
 			s.Children = append(s.Children, child)
-		case <-deadline:
+		case <-ctx.Done():
+			err := ctx.Err()
 			s.Logger.Error("Failed to create services. Time limit exceeded",
-				"limit", c.MaxStartupTime)
+				"err", err)
 			return fmt.Errorf("Failed to create services. Time limit exceeded")
 		}
 	}
@@ -167,141 +137,96 @@ func (me *Service) Serve() error {
 
 // services creation
 
-func newEVMReader(
-	nc *CreateInfo,
-	logger *slog.Logger,
-	r repository.Repository,
-	serveMux *http.ServeMux,
-) service.IService {
-	s := evmreader.Service{
-		Service: service.Service{
-			ServeMux: serveMux,
-		},
-	}
-	c := evmreader.CreateInfo{
+func newEVMReader(ctx context.Context, c *CreateInfo, s *Service) service.IService {
+	readerArgs := evmreader.CreateInfo{
 		CreateInfo: service.CreateInfo{
 			Name:                 "evm-reader",
-			Impl:                 &s,
-			ServeMux:             serveMux,
-			EnableSignalHandling: true,
+			LogLevel:             c.Config.LogLevel,
+			LogColor:             c.Config.LogColor,
+			EnableSignalHandling: false,
+			TelemetryCreate:      false,
+			ServeMux:             s.ServeMux,
 		},
-		NodeConfig: model.NodeConfig[model.NodeConfigValue]{
-			Value: model.NodeConfigValue{
-				DefaultBlock:            nc.Value.DefaultBlock,
-				InputBoxAddress:         nc.Value.InputBoxAddress,
-				InputBoxDeploymentBlock: nc.Value.InputBoxDeploymentBlock,
-			},
-		},
-		Repository: r,
+		EthClient:   c.ReaderClient,
+		EthWsClient: c.ReaderWSClient,
+		Repository:  c.Repository,
+		Config:      c.Config,
 	}
-	c.LoadEnv()
-	c.LogLevel = nc.LogLevel
-	c.LogPretty = nc.LogPretty
 
-	err := evmreader.Create(&c, &s)
+	readerService, err := evmreader.Create(ctx, &readerArgs)
 	if err != nil {
-		logger.Error("Fatal", "error", err)
+		s.Logger.Error("Fatal", "error", err)
 		os.Exit(1)
 	}
-	s.CreateDefaultHandlers("/" + s.Name)
-	return &s
+	return readerService
 }
 
-func newAdvancer(
-	nc *CreateInfo,
-	logger *slog.Logger,
-	r repository.Repository,
-	serveMux *http.ServeMux,
-) service.IService {
-	s := advancer.Service{
-		Service: service.Service{
-			ServeMux: serveMux,
-		},
-	}
-	c := advancer.CreateInfo{
+func newAdvancer(ctx context.Context, c *CreateInfo, s *Service) service.IService {
+	advancerArgs := advancer.CreateInfo{
 		CreateInfo: service.CreateInfo{
 			Name:                 "advancer",
-			Impl:                 &s,
-			ServeMux:             serveMux,
-			EnableSignalHandling: true,
+			LogLevel:             c.Config.LogLevel,
+			LogColor:             c.Config.LogColor,
+			EnableSignalHandling: false,
+			TelemetryCreate:      false,
+			PollInterval:         c.Config.AdvancerPollingInterval,
+			ServeMux:             s.ServeMux,
 		},
-		Repository: r,
+		Repository: c.Repository,
+		Config:     c.Config,
 	}
-	c.LoadEnv()
-	c.LogLevel = nc.LogLevel
-	c.LogPretty = nc.LogPretty
 
-	err := advancer.Create(&c, &s)
+	advancerService, err := advancer.Create(ctx, &advancerArgs)
 	if err != nil {
-		logger.Error("Fatal", "error", err)
+		s.Logger.Error("Fatal", "error", err)
 		os.Exit(1)
 	}
-	s.CreateDefaultHandlers("/" + s.Name)
-	return &s
+	return advancerService
 }
 
-func newValidator(
-	nc *CreateInfo,
-	logger *slog.Logger,
-	r repository.Repository,
-	serveMux *http.ServeMux,
-) service.IService {
-	s := validator.Service{
-		Service: service.Service{
-			ServeMux: serveMux,
-		},
-	}
-	c := validator.CreateInfo{
+func newValidator(ctx context.Context, c *CreateInfo, s *Service) service.IService {
+	validatorArgs := validator.CreateInfo{
 		CreateInfo: service.CreateInfo{
 			Name:                 "validator",
-			Impl:                 &s,
-			ServeMux:             serveMux,
-			EnableSignalHandling: true,
+			LogLevel:             c.Config.LogLevel,
+			LogColor:             c.Config.LogColor,
+			EnableSignalHandling: false,
+			TelemetryCreate:      false,
+			PollInterval:         c.Config.ValidatorPollingInterval,
+			ServeMux:             s.ServeMux,
 		},
-		Repository: r,
+		Repository: c.Repository,
+		Config:     c.Config,
 	}
-	c.LoadEnv()
-	c.LogLevel = nc.LogLevel
-	c.LogPretty = nc.LogPretty
 
-	err := validator.Create(&c, &s)
+	validatorService, err := validator.Create(ctx, &validatorArgs)
 	if err != nil {
-		logger.Error("Fatal", "error", err)
+		s.Logger.Error("Fatal", "error", err)
 		os.Exit(1)
 	}
-	s.CreateDefaultHandlers("/" + s.Name)
-	return &s
+	return validatorService
 }
 
-func newClaimer(
-	nc *CreateInfo,
-	logger *slog.Logger,
-	r repository.Repository,
-	serveMux *http.ServeMux,
-) service.IService {
-	s := claimer.Service{
-		Service: service.Service{
-			ServeMux: serveMux,
-		},
-	}
-	c := claimer.CreateInfo{
+func newClaimer(ctx context.Context, c *CreateInfo, s *Service) service.IService {
+	claimerArgs := claimer.CreateInfo{
 		CreateInfo: service.CreateInfo{
 			Name:                 "claimer",
-			Impl:                 &s,
-			EnableSignalHandling: true,
+			LogLevel:             c.Config.LogLevel,
+			LogColor:             c.Config.LogColor,
+			EnableSignalHandling: false,
+			TelemetryCreate:      false,
+			PollInterval:         c.Config.ClaimerPollingInterval,
+			ServeMux:             s.ServeMux,
 		},
-		Repository: r,
+		EthConn:    c.ClaimerClient,
+		Repository: c.Repository,
+		Config:     c.Config,
 	}
-	c.LoadEnv()
-	c.LogLevel = nc.LogLevel
-	c.LogPretty = nc.LogPretty
-	c.EnableSubmission = nc.EnableClaimSubmission
 
-	err := claimer.Create(&c, &s)
+	claimerService, err := claimer.Create(ctx, &claimerArgs)
 	if err != nil {
-		logger.Error("Fatal", "error", err)
+		s.Logger.Error("Fatal", "error", err)
 		os.Exit(1)
 	}
-	s.CreateDefaultHandlers("/" + s.Name)
-	return &s
+	return claimerService
 }

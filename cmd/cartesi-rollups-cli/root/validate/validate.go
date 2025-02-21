@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"os"
 
-	cmdcommon "github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/common"
+	"github.com/cartesi/rollups-node/internal/config"
+	"github.com/cartesi/rollups-node/internal/repository/factory"
 	"github.com/cartesi/rollups-node/pkg/ethutil"
 
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var Cmd = &cobra.Command{
@@ -25,43 +27,26 @@ const examples = `# Validates output with index 5:
 cartesi-rollups-cli validate -n echo-dapp --output-index 5`
 
 var (
-	name        string
-	address     string
-	outputIndex uint64
-	ethEndpoint string
+	name                   string
+	address                string
+	outputIndex            uint64
+	databaseConnection     string
+	blockchainHttpEndpoint string
 )
 
 func init() {
-	Cmd.Flags().StringVarP(
-		&name,
-		"name",
-		"n",
-		"",
-		"Application name",
-	)
+	Cmd.Flags().StringVarP(&name, "name", "n", "", "Application name")
 
-	Cmd.Flags().StringVarP(
-		&address,
-		"address",
-		"a",
-		"",
-		"Application contract address",
-	)
+	Cmd.Flags().StringVarP(&address, "address", "a", "", "Application contract address")
 
-	Cmd.Flags().StringVarP(
-		&cmdcommon.PostgresEndpoint,
-		"postgres-endpoint",
-		"p",
-		"postgres://postgres:password@localhost:5432/rollupsdb?sslmode=disable",
-		"Postgres endpoint",
-	)
-
-	Cmd.Flags().Uint64Var(&outputIndex, "output-index", 0,
-		"index of the output")
+	Cmd.Flags().Uint64Var(&outputIndex, "output-index", 0, "index of the output")
 	cobra.CheckErr(Cmd.MarkFlagRequired("output-index"))
 
-	Cmd.Flags().StringVar(&ethEndpoint, "eth-endpoint", "http://localhost:8545",
-		"ethereum node JSON-RPC endpoint")
+	Cmd.Flags().StringVar(&databaseConnection, "database-connection", "", "Database connection string in the URL format\n(eg.: 'postgres://user:password@hostname:port/database') ")
+	viper.BindPFlag(config.DATABASE_CONNECTION, Cmd.Flags().Lookup("database-connection"))
+
+	Cmd.Flags().StringVar(&blockchainHttpEndpoint, "blockchain-http-endpoint", "", "Blockchain HTTP endpoint")
+	viper.BindPFlag(config.BLOCKCHAIN_HTTP_ENDPOINT, Cmd.Flags().Lookup("blockchain-http-endpoint"))
 
 	Cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		if name == "" && address == "" {
@@ -70,16 +55,23 @@ func init() {
 		if name != "" && address != "" {
 			return fmt.Errorf("only one of 'name' or 'address' can be specified")
 		}
-		return cmdcommon.PersistentPreRun(cmd, args)
+		return nil
 	}
 
 }
 
 func run(cmd *cobra.Command, args []string) {
 	ctx := cmd.Context()
-	if cmdcommon.Repository == nil {
-		panic("Repository was not initialized")
-	}
+
+	dsn, err := config.GetDatabaseConnection()
+	cobra.CheckErr(err)
+
+	ethEndpoint, err := config.GetBlockchainHttpEndpoint()
+	cobra.CheckErr(err)
+
+	repo, err := factory.NewRepositoryFromConnectionString(ctx, dsn.String())
+	cobra.CheckErr(err)
+	defer repo.Close()
 
 	var nameOrAddress string
 	if cmd.Flags().Changed("name") {
@@ -88,7 +80,7 @@ func run(cmd *cobra.Command, args []string) {
 		nameOrAddress = address
 	}
 
-	output, err := cmdcommon.Repository.GetOutput(ctx, nameOrAddress, outputIndex)
+	output, err := repo.GetOutput(ctx, nameOrAddress, outputIndex)
 	cobra.CheckErr(err)
 
 	if output == nil {
@@ -96,7 +88,7 @@ func run(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	app, err := cmdcommon.Repository.GetApplication(ctx, nameOrAddress)
+	app, err := repo.GetApplication(ctx, nameOrAddress)
 	cobra.CheckErr(err)
 
 	if len(output.OutputHashesSiblings) == 0 {
@@ -104,7 +96,7 @@ func run(cmd *cobra.Command, args []string) {
 		os.Exit(0)
 	}
 
-	client, err := ethclient.DialContext(ctx, ethEndpoint)
+	client, err := ethclient.DialContext(ctx, ethEndpoint.String())
 	cobra.CheckErr(err)
 
 	fmt.Printf("Validating output app: %v (%v) output_index: %v\n", app.Name, app.IApplicationAddress, outputIndex)

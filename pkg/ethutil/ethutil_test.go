@@ -5,17 +5,16 @@ package ethutil
 
 import (
 	"context"
-	"log/slog"
+	"crypto/rand"
+	"net/url"
 	"os"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/cartesi/rollups-node/internal/advancer/snapshot"
 	"github.com/cartesi/rollups-node/internal/config"
-	"github.com/cartesi/rollups-node/pkg/addresses"
 	"github.com/cartesi/rollups-node/pkg/contracts/inputs"
-	"github.com/cartesi/rollups-node/pkg/service"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/stretchr/testify/suite"
@@ -27,40 +26,48 @@ const testTimeout = 300 * time.Second
 // and connects to it using go-ethereum's client.
 type EthUtilSuite struct {
 	suite.Suite
-	ctx        context.Context
-	cancel     context.CancelFunc
-	client     *ethclient.Client
-	endpoint   string
-	signer     Signer
-	book       *addresses.Book
-	appAddr    common.Address
-	machineDir string
-	cleanup    func()
+	ctx                  context.Context
+	cancel               context.CancelFunc
+	client               *ethclient.Client
+	endpoint             *url.URL
+	txOpts               *bind.TransactOpts
+	inputBoxAddr         common.Address
+	selfHostedAppFactory common.Address
+	appAddr              common.Address
+	machineDir           string
+	cleanup              func()
 }
 
 func (s *EthUtilSuite) SetupTest() {
 	s.ctx, s.cancel = context.WithTimeout(context.Background(), testTimeout)
 
-	s.endpoint = config.GetBlockchainHttpEndpoint()
-
 	var err error
-	s.client, err = ethclient.DialContext(s.ctx, s.endpoint)
+	s.endpoint, err = config.GetBlockchainHttpEndpoint()
 	s.Require().Nil(err)
 
-	s.signer, err = NewMnemonicSigner(s.ctx, s.client, FoundryMnemonic, 0)
+	s.client, err = ethclient.DialContext(s.ctx, s.endpoint.String())
 	s.Require().Nil(err)
 
-	s.book, err = addresses.GetBookFromFile("../../deployment.json") // FIXME
+	chainId, err := s.client.ChainID(s.ctx)
 	s.Require().Nil(err)
 
-	logger := service.NewLogger(slog.LevelDebug, true)
-	s.machineDir, err = snapshot.CreateDefaultMachineSnapshot(logger)
+	privateKey, err := MnemonicToPrivateKey(FoundryMnemonic, 0)
 	s.Require().Nil(err)
 
-	templateHash, err := snapshot.ReadHash(s.machineDir)
+	s.txOpts, err = bind.NewKeyedTransactorWithChainID(privateKey, chainId)
 	s.Require().Nil(err)
 
-	s.appAddr, s.cleanup, err = CreateAnvilSnapshotAndDeployApp(s.ctx, s.endpoint, s.book.SelfHostedApplicationFactory, templateHash)
+	s.inputBoxAddr, err = config.GetContractsInputBoxAddress()
+	s.Require().Nil(err)
+
+	s.selfHostedAppFactory, err = config.GetContractsSelfHostedApplicationFactoryAddress()
+	s.Require().Nil(err)
+
+	var templateHash common.Hash
+	_, err = rand.Read(templateHash[:])
+	s.Require().Nil(err)
+
+	s.appAddr, s.cleanup, err = CreateAnvilSnapshotAndDeployApp(s.ctx, s.client, s.selfHostedAppFactory, templateHash)
 	s.Require().Nil(err)
 }
 
@@ -74,10 +81,7 @@ func (s *EthUtilSuite) TearDownTest() {
 
 func (s *EthUtilSuite) TestAddInput() {
 
-	signer, err := NewMnemonicSigner(s.ctx, s.client, FoundryMnemonic, 0)
-	s.Require().Nil(err)
-
-	sender := signer.Account()
+	sender := s.txOpts.From
 	payload := common.Hex2Bytes("deadbeef")
 
 	indexChan := make(chan uint64)
@@ -88,7 +92,7 @@ func (s *EthUtilSuite) TestAddInput() {
 
 	go func() {
 		waitGroup.Done()
-		inputIndex, _, err := AddInput(s.ctx, s.client, s.book.InputBox, s.appAddr, s.signer, payload)
+		inputIndex, _, err := AddInput(s.ctx, s.client, s.txOpts, s.inputBoxAddr, s.appAddr, payload)
 		if err != nil {
 			errChan <- err
 			return
@@ -98,7 +102,7 @@ func (s *EthUtilSuite) TestAddInput() {
 
 	waitGroup.Wait()
 	time.Sleep(1 * time.Second)
-	_, err = MineNewBlock(s.ctx, s.endpoint)
+	_, err := MineNewBlock(s.ctx, s.client)
 	s.Require().Nil(err)
 
 	select {
@@ -107,7 +111,7 @@ func (s *EthUtilSuite) TestAddInput() {
 	case inputIndex := <-indexChan:
 		s.Require().Equal(uint64(0), inputIndex)
 
-		event, err := GetInputFromInputBox(s.client, s.book, s.appAddr, inputIndex)
+		event, err := GetInputFromInputBox(s.client, s.inputBoxAddr, s.appAddr, inputIndex)
 		s.Require().Nil(err)
 
 		inputsABI, err := inputs.InputsMetaData.GetAbi()
@@ -126,7 +130,7 @@ func (s *EthUtilSuite) TestAddInput() {
 func (s *EthUtilSuite) TestMineNewBlock() {
 	prevBlockNumber, err := s.client.BlockNumber(s.ctx)
 	s.Require().Nil(err)
-	blockNumber, err := MineNewBlock(s.ctx, s.endpoint)
+	blockNumber, err := MineNewBlock(s.ctx, s.client)
 	s.Require().Nil(err)
 	s.Require().Equal(prevBlockNumber+1, blockNumber)
 

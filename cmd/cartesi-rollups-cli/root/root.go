@@ -11,6 +11,9 @@ import (
 	"github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/read"
 	"github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/send"
 	"github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/validate"
+	"github.com/cartesi/rollups-node/internal/config"
+	"github.com/cartesi/rollups-node/internal/version"
+
 	"github.com/spf13/cobra"
 )
 
@@ -19,11 +22,14 @@ var Cmd = &cobra.Command{
 	Short: "Command line interface for Cartesi Rollups",
 	Long: `This command line interface provides functionality to help develop and debug the
 Cartesi Rollups node.`,
+	Version: version.BuildVersion,
 }
 
 var verbose bool
 
 func init() {
+	config.SetDefaults()
+
 	Cmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
 
 	Cmd.AddCommand(send.Cmd)

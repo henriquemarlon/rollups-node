@@ -45,7 +45,7 @@ export CGO_LDFLAGS
 CARTESI_TEST_MACHINE_IMAGES_PATH:= $(PREFIX)/share/cartesi-machine/images/
 export CARTESI_TEST_MACHINE_IMAGES_PATH
 
-GO_BUILD_PARAMS := -ldflags "-s -w -X 'main.buildVersion=$(ROLLUPS_NODE_VERSION)' -r $(PREFIX)/lib"
+GO_BUILD_PARAMS := -ldflags "-s -w -X 'github.com/cartesi/rollups-node/internal/version.BuildVersion=$(ROLLUPS_NODE_VERSION)' -r $(PREFIX)/lib"
 CARGO_BUILD_PARAMS := --release
 ifeq ($(BUILD_TYPE),debug)
 	GO_BUILD_PARAMS += -gcflags "all=-N -l"
@@ -69,17 +69,19 @@ env:
 	@echo export CGO_CFLAGS=\"$(CGO_CFLAGS)\"
 	@echo export CGO_LDFLAGS=\"$(CGO_LDFLAGS)\"
 	@echo export CARTESI_LOG_LEVEL="info"
-	@echo export CARTESI_EVM_READER_DEFAULT_BLOCK="latest"
+	@echo export CARTESI_BLOCKCHAIN_DEFAULT_BLOCK="latest"
 	@echo export CARTESI_BLOCKCHAIN_HTTP_ENDPOINT="http://localhost:8545"
 	@echo export CARTESI_BLOCKCHAIN_WS_ENDPOINT="ws://localhost:8545"
 	@echo export CARTESI_BLOCKCHAIN_ID="31337"
 	@echo export CARTESI_CONTRACTS_INPUT_BOX_ADDRESS="0x593E5BCf894D6829Dd26D0810DA7F064406aebB6"
 	@echo export CARTESI_CONTRACTS_INPUT_BOX_DEPLOYMENT_BLOCK_NUMBER="10"
+	@echo export CARTESI_CONTRACTS_AUTHORITY_FACTORY_ADDRESS="0xB897F7Fe78f220aE34B7FA9493092701a873Ed45"
+	@echo export CARTESI_CONTRACTS_APPLICATION_FACTORY_ADDRESS="0xd7d4d184b82b1a4e08f304DDaB0A2A7a301C2620"
+	@echo export CARTESI_CONTRACTS_SELF_HOSTED_APPLICATION_FACTORY_ADDRESS="0xF925E1467DfCb1be6904bcF70621A974b5eA8708"
 	@echo export CARTESI_AUTH_MNEMONIC=\"test test test test test test test test test test test junk\"
-	@echo export CARTESI_POSTGRES_ENDPOINT="postgres://postgres:password@localhost:5432/rollupsdb?sslmode=disable"
-	@echo export CARTESI_TEST_POSTGRES_ENDPOINT="postgres://test_user:password@localhost:5432/test_rollupsdb?sslmode=disable"
+	@echo export CARTESI_DATABASE_CONNECTION="postgres://postgres:password@localhost:5432/rollupsdb?sslmode=disable"
+	@echo export CARTESI_TEST_DATABASE_CONNECTION="postgres://test_user:password@localhost:5432/test_rollupsdb?sslmode=disable"
 	@echo export CARTESI_TEST_MACHINE_IMAGES_PATH=\"$(CARTESI_TEST_MACHINE_IMAGES_PATH)\"
-	@echo export CARTESI_FEATURE_CLAIMER_SUBMISSION_ENABLED=true
 	@echo export PATH=\"$(CURDIR):$$PATH\"
 
 # =============================================================================

@@ -256,6 +256,7 @@ func (s *EvmReaderSuite) TestReadOutputExecution() {
 
 func (s *EvmReaderSuite) TestCheckOutputFails() {
 	s.Run("whenRetrieveOutputsFails", func() {
+		ctx := context.Background()
 		//ctx, cancel := context.WithCancel(context.Background())
 		//defer cancel()
 
@@ -286,8 +287,11 @@ func (s *EvmReaderSuite) TestCheckOutputFails() {
 			defaultBlock:            DefaultBlock_Latest,
 			contractFactory:         contractFactory,
 			hasEnabledApps:          true,
+			inputReaderEnabled:      true,
 		}
-		service.Create(&service.CreateInfo{}, &evmReader.Service)
+		serviceArgs := &service.CreateInfo{Name: "evm-reader", Impl: &evmReader}
+		err := service.Create(ctx, serviceArgs, &evmReader.Service)
+		s.Require().Nil(err)
 
 		applicationContract.On("RetrieveOutputExecutionEvents",
 			mock.Anything,

@@ -15,16 +15,35 @@ import (
 	"github.com/cartesi/rollups-node/pkg/emulator"
 )
 
-type ServerVerbosity string
+type MachineLogLevel string
 
 const (
-	ServerVerbosityTrace ServerVerbosity = "trace"
-	ServerVerbosityDebug ServerVerbosity = "debug"
-	ServerVerbosityInfo  ServerVerbosity = "info"
-	ServerVerbosityWarn  ServerVerbosity = "warn"
-	ServerVerbosityError ServerVerbosity = "error"
-	ServerVerbosityFatal ServerVerbosity = "fatal"
+	MachineLogLevelTrace MachineLogLevel = "trace"
+	MachineLogLevelDebug MachineLogLevel = "debug"
+	MachineLogLevelInfo  MachineLogLevel = "info"
+	MachineLogLevelWarn  MachineLogLevel = "warn"
+	MachineLogLevelError MachineLogLevel = "error"
+	MachineLogLevelFatal MachineLogLevel = "fatal"
 )
+
+func ParseMachineLogLevel(level string) (MachineLogLevel, error) {
+	switch level {
+	case string(MachineLogLevelTrace):
+		return MachineLogLevelTrace, nil
+	case string(MachineLogLevelDebug):
+		return MachineLogLevelDebug, nil
+	case string(MachineLogLevelInfo):
+		return MachineLogLevelInfo, nil
+	case string(MachineLogLevelWarn):
+		return MachineLogLevelWarn, nil
+	case string(MachineLogLevelError):
+		return MachineLogLevelError, nil
+	case string(MachineLogLevelFatal):
+		return MachineLogLevelFatal, nil
+	default:
+		return "", fmt.Errorf("invalid remote machine log level")
+	}
+}
 
 // StartServer starts a JSON RPC remote cartesi machine server.
 //
@@ -35,7 +54,7 @@ const (
 // StartServer also redirects the server's stdout and stderr to the provided io.Writers.
 //
 // It returns the server's address.
-func StartServer(logger *slog.Logger, verbosity ServerVerbosity, port uint32, stdout, stderr io.Writer) (string, error) {
+func StartServer(logger *slog.Logger, verbosity MachineLogLevel, port uint32, stdout, stderr io.Writer) (string, error) {
 	// Configures the command's arguments.
 	args := []string{}
 	if verbosity.valid() {
@@ -86,13 +105,13 @@ func StopServer(address string, logger *slog.Logger) error {
 
 // ------------------------------------------------------------------------------------------------
 
-func (verbosity ServerVerbosity) valid() bool {
-	return verbosity == ServerVerbosityTrace ||
-		verbosity == ServerVerbosityDebug ||
-		verbosity == ServerVerbosityInfo ||
-		verbosity == ServerVerbosityWarn ||
-		verbosity == ServerVerbosityError ||
-		verbosity == ServerVerbosityFatal
+func (verbosity MachineLogLevel) valid() bool {
+	return verbosity == MachineLogLevelTrace ||
+		verbosity == MachineLogLevelDebug ||
+		verbosity == MachineLogLevelInfo ||
+		verbosity == MachineLogLevelWarn ||
+		verbosity == MachineLogLevelError ||
+		verbosity == MachineLogLevelFatal
 }
 
 // portInterceptor sends the server's port through the port channel as soon as it reads it.

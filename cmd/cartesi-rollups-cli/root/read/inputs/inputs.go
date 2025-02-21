@@ -9,9 +9,10 @@ import (
 	"fmt"
 	"math/big"
 
-	cmdcommon "github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/common"
+	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/repository"
+	"github.com/cartesi/rollups-node/internal/repository/factory"
 	"github.com/cartesi/rollups-node/pkg/contracts/inputs"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -75,9 +76,12 @@ func decodeInputData(input *model.Input, parsedAbi *abi.ABI) (EvmAdvance, error)
 func run(cmd *cobra.Command, args []string) {
 	ctx := cmd.Context()
 
-	if cmdcommon.Repository == nil {
-		panic("Repository was not initialized")
-	}
+	dsn, err := config.GetDatabaseConnection()
+	cobra.CheckErr(err)
+
+	repo, err := factory.NewRepositoryFromConnectionString(ctx, dsn.String())
+	cobra.CheckErr(err)
+	defer repo.Close()
 
 	var nameOrAddress string
 	pFlags := cmd.Flags()
@@ -89,7 +93,7 @@ func run(cmd *cobra.Command, args []string) {
 
 	var result []byte
 	if cmd.Flags().Changed("index") {
-		input, err := cmdcommon.Repository.GetInput(ctx, nameOrAddress, index)
+		input, err := repo.GetInput(ctx, nameOrAddress, index)
 		cobra.CheckErr(err)
 
 		if decodeInput {
@@ -107,7 +111,7 @@ func run(cmd *cobra.Command, args []string) {
 		}
 
 	} else {
-		inputList, err := cmdcommon.Repository.ListInputs(ctx, nameOrAddress, repository.InputFilter{}, repository.Pagination{})
+		inputList, err := repo.ListInputs(ctx, nameOrAddress, repository.InputFilter{}, repository.Pagination{})
 		cobra.CheckErr(err)
 
 		if decodeInput {

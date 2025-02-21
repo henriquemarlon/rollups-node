@@ -32,7 +32,7 @@ func init() {
 
 const (
 	cycles          = uint64(1_000_000_000)
-	serverVerbosity = cartesimachine.ServerVerbosityInfo
+	serverVerbosity = cartesimachine.MachineLogLevelInfo
 )
 
 // ------------------------------------------------------------------------------------------------

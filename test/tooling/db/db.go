@@ -10,10 +10,10 @@ import (
 	"github.com/cartesi/rollups-node/internal/repository/postgres/schema"
 )
 
-func GetPostgresTestEndpoint() (string, error) {
-	endpoint, ok := os.LookupEnv("CARTESI_TEST_POSTGRES_ENDPOINT")
+func GetTestDatabaseEndpoint() (string, error) {
+	endpoint, ok := os.LookupEnv("CARTESI_TEST_DATABASE_CONNECTION")
 	if !ok {
-		return "", fmt.Errorf("environment variable CARTESI_TEST_POSTGRES_ENDPOINT not set")
+		return "", fmt.Errorf("environment variable CARTESI_TEST_DATABASE_CONNECTION not set")
 	}
 	return endpoint, nil
 }

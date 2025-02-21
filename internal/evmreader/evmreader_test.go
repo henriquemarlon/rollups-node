@@ -8,7 +8,6 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"math/big"
 	"testing"
 	"time"
@@ -127,14 +126,9 @@ func (me *EvmReaderSuite) SetupTest() {
 		hasEnabledApps:          true,
 		inputReaderEnabled:      true,
 	}
-	c := CreateInfo{
-		CreateInfo: service.CreateInfo{
-			Name:     "evm-reader",
-			Impl:     me.evmReader,
-			LogLevel: service.LogLevel(slog.LevelInfo),
-		},
-	}
-	me.Require().NotNil(Create(&c, me.evmReader))
+	serviceArgs := &service.CreateInfo{Name: "evm-reader", Impl: me.evmReader}
+	err := service.Create(context.Background(), serviceArgs, &me.evmReader.Service)
+	me.Require().Nil(err)
 }
 
 // Service tests

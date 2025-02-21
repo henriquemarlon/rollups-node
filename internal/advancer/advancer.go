@@ -8,15 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/cartesi/rollups-node/internal/advancer/machines"
 	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/internal/inspect"
 	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/repository"
-	"github.com/cartesi/rollups-node/internal/repository/factory"
-	"github.com/cartesi/rollups-node/pkg/rollupsmachine/cartesimachine"
 	"github.com/cartesi/rollups-node/pkg/service"
 )
 
@@ -52,69 +49,49 @@ type Service struct {
 
 type CreateInfo struct {
 	service.CreateInfo
-	AdvancerPollingInterval time.Duration
-	PostgresEndpoint        config.Redacted[string]
-	PostgresSslMode         bool
-	Repository              repository.Repository
-	MachineServerVerbosity  config.Redacted[cartesimachine.ServerVerbosity]
-	Machines                *machines.Machines
-	MaxStartupTime          time.Duration
-	InspectAddress          string
-	InspectServeMux         *http.ServeMux
+
+	Config config.Config
+
+	Repository repository.Repository
 }
 
-func (c *CreateInfo) LoadEnv() {
-	c.PostgresEndpoint.Value = config.GetPostgresEndpoint()
-	c.PollInterval = config.GetAdvancerPollingInterval()
-	c.MachineServerVerbosity.Value =
-		cartesimachine.ServerVerbosity(config.GetMachineServerVerbosity())
-	c.LogLevel = service.LogLevel(config.GetLogLevel())
-	c.LogPretty = config.GetLogPrettyEnabled()
-	c.MaxStartupTime = config.GetMaxStartupTime()
-	c.InspectAddress = config.GetInspectAddress()
-}
-
-func Create(c *CreateInfo, s *Service) error {
-	err := service.Create(&c.CreateInfo, &s.Service)
-	if err != nil {
-		return err
+func Create(ctx context.Context, c *CreateInfo) (*Service, error) {
+	var err error
+	if err = ctx.Err(); err != nil {
+		return nil, err // This returns context.Canceled or context.DeadlineExceeded.
 	}
 
-	return service.WithTimeout(c.MaxStartupTime, func() error {
-		if s.repository == nil {
-			if c.Repository == nil {
-				c.Repository, err = factory.NewRepositoryFromConnectionString(s.Context, c.PostgresEndpoint.Value)
-				if err != nil {
-					return err
-				}
-			}
-			s.repository = c.Repository
-		}
+	s := &Service{}
+	c.CreateInfo.Impl = s
 
-		if s.machines == nil {
-			if c.Machines == nil {
-				c.Machines, err = machines.Load(s.Context,
-					c.Repository, c.MachineServerVerbosity.Value, s.Logger)
-				if err != nil {
-					return err
-				}
-			}
-			s.machines = c.Machines
-		}
+	err = service.Create(ctx, &c.CreateInfo, &s.Service)
+	if err != nil {
+		return nil, err
+	}
 
+	s.repository = c.Repository
+	if s.repository == nil {
+		return nil, fmt.Errorf("repository on advancer service Create is nil")
+	}
+
+	machines, err := machines.Load(ctx, c.Repository, c.Config.RemoteMachineLogLevel, s.Logger, c.Config.FeatureMachineHashCheckEnabled)
+	if err != nil {
+		return nil, err
+	}
+	s.machines = machines
+
+	if c.Config.FeatureInspectEnabled {
 		// allow partial construction for testing
-		if c.Machines != nil {
-			s.inspector, s.HTTPServer, s.HTTPServerFunc = inspect.NewInspector(
-				c.Repository,
-				c.Machines,
-				c.InspectAddress,
-				c.LogLevel,
-				c.LogPretty,
-			)
-			go s.HTTPServerFunc()
-		}
-		return nil
-	})
+		s.inspector, s.HTTPServer, s.HTTPServerFunc = inspect.NewInspector(
+			c.Repository,
+			machines,
+			c.Config.InspectAddress,
+			c.LogLevel,
+			c.LogColor,
+		)
+	}
+
+	return s, nil
 }
 
 func (s *Service) Alive() bool     { return true }
@@ -130,12 +107,15 @@ func (s *Service) Stop(b bool) []error {
 	return nil
 }
 
-func (s *Service) Start(context context.Context, ready chan<- struct{}) error {
-	ready <- struct{}{}
-	return s.Serve()
+func (s *Service) Serve() error {
+	if s.inspector != nil && s.HTTPServerFunc != nil {
+		go s.HTTPServerFunc()
+	}
+	return s.Service.Serve()
 }
-func (v *Service) String() string {
-	return v.Name
+
+func (s *Service) String() string {
+	return s.Name
 }
 
 func getUnprocessedInputs(ctx context.Context, mr IAdvancerRepository, appAddress string) ([]*Input, error) {

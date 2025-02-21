@@ -93,15 +93,15 @@ type IService interface {
 // CreateInfo stores initialization data for the Create function
 type CreateInfo struct {
 	Name                 string
-	Impl                 ServiceImpl
-	LogLevel             LogLevel
-	LogPretty            bool
-	ServeMux             *http.ServeMux
-	Context              context.Context
-	PollInterval         time.Duration
+	LogLevel             slog.Level
+	LogColor             bool
 	EnableSignalHandling bool
 	TelemetryCreate      bool
 	TelemetryAddress     string
+	PollInterval         time.Duration
+	Impl                 ServiceImpl
+	ServeMux             *http.ServeMux
+	Context              context.Context
 }
 
 // Service stores runtime information.
@@ -125,9 +125,12 @@ type Service struct {
 //   - using values from s if non zero,
 //   - using values from c,
 //   - using default values when applicable
-func Create(c *CreateInfo, s *Service) error {
+func Create(ctx context.Context, c *CreateInfo, s *Service) error {
 	if c == nil || c.Impl == nil || c.Impl == s || s == nil {
 		return ErrInvalid
+	}
+	if err := ctx.Err(); err != nil {
+		return err // This returns context.Canceled or context.DeadlineExceeded.
 	}
 
 	s.Running.Store(false)
@@ -136,7 +139,7 @@ func Create(c *CreateInfo, s *Service) error {
 
 	// log
 	if s.Logger == nil {
-		s.Logger = NewLogger(slog.Level(c.LogLevel), c.LogPretty)
+		s.Logger = NewLogger(c.LogLevel, c.LogColor)
 		s.Logger = s.Logger.With("service", s.Name)
 	}
 
@@ -154,20 +157,22 @@ func Create(c *CreateInfo, s *Service) error {
 	// ticker
 	if s.Ticker == nil {
 		if c.PollInterval == 0 {
-			c.PollInterval = 60 * time.Second
+			c.PollInterval = time.Minute
 		}
 		s.PollInterval = c.PollInterval
 		s.Ticker = time.NewTicker(s.PollInterval)
 	}
 
 	// signal handling
-	if s.Sighup == nil {
-		s.Sighup = make(chan os.Signal, 1)
-		signal.Notify(s.Sighup, syscall.SIGHUP)
-	}
-	if s.Sigint == nil {
-		s.Sigint = make(chan os.Signal, 1)
-		signal.Notify(s.Sigint, syscall.SIGINT)
+	if c.EnableSignalHandling {
+		if s.Sighup == nil {
+			s.Sighup = make(chan os.Signal, 1)
+			signal.Notify(s.Sighup, syscall.SIGHUP)
+		}
+		if s.Sigint == nil {
+			s.Sigint = make(chan os.Signal, 1)
+			signal.Notify(s.Sigint, syscall.SIGINT)
+		}
 	}
 
 	// telemetry
@@ -181,8 +186,7 @@ func Create(c *CreateInfo, s *Service) error {
 		if c.TelemetryAddress == "" {
 			c.TelemetryAddress = ":8080"
 		}
-		s.Telemetry, s.TelemetryFunc = s.CreateDefaultTelemetry(
-			c.TelemetryAddress, 3, 5*time.Second, s.ServeMux)
+		s.Telemetry, s.TelemetryFunc = s.CreateDefaultTelemetry(c.TelemetryAddress, 3, 5*time.Second)
 		go s.TelemetryFunc()
 	}
 
@@ -274,48 +278,30 @@ func (s *Service) String() string {
 	return s.Name
 }
 
-func NewLogger(level slog.Level, pretty bool) *slog.Logger {
+func NewLogger(level slog.Level, color bool) *slog.Logger {
 	opts := &tint.Options{
 		Level:     level,
 		AddSource: level == slog.LevelDebug,
 		// RFC3339 with milliseconds and without timezone
 		TimeFormat: "2006-01-02T15:04:05.000",
-		NoColor:    !pretty,
+		NoColor:    !color,
 	}
 	handler := tint.NewHandler(os.Stdout, opts)
 	return slog.New(handler)
 }
 
-func WithTimeout(limit time.Duration, fn func() error) error {
-	ch := make(chan error)
-	deadline := time.After(limit)
-	go func() {
-		ch <- fn()
-	}()
-
-	select {
-	case err := <-ch:
-		return err
-	case <-deadline:
-		return fmt.Errorf("Time limit exceeded")
-	}
-}
-
 // Telemetry
-func (s *Service) CreateDefaultHandlers(prefix string) {
-	s.ServeMux.Handle(prefix+"/readyz", http.HandlerFunc(s.ReadyHandler))
-	s.ServeMux.Handle(prefix+"/livez", http.HandlerFunc(s.AliveHandler))
-}
-
 func (s *Service) CreateDefaultTelemetry(
 	addr string,
 	maxRetries int,
 	retryInterval time.Duration,
-	mux *http.ServeMux,
 ) (*http.Server, func() error) {
+	s.ServeMux.Handle("/readyz", http.HandlerFunc(s.ReadyHandler))
+	s.ServeMux.Handle("/livez", http.HandlerFunc(s.AliveHandler))
+
 	server := &http.Server{
 		Addr:     addr,
-		Handler:  mux,
+		Handler:  s.ServeMux,
 		ErrorLog: slog.NewLogLogger(s.Logger.Handler(), slog.LevelError),
 	}
 	return server, func() error {
@@ -344,7 +330,7 @@ func (s *Service) ReadyHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, s.Name+": ready check failed",
 			http.StatusInternalServerError)
 	} else {
-		fmt.Fprintf(w, s.Name+": ready\n")
+		fmt.Fprintf(w, "%s: ready\n", s.Name)
 	}
 }
 
@@ -354,6 +340,6 @@ func (s *Service) AliveHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, s.Name+": alive check failed",
 			http.StatusInternalServerError)
 	} else {
-		fmt.Fprintf(w, s.Name+": alive\n")
+		fmt.Fprintf(w, "%s: alive\n", s.Name)
 	}
 }

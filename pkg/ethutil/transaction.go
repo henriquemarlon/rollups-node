@@ -22,12 +22,12 @@ const PollInterval = 100 * time.Millisecond
 func sendTransaction(
 	ctx context.Context,
 	client *ethclient.Client,
-	signer Signer,
+	txOpts *bind.TransactOpts,
 	txValue *big.Int,
 	gasLimit uint64,
 	doSend func(txOpts *bind.TransactOpts) (*types.Transaction, error),
 ) (*types.Receipt, error) {
-	txOpts, err := _prepareTransaction(ctx, client, signer, txValue, gasLimit)
+	txOpts, err := _prepareTransaction(ctx, client, txOpts, txValue, gasLimit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare transaction: %v", err)
 	}
@@ -46,11 +46,11 @@ func sendTransaction(
 func _prepareTransaction(
 	ctx context.Context,
 	client *ethclient.Client,
-	signer Signer,
+	txOpts *bind.TransactOpts,
 	txValue *big.Int,
 	gasLimit uint64,
 ) (*bind.TransactOpts, error) {
-	nonce, err := client.PendingNonceAt(ctx, signer.Account())
+	nonce, err := client.PendingNonceAt(ctx, txOpts.From)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get nonce: %v", err)
 	}
@@ -58,15 +58,11 @@ func _prepareTransaction(
 	if err != nil {
 		return nil, fmt.Errorf("failed to get gas price: %v", err)
 	}
-	tx, err := signer.MakeTransactor()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create transactor: %v", err)
-	}
-	tx.Nonce = big.NewInt(int64(nonce))
-	tx.Value = txValue
-	tx.GasLimit = gasLimit
-	tx.GasPrice = gasPrice
-	return tx, nil
+	txOpts.Nonce = big.NewInt(int64(nonce))
+	txOpts.Value = txValue
+	txOpts.GasLimit = gasLimit
+	txOpts.GasPrice = gasPrice
+	return txOpts, nil
 }
 
 // Wait for transaction to be included in a block. Return the transaction receipt.

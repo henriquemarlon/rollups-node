@@ -7,8 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/common"
+	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/internal/repository"
+	"github.com/cartesi/rollups-node/internal/repository/factory"
 	"github.com/spf13/cobra"
 )
 
@@ -25,13 +26,18 @@ cartesi-rollups-cli app list`
 func run(cmd *cobra.Command, args []string) {
 	ctx := cmd.Context()
 
-	if common.Repository == nil {
-		panic("Database was not initialized")
-	}
-
-	applications, err := common.Repository.ListApplications(ctx, repository.ApplicationFilter{}, repository.Pagination{})
+	dsn, err := config.GetDatabaseConnection()
 	cobra.CheckErr(err)
+
+	repo, err := factory.NewRepositoryFromConnectionString(ctx, dsn.String())
+	cobra.CheckErr(err)
+	defer repo.Close()
+
+	applications, err := repo.ListApplications(ctx, repository.ApplicationFilter{}, repository.Pagination{})
+	cobra.CheckErr(err)
+
 	result, err := json.MarshalIndent(applications, "", "    ")
 	cobra.CheckErr(err)
+
 	fmt.Println(string(result))
 }

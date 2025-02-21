@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/cartesi/rollups-node/pkg/addresses"
 	"github.com/cartesi/rollups-node/pkg/contracts/iapplication"
 	"github.com/cartesi/rollups-node/pkg/contracts/iapplicationfactory"
+	"github.com/cartesi/rollups-node/pkg/contracts/iconsensus"
 	"github.com/cartesi/rollups-node/pkg/contracts/iinputbox"
 	"github.com/cartesi/rollups-node/pkg/contracts/iselfhostedapplicationfactory"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -27,27 +27,20 @@ const GasLimit = 30_000_000
 // Dev mnemonic used by Foundry/Anvil.
 const FoundryMnemonic = "test test test test test test test test test test test junk"
 
-// Interface that sign blockchain transactions.
-type Signer interface {
-
-	// Create the base transaction used in the contract bindings.
-	MakeTransactor() (*bind.TransactOpts, error)
-
-	// Get the account address of the signer.
-	Account() common.Address
-}
-
 func DeploySelfHostedApplication(
 	ctx context.Context,
 	client *ethclient.Client,
-	signer Signer,
+	transactionOpts *bind.TransactOpts,
 	shAppFactoryAddr common.Address,
 	ownerAddr common.Address,
-	templateHash string,
+	templateHash common.Hash,
 	salt string,
 ) (common.Address, error) {
 	var appAddr common.Address
-	templateHashBytes := common.Hex2Bytes(templateHash)
+	if client == nil {
+		return appAddr, fmt.Errorf("DeploySelfHostedApplication: client is nil")
+	}
+
 	saltBytes := common.Hex2Bytes(salt)
 
 	factory, err := iselfhostedapplicationfactory.NewISelfHostedApplicationFactory(shAppFactoryAddr, client)
@@ -56,9 +49,9 @@ func DeploySelfHostedApplication(
 	}
 
 	receipt, err := sendTransaction(
-		ctx, client, signer, big.NewInt(0), GasLimit,
+		ctx, client, transactionOpts, big.NewInt(0), GasLimit,
 		func(txOpts *bind.TransactOpts) (*types.Transaction, error) {
-			return factory.DeployContracts(txOpts, ownerAddr, big.NewInt(10), ownerAddr, toBytes32(templateHashBytes), toBytes32(saltBytes))
+			return factory.DeployContracts(txOpts, ownerAddr, big.NewInt(10), ownerAddr, templateHash, toBytes32(saltBytes))
 		},
 	)
 	if err != nil {
@@ -96,17 +89,20 @@ func DeploySelfHostedApplication(
 func AddInput(
 	ctx context.Context,
 	client *ethclient.Client,
+	transactionOpts *bind.TransactOpts,
 	inputBoxAddress common.Address,
 	application common.Address,
-	signer Signer,
 	input []byte,
 ) (uint64, uint64, error) {
+	if client == nil {
+		return 0, 0, fmt.Errorf("AddInput: client is nil")
+	}
 	inputBox, err := iinputbox.NewIInputBox(inputBoxAddress, client)
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to connect to InputBox contract: %v", err)
 	}
 	receipt, err := sendTransaction(
-		ctx, client, signer, big.NewInt(0), GasLimit,
+		ctx, client, transactionOpts, big.NewInt(0), GasLimit,
 		func(txOpts *bind.TransactOpts) (*types.Transaction, error) {
 			return inputBox.AddInput(txOpts, application, input)
 		},
@@ -142,11 +138,14 @@ func getInputIndex(
 // Return the event with the input sender and payload.
 func GetInputFromInputBox(
 	client *ethclient.Client,
-	book *addresses.Book,
+	inputBoxAddress common.Address,
 	application common.Address,
 	inputIndex uint64,
 ) (*iinputbox.IInputBoxInputAdded, error) {
-	inputBox, err := iinputbox.NewIInputBox(book.InputBox, client)
+	if client == nil {
+		return nil, fmt.Errorf("GetInputFromInputBox: client is nil")
+	}
+	inputBox, err := iinputbox.NewIInputBox(inputBoxAddress, client)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to InputBox contract: %v", err)
 	}
@@ -175,6 +174,9 @@ func ValidateOutput(
 	output []byte,
 	outputHashesSiblings []common.Hash,
 ) error {
+	if client == nil {
+		return fmt.Errorf("ValidateOutput: client is nil")
+	}
 	proof := iapplication.OutputValidityProof{
 		OutputIndex:          index,
 		OutputHashesSiblings: make([][32]byte, len(outputHashesSiblings)),
@@ -196,13 +198,15 @@ func ValidateOutput(
 func ExecuteOutput(
 	ctx context.Context,
 	client *ethclient.Client,
+	transactionOpts *bind.TransactOpts,
 	appAddr common.Address,
-	signer Signer,
 	index uint64,
 	output []byte,
 	outputHashesSiblings []common.Hash,
 ) (*common.Hash, error) {
-
+	if client == nil {
+		return nil, fmt.Errorf("ExecuteOutput: client is nil")
+	}
 	proof := iapplication.OutputValidityProof{
 		OutputIndex:          index,
 		OutputHashesSiblings: make([][32]byte, len(outputHashesSiblings)),
@@ -217,7 +221,7 @@ func ExecuteOutput(
 		return nil, fmt.Errorf("failed to connect to CartesiDapp contract: %v", err)
 	}
 	receipt, err := sendTransaction(
-		ctx, client, signer, big.NewInt(0), GasLimit,
+		ctx, client, transactionOpts, big.NewInt(0), GasLimit,
 		func(txOpts *bind.TransactOpts) (*types.Transaction, error) {
 			return app.ExecuteOutput(txOpts, output, proof)
 		},
@@ -229,29 +233,66 @@ func ExecuteOutput(
 	return &receipt.TxHash, nil
 }
 
-// Retrieves the template hash from the application contract. Returns it as a
-// hex string or an error
+// Retrieves the template hash from the application contract.
 func GetTemplateHash(
 	ctx context.Context,
+	client *ethclient.Client,
 	applicationAddress common.Address,
-	ethereumProvider string,
-) (string, error) {
-	client, err := ethclient.DialContext(ctx, ethereumProvider)
-	if err != nil {
-		return "", fmt.Errorf("get template hash failed to create ethclient: %w", err)
+) (*common.Hash, error) {
+	if client == nil {
+		return nil, fmt.Errorf("get template hash: client is nil")
 	}
 	cartesiApplication, err := iapplication.NewIApplicationCaller(
 		applicationAddress,
 		client,
 	)
 	if err != nil {
-		return "", fmt.Errorf("get template hash failed to instantiate binding: %w", err)
+		return nil, fmt.Errorf("get template hash failed to instantiate binding: %w", err)
 	}
-	hash, err := cartesiApplication.GetTemplateHash(&bind.CallOpts{Context: ctx})
+	var hash common.Hash
+	hash, err = cartesiApplication.GetTemplateHash(&bind.CallOpts{Context: ctx})
 	if err != nil {
-		return "", fmt.Errorf("get template hash failed to call contract method: %w", err)
+		return nil, fmt.Errorf("get template hash failed to call contract method: %w", err)
 	}
-	return common.Bytes2Hex(hash[:]), nil
+	return &hash, nil
+}
+
+func GetConsensus(
+	ctx context.Context,
+	client *ethclient.Client,
+	appAddress common.Address,
+) (common.Address, error) {
+	if client == nil {
+		return common.Address{}, fmt.Errorf("get consensus: client is nil")
+	}
+	app, err := iapplication.NewIApplication(appAddress, client)
+	if err != nil {
+		return common.Address{}, fmt.Errorf("Failed to instantiate contract: %v", err)
+	}
+	consensus, err := app.GetConsensus(&bind.CallOpts{Context: ctx})
+	if err != nil {
+		return common.Address{}, fmt.Errorf("error retrieving application epoch length: %v", err)
+	}
+	return consensus, nil
+}
+
+func GetEpochLength(
+	ctx context.Context,
+	client *ethclient.Client,
+	consensusAddr common.Address,
+) (uint64, error) {
+	if client == nil {
+		return 0, fmt.Errorf("get epoch length: client is nil")
+	}
+	consensus, err := iconsensus.NewIConsensus(consensusAddr, client)
+	if err != nil {
+		return 0, fmt.Errorf("Failed to instantiate contract: %v", err)
+	}
+	epochLengthRaw, err := consensus.GetEpochLength(&bind.CallOpts{Context: ctx})
+	if err != nil {
+		return 0, fmt.Errorf("error retrieving application epoch length: %v", err)
+	}
+	return epochLengthRaw.Uint64(), nil
 }
 
 func toBytes32(data []byte) [32]byte {

@@ -12,19 +12,21 @@ import (
 	"os"
 	"strings"
 
-	cmdcommom "github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/common"
 	"github.com/cartesi/rollups-node/internal/advancer/snapshot"
+	"github.com/cartesi/rollups-node/internal/config"
+	"github.com/cartesi/rollups-node/internal/config/auth"
 	"github.com/cartesi/rollups-node/internal/model"
+	"github.com/cartesi/rollups-node/internal/repository/factory"
 	"github.com/cartesi/rollups-node/pkg/contracts/iapplicationfactory"
 	"github.com/cartesi/rollups-node/pkg/contracts/iauthorityfactory"
 	"github.com/cartesi/rollups-node/pkg/contracts/iconsensus"
-	"github.com/cartesi/rollups-node/pkg/ethutil"
+
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var Cmd = &cobra.Command{
@@ -38,123 +40,72 @@ const examples = `# Adds an application to Rollups Node:
 cartesi-rollups-cli app deploy -n echo-dapp -a 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF -c 0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA -t applications/echo-dapp` //nolint:lll
 
 var (
-	name                 string
-	applicationOwner     string
-	authorityOwner       string
-	templatePath         string
-	templateHash         string
-	consensusAddr        string
-	appFactoryAddr       string
-	authorityFactoryAddr string
-	rpcURL               string
-	privateKey           string
-	mnemonic             string
-	salt                 string
-	inputBoxBlockNumber  uint64
-	epochLength          uint64
-	disabled             bool
-	printAsJSON          bool
-	noRegister           bool
+	name                   string
+	applicationOwner       string
+	authorityOwner         string
+	templatePath           string
+	templateHash           string
+	consensusAddr          string
+	appFactoryAddr         string
+	authorityFactoryAddr   string
+	blockchainHttpEndpoint string
+	salt                   string
+	inputBoxBlockNumber    uint64
+	epochLength            uint64
+	disabled               bool
+	printAsJSON            bool
+	noRegister             bool
 )
 
 func init() {
-	Cmd.Flags().StringVarP(
-		&name,
-		"name",
-		"n",
-		"",
-		"Application name",
-	)
+	Cmd.Flags().StringVarP(&name, "name", "n", "", "Application name")
 	cobra.CheckErr(Cmd.MarkFlagRequired("name"))
 
-	Cmd.Flags().StringVarP(
-		&applicationOwner,
-		"app-owner",
-		"o",
-		"0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-		"Application owner",
+	Cmd.Flags().StringVarP(&applicationOwner, "app-owner", "o", "",
+		"Application owner. If not defined, it will be derived from the auth method.",
 	)
 
-	Cmd.Flags().StringVarP(
-		&authorityOwner,
-		"authority-owner",
-		"O",
-		"0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-		"Authority owner",
+	Cmd.Flags().StringVarP(&authorityOwner, "authority-owner", "O", "",
+		"Authority owner. If not defined, it will be derived from the auth method.",
 	)
 
-	Cmd.Flags().StringVarP(
-		&templatePath,
-		"template-path",
-		"t",
-		"",
-		"Application template URI",
-	)
+	Cmd.Flags().StringVarP(&templatePath, "template-path", "t", "", "Application template path")
 	cobra.CheckErr(Cmd.MarkFlagRequired("template-path"))
 
-	Cmd.Flags().StringVarP(
-		&templateHash,
-		"template-hash",
-		"H",
-		"",
-		"Application template hash. If not provided, it will be read from the template URI",
+	Cmd.Flags().StringVarP(&templateHash, "template-hash", "H", "",
+		"Application template hash. If not provided, it will be read from the template path",
 	)
 
-	Cmd.Flags().BoolVarP(
-		&disabled,
-		"disabled",
-		"d",
-		false,
-		"Sets the application state to disabled",
-	)
+	Cmd.Flags().StringVarP(&appFactoryAddr, "application-factory", "a", "", "Application Factory Address")
+	viper.BindPFlag(config.CONTRACTS_APPLICATION_FACTORY_ADDRESS, Cmd.Flags().Lookup("application-factory"))
 
-	Cmd.Flags().StringVarP(
-		&appFactoryAddr,
-		"app-factory",
-		"a",
-		"0xd7d4d184b82b1a4e08f304DDaB0A2A7a301C2620",
-		"Application Factory Address",
-	)
+	Cmd.Flags().StringVarP(&consensusAddr, "consensus", "c", "", "Application IConsensus Address")
 
-	Cmd.Flags().StringVarP(
-		&authorityFactoryAddr,
-		"authority-factory",
-		"C",
-		"0xB897F7Fe78f220aE34B7FA9493092701a873Ed45",
-		"Authority Factory Address",
+	Cmd.Flags().StringVarP(&authorityFactoryAddr, "authority-factory", "C", "",
+		"Authority Factory Address. If defined, epoch-length value will be used to create a new consensus",
 	)
+	viper.BindPFlag(config.CONTRACTS_AUTHORITY_FACTORY_ADDRESS, Cmd.Flags().Lookup("authority-factory"))
 
-	Cmd.Flags().StringVarP(
-		&consensusAddr,
-		"consensus",
-		"c",
-		"",
-		"Application IConsensus Address",
-	)
-
-	Cmd.Flags().Uint64VarP(
-		&epochLength,
-		"epoch-length",
-		"e",
-		10,
+	Cmd.Flags().Uint64VarP(&epochLength, "epoch-length", "e", 10,
 		"Consensus Epoch length. If consensus address is provided, the value will be read from the contract",
 	)
 
-	Cmd.Flags().StringVarP(&rpcURL, "rpc-url", "r", "http://localhost:8545", "Ethereum RPC URL")
-	Cmd.Flags().StringVarP(&privateKey, "private-key", "k", "", "Private key for signing transactions")
-	Cmd.Flags().StringVarP(&mnemonic, "mnemonic", "m", ethutil.FoundryMnemonic, "Mnemonic for signing transactions")
-	Cmd.Flags().StringVar(&salt, "salt", "0000000000000000000000000000000000000000000000000000000000000000", "salt")
 	Cmd.Flags().Uint64VarP(&inputBoxBlockNumber, "inputbox-block-number", "i", 0, "InputBox deployment block number")
-	Cmd.Flags().BoolVarP(&printAsJSON, "print-json", "j", false, "Prints the application data as JSON")
+	viper.BindPFlag(config.CONTRACTS_INPUT_BOX_DEPLOYMENT_BLOCK_NUMBER, Cmd.Flags().Lookup("inputbox-block-number"))
+
+	Cmd.Flags().StringVar(&salt, "salt", "0000000000000000000000000000000000000000000000000000000000000000", "salt")
+
+	Cmd.Flags().BoolVarP(&disabled, "disabled", "d", false, "Sets the application state to disabled")
 	Cmd.Flags().BoolVar(&noRegister, "no-register", false, "Don't register the application on the node. Only deploy contracts")
+
+	Cmd.Flags().BoolVarP(&printAsJSON, "print-json", "j", false, "Prints the application data as JSON")
+
+	Cmd.Flags().StringVar(&blockchainHttpEndpoint, "blockchain-http-endpoint", "", "Blockchain HTTP endpoint")
+	viper.BindPFlag(config.BLOCKCHAIN_HTTP_ENDPOINT, Cmd.Flags().Lookup("blockchain-http-endpoint"))
 }
 
 func run(cmd *cobra.Command, args []string) {
 	ctx := cmd.Context()
-
-	if cmdcommom.Repository == nil {
-		panic("Database was not initialized")
-	}
 
 	applicationState := model.ApplicationState_Enabled
 	if disabled {
@@ -170,11 +121,29 @@ func run(cmd *cobra.Command, args []string) {
 		}
 	}
 
+	ethEndpoint, err := config.GetBlockchainHttpEndpoint()
+	cobra.CheckErr(err)
+
+	client, err := ethclient.DialContext(ctx, ethEndpoint.String())
+	cobra.CheckErr(err)
+
+	chainId, err := client.ChainID(ctx)
+	cobra.CheckErr(err)
+
+	txOpts, err := auth.GetTransactOpts(chainId)
+	cobra.CheckErr(err)
+
 	var consensus common.Address
-	var err error
 	if consensusAddr == "" {
-		authorityFactoryAddress := common.HexToAddress(authorityFactoryAddr)
-		consensus, err = deployAuthority(ctx, authorityOwner, authorityFactoryAddress, epochLength, salt)
+		var owner common.Address
+		authorityFactoryAddress, err := config.GetContractsAuthorityFactoryAddress()
+		cobra.CheckErr(err)
+		if cmd.Flags().Changed("authority-owner") {
+			owner = common.HexToAddress(authorityOwner)
+		} else {
+			owner = txOpts.From
+		}
+		consensus, err = deployAuthority(ctx, client, txOpts, authorityFactoryAddress, owner, epochLength, salt)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Authoriy contract creation failed: %v\n", err)
 			os.Exit(1)
@@ -188,8 +157,15 @@ func run(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	applicationFactoryAddress := common.HexToAddress(appFactoryAddr)
-	appAddr, err := deployApplication(ctx, applicationOwner, applicationFactoryAddress, consensus, templateHash, salt)
+	var owner common.Address
+	if cmd.Flags().Changed("application-owner") {
+		owner = common.HexToAddress(applicationOwner)
+	} else {
+		owner = txOpts.From
+	}
+	applicationFactoryAddress, err := config.GetContractsApplicationFactoryAddress()
+	cobra.CheckErr(err)
+	appAddr, err := deployApplication(ctx, client, txOpts, applicationFactoryAddress, consensus, owner, templateHash, salt)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Application contract creation failed: %v\n", err)
 		os.Exit(1)
@@ -209,7 +185,14 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	if !noRegister {
-		_, err = cmdcommom.Repository.CreateApplication(ctx, &application)
+		dsn, err := config.GetDatabaseConnection()
+		cobra.CheckErr(err)
+
+		repo, err := factory.NewRepositoryFromConnectionString(ctx, dsn.String())
+		cobra.CheckErr(err)
+		defer repo.Close()
+
+		_, err = repo.CreateApplication(ctx, &application)
 		cobra.CheckErr(err)
 	}
 
@@ -228,18 +211,15 @@ func run(cmd *cobra.Command, args []string) {
 // FIXME remove this
 func deployApplication(
 	ctx context.Context,
-	owner string,
-	applicationFactoryAddr,
+	client *ethclient.Client,
+	txOpts *bind.TransactOpts,
+	applicationFactoryAddr common.Address,
 	authorityAddr common.Address,
+	owner common.Address,
 	templateHash string,
 	salt string,
 ) (common.Address, error) {
-	client, err := ethclient.Dial(rpcURL)
-	if err != nil {
-		return common.Address{}, fmt.Errorf("Failed to connect to the Ethereum client: %v", err)
-	}
 
-	ownerAddr := common.HexToAddress(owner)
 	templateHashBytes, err := hex.DecodeString(templateHash)
 	if err != nil {
 		return common.Address{}, fmt.Errorf("Failed to decode template hash: %v", err)
@@ -249,17 +229,12 @@ func deployApplication(
 		return common.Address{}, fmt.Errorf("Failed to decode salt: %v", err)
 	}
 
-	auth, err := getAuth(ctx, client)
-	if err != nil {
-		return common.Address{}, fmt.Errorf("Failed to get transaction signer: %v", err)
-	}
-
 	factory, err := iapplicationfactory.NewIApplicationFactory(applicationFactoryAddr, client)
 	if err != nil {
 		return common.Address{}, fmt.Errorf("Failed to instantiate contract: %v", err)
 	}
 
-	tx, err := factory.NewApplication(auth, authorityAddr, ownerAddr, toBytes32(templateHashBytes), toBytes32(saltBytes))
+	tx, err := factory.NewApplication(txOpts, authorityAddr, owner, toBytes32(templateHashBytes), toBytes32(saltBytes))
 	if err != nil {
 		return common.Address{}, fmt.Errorf("Transaction failed: %v", err)
 	}
@@ -269,7 +244,7 @@ func deployApplication(
 	}
 
 	// Wait for the transaction to be mined
-	receipt, err := bind.WaitMined(context.Background(), client, tx)
+	receipt, err := bind.WaitMined(ctx, client, tx)
 	if err != nil {
 		return common.Address{}, fmt.Errorf("Failed to wait for transaction mining: %v", err)
 	}
@@ -315,25 +290,16 @@ func deployApplication(
 // FIXME remove this
 func deployAuthority(
 	ctx context.Context,
-	owner string,
+	client *ethclient.Client,
+	txOpts *bind.TransactOpts,
 	authorityFactoryAddr common.Address,
+	owner common.Address,
 	epochLength uint64,
 	salt string,
 ) (common.Address, error) {
-	client, err := ethclient.Dial(rpcURL)
-	if err != nil {
-		return common.Address{}, fmt.Errorf("Failed to connect to the Ethereum client: %v", err)
-	}
-
-	ownerAddr := common.HexToAddress(owner)
 	saltBytes, err := hex.DecodeString(salt)
 	if err != nil {
 		return common.Address{}, fmt.Errorf("Failed to decode salt: %v", err)
-	}
-
-	auth, err := getAuth(ctx, client)
-	if err != nil {
-		return common.Address{}, fmt.Errorf("Failed to get transaction signer: %v", err)
 	}
 
 	contract, err := iauthorityfactory.NewIAuthorityFactory(authorityFactoryAddr, client)
@@ -341,7 +307,7 @@ func deployAuthority(
 		return common.Address{}, fmt.Errorf("Failed to instantiate contract: %v", err)
 	}
 
-	tx, err := contract.NewAuthority0(auth, ownerAddr, big.NewInt(int64(epochLength)), toBytes32(saltBytes))
+	tx, err := contract.NewAuthority0(txOpts, owner, big.NewInt(int64(epochLength)), toBytes32(saltBytes))
 	if err != nil {
 		return common.Address{}, fmt.Errorf("Transaction failed: %v", err)
 	}
@@ -351,7 +317,7 @@ func deployAuthority(
 	}
 
 	// Wait for the transaction to be mined
-	receipt, err := bind.WaitMined(context.Background(), client, tx)
+	receipt, err := bind.WaitMined(ctx, client, tx)
 	if err != nil {
 		return common.Address{}, fmt.Errorf("Failed to wait for transaction mining: %v", err)
 	}
@@ -391,50 +357,15 @@ func deployAuthority(
 	return common.Address{}, fmt.Errorf("failed to find AuthorityCreated event in receipt logs")
 }
 
-func getAuth(ctx context.Context, client *ethclient.Client) (*bind.TransactOpts, error) {
-	var auth *bind.TransactOpts
-	if privateKey != "" {
-		key, err := crypto.HexToECDSA(privateKey)
-		if err != nil {
-			return nil, err
-		}
-		chainId, err := client.ChainID(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("Failed to get chain id: %v", err)
-		}
-		auth, err = bind.NewKeyedTransactorWithChainID(key, chainId)
-		if err != nil {
-			return nil, err
-		}
-	} else if mnemonic != "" {
-		signer, err := ethutil.NewMnemonicSigner(ctx, client, mnemonic, 0)
-		if err != nil {
-			return nil, err
-		}
-		auth, err = signer.MakeTransactor()
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		// Default private key (unsafe for production!)
-		key, err := crypto.HexToECDSA("YOUR_DEFAULT_PRIVATE_KEY")
-		if err != nil {
-			return nil, err
-		}
-		auth, err = bind.NewKeyedTransactorWithChainID(key, big.NewInt(1))
-		if err != nil {
-			return nil, err
-		}
-	}
-	return auth, nil
-}
-
 func getEpochLength(
 	consensusAddr common.Address,
 ) (uint64, error) {
-	client, err := ethclient.Dial(rpcURL)
+	ethEndpoint, err := config.GetBlockchainHttpEndpoint()
+	cobra.CheckErr(err)
+
+	client, err := ethclient.Dial(ethEndpoint.String())
 	if err != nil {
-		return 0, fmt.Errorf("Failed to connect to the Ethereum client: %v", err)
+		return 0, fmt.Errorf("Failed to connect to the blockchain http endpoint: %s", ethEndpoint.Redacted())
 	}
 
 	consensus, err := iconsensus.NewIConsensus(consensusAddr, client)

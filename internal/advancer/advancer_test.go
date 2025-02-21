@@ -11,7 +11,6 @@ import (
 	"fmt"
 	mrand "math/rand"
 	"testing"
-	"time"
 
 	"github.com/cartesi/rollups-node/internal/advancer/machines"
 	. "github.com/cartesi/rollups-node/internal/model"
@@ -33,13 +32,12 @@ func newMock(m IAdvancerMachines, r IAdvancerRepository) (*Service, error) {
 		machines:   m,
 		repository: r,
 	}
-	return s, Create(&CreateInfo{
-		CreateInfo: service.CreateInfo{
-			Name: "advancer",
-			Impl: s,
-		},
-		MaxStartupTime: 1 * time.Second,
-	}, s)
+	serviceArgs := &service.CreateInfo{Name: "advancer", Impl: s}
+	err := service.Create(context.Background(), serviceArgs, &s.Service)
+	if err != nil {
+		return nil, err
+	}
+	return s, nil
 }
 
 func (s *AdvancerSuite) TestRun() {

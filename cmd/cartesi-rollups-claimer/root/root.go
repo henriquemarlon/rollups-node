@@ -4,65 +4,108 @@
 package root
 
 import (
-	"time"
+	"context"
 
 	"github.com/cartesi/rollups-node/internal/claimer"
+	"github.com/cartesi/rollups-node/internal/config"
+	"github.com/cartesi/rollups-node/internal/repository/factory"
+	"github.com/cartesi/rollups-node/internal/version"
 	"github.com/cartesi/rollups-node/pkg/service"
+
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
+const serviceName = "claimer"
+
 var (
-	// Should be overridden during the final release build with ldflags
-	// to contain the actual version number
-	buildVersion   = "devel"
-	claimerService = claimer.Service{}
-	createInfo     = claimer.CreateInfo{
-		CreateInfo: service.CreateInfo{
-			Name:                 "claimer",
-			EnableSignalHandling: true,
-			TelemetryCreate:      true,
-			TelemetryAddress:     ":10004",
-			Impl:                 &claimerService,
-		},
-		EnableSubmission: true,
-		MaxStartupTime:   10 * time.Second,
-	}
+	logLevel               string
+	logColor               bool
+	defaultBlockString     string
+	blockchainHttpEndpoint string
+	databaseConnection     string
+	pollInterval           string
+	maxStartupTime         string
+	enableSubmission       bool
+	telemetryAddress       string
+	cfg                    *config.Config
 )
 
 var Cmd = &cobra.Command{
-	Use:   createInfo.Name,
-	Short: "Runs " + createInfo.Name,
-	Long:  "Runs " + createInfo.Name + " in standalone mode",
-	Run:   run,
+	Use:     "cartesi-rollups-" + serviceName,
+	Short:   "Runs cartesi-rollups-" + serviceName,
+	Long:    "Runs cartesi-rollups-" + serviceName + " in standalone mode",
+	Run:     run,
+	Version: version.BuildVersion,
 }
 
 func init() {
-	createInfo.LoadEnv()
-	Cmd.Flags().StringVar(&createInfo.TelemetryAddress,
-		"telemetry-address", createInfo.TelemetryAddress,
-		"health check and metrics address and port")
-	Cmd.Flags().Var(&createInfo.LogLevel,
-		"log-level",
-		"log level: debug, info, warn or error")
-	Cmd.Flags().BoolVar(&createInfo.LogPretty,
-		"log-color", createInfo.LogPretty,
-		"tint the logs (colored output)")
-	Cmd.Flags().StringVar(&createInfo.BlockchainHttpEndpoint.Value,
-		"blockchain-http-endpoint", createInfo.BlockchainHttpEndpoint.Value,
-		"blockchain http endpoint")
-	Cmd.Flags().DurationVar(&createInfo.PollInterval,
-		"poll-interval", createInfo.PollInterval,
-		"poll interval")
-	Cmd.Flags().DurationVar(&createInfo.MaxStartupTime,
-		"max-startup-time", createInfo.MaxStartupTime,
-		"maximum startup time in seconds")
-	Cmd.Flags().BoolVar(&createInfo.EnableSubmission,
-		"claim-submission", createInfo.EnableSubmission,
-		"enable or disable claim submission (reader mode)")
+	Cmd.Flags().StringVarP(&defaultBlockString, "default-block", "d", "finalized", "Default block to be used when fetching new blocks.\nOne of 'latest', 'safe', 'pending', 'finalized'")
+	viper.BindPFlag(config.BLOCKCHAIN_DEFAULT_BLOCK, Cmd.Flags().Lookup("default-block"))
+
+	Cmd.Flags().StringVar(&telemetryAddress, "telemetry-address", ":10004", "Health check and metrics address and port")
+	viper.BindPFlag(config.TELEMETRY_ADDRESS, Cmd.Flags().Lookup("telemetry-address"))
+
+	Cmd.Flags().StringVar(&logLevel, "log-level", "info", "Log level: debug, info, warn or error")
+	viper.BindPFlag(config.LOG_LEVEL, Cmd.Flags().Lookup("log-level"))
+
+	Cmd.Flags().BoolVar(&logColor, "log-color", true, "tint the logs (colored output)")
+	viper.BindPFlag(config.LOG_COLOR, Cmd.Flags().Lookup("log-color"))
+
+	Cmd.Flags().StringVar(&databaseConnection, "database-connection", "", "Database connection string in the URL format\n(eg.: 'postgres://user:password@hostname:port/database') ")
+	viper.BindPFlag(config.DATABASE_CONNECTION, Cmd.Flags().Lookup("database-connection"))
+
+	Cmd.Flags().StringVar(&blockchainHttpEndpoint, "blockchain-http-endpoint", "", "Blockchain http endpoint")
+	viper.BindPFlag(config.BLOCKCHAIN_HTTP_ENDPOINT, Cmd.Flags().Lookup("blockchain-http-endpoint"))
+
+	Cmd.Flags().StringVar(&pollInterval, "poll-interval", "7", "Poll interval")
+	viper.BindPFlag(config.CLAIMER_POLLING_INTERVAL, Cmd.Flags().Lookup("poll-interval"))
+
+	Cmd.Flags().StringVar(&maxStartupTime, "max-startup-time", "15", "Maximum startup time in seconds")
+	viper.BindPFlag(config.MAX_STARTUP_TIME, Cmd.Flags().Lookup("max-startup-time"))
+
+	Cmd.Flags().BoolVar(&enableSubmission, "claim-submission", true, "Enable or disable claim submission (reader mode)")
+	viper.BindPFlag(config.FEATURE_CLAIM_SUBMISSION_ENABLED, Cmd.Flags().Lookup("claim-submission"))
+
+	// TODO: validate on preRunE
+	Cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		var err error
+		cfg, err = config.Load()
+		if err != nil {
+			return err
+		}
+		return nil
+	}
 }
 
 func run(cmd *cobra.Command, args []string) {
-	cobra.CheckErr(claimer.Create(&createInfo, &claimerService))
-	claimerService.CreateDefaultHandlers("")
+	ctx, cancel := context.WithTimeout(context.Background(), cfg.MaxStartupTime)
+	defer cancel()
+
+	createInfo := claimer.CreateInfo{
+		CreateInfo: service.CreateInfo{
+			Name:                 serviceName,
+			LogLevel:             cfg.LogLevel,
+			LogColor:             cfg.LogColor,
+			EnableSignalHandling: true,
+			TelemetryCreate:      true,
+			TelemetryAddress:     cfg.TelemetryAddress,
+			PollInterval:         cfg.ClaimerPollingInterval,
+		},
+		Config: *cfg,
+	}
+
+	var err error
+	createInfo.EthConn, err = ethclient.DialContext(ctx, cfg.BlockchainHttpEndpoint.String())
+	cobra.CheckErr(err)
+
+	createInfo.Repository, err = factory.NewRepositoryFromConnectionString(ctx, cfg.DatabaseConnection.String())
+	cobra.CheckErr(err)
+	defer createInfo.Repository.Close()
+
+	claimerService, err := claimer.Create(ctx, &createInfo)
+	cobra.CheckErr(err)
+
 	cobra.CheckErr(claimerService.Serve())
 }

@@ -21,7 +21,6 @@ import (
 	"github.com/cartesi/rollups-node/internal/model"
 	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/repository"
-	"github.com/cartesi/rollups-node/internal/repository/factory"
 	appcontract "github.com/cartesi/rollups-node/pkg/contracts/iapplication"
 	"github.com/cartesi/rollups-node/pkg/contracts/iconsensus"
 	"github.com/cartesi/rollups-node/pkg/contracts/iinputbox"
@@ -30,16 +29,13 @@ import (
 
 type CreateInfo struct {
 	service.CreateInfo
-	model.NodeConfig[model.NodeConfigValue]
 
-	PostgresEndpoint       config.Redacted[string]
-	BlockchainHttpEndpoint config.Redacted[string]
-	BlockchainWsEndpoint   config.Redacted[string]
-	Repository             repository.Repository
-	EnableInputReader      bool
-	MaxRetries             uint64
-	MaxDelay               time.Duration
-	MaxStartupTime         time.Duration
+	Config config.Config
+
+	Repository repository.Repository
+
+	EthClient   *ethclient.Client
+	EthWsClient *ethclient.Client
 }
 
 type Service struct {
@@ -50,81 +46,94 @@ type Service struct {
 	inputSource             InputSource
 	repository              EvmReaderRepository
 	contractFactory         ContractFactory
+	chainId                 uint64
 	inputBoxDeploymentBlock uint64
 	defaultBlock            DefaultBlock
 	hasEnabledApps          bool
 	inputReaderEnabled      bool
 }
 
-func (c *CreateInfo) LoadEnv() {
-	c.BlockchainHttpEndpoint.Value = config.GetBlockchainHttpEndpoint()
-	c.BlockchainWsEndpoint.Value = config.GetBlockchainWsEndpoint()
-	c.MaxDelay = config.GetEvmReaderRetryPolicyMaxDelay()
-	c.MaxRetries = config.GetEvmReaderRetryPolicyMaxRetries()
-	c.PostgresEndpoint.Value = config.GetPostgresEndpoint()
-	c.LogLevel = service.LogLevel(config.GetLogLevel())
-	c.LogPretty = config.GetLogPrettyEnabled()
-	c.MaxStartupTime = config.GetMaxStartupTime()
-	c.EnableInputReader = config.GetFeatureInputReaderEnabled()
+const EvmReaderConfigKey = "evm-reader"
 
-	// persistent
-	c.Key = BaseConfigKey
-	c.Value.DefaultBlock = config.GetEvmReaderDefaultBlock()
-	c.Value.InputBoxDeploymentBlock = uint64(config.GetContractsInputBoxDeploymentBlockNumber())
-	c.Value.InputBoxAddress = common.HexToAddress(config.GetContractsInputBoxAddress()).String()
-	c.Value.ChainID = config.GetBlockchainId()
+type PersistentConfig struct {
+	DefaultBlock            DefaultBlock
+	InputReaderEnabled      bool
+	InputBoxDeploymentBlock uint64
+	InputBoxAddress         string
+	ChainID                 uint64
 }
 
-func Create(c *CreateInfo, s *Service) error {
+func Create(ctx context.Context, c *CreateInfo) (*Service, error) {
 	var err error
-
-	err = service.Create(&c.CreateInfo, &s.Service)
-	if err != nil {
-		return err
+	if err = ctx.Err(); err != nil {
+		return nil, err // This returns context.Canceled or context.DeadlineExceeded.
 	}
 
-	return service.WithTimeout(c.MaxStartupTime, func() error {
-		client, err := ethclient.DialContext(s.Context, c.BlockchainHttpEndpoint.Value)
-		if err != nil {
-			return err
-		}
+	s := &Service{}
+	c.CreateInfo.Impl = s
 
-		wsClient, err := ethclient.DialContext(s.Context, c.BlockchainWsEndpoint.Value)
-		if err != nil {
-			return err
-		}
+	err = service.Create(ctx, &c.CreateInfo, &s.Service)
+	if err != nil {
+		return nil, err
+	}
 
-		if c.Repository == nil {
-			c.Repository, err = factory.NewRepositoryFromConnectionString(s.Context, c.PostgresEndpoint.Value)
-			if err != nil {
-				return err
-			}
-		}
+	if c.EthClient == nil {
+		return nil, fmt.Errorf("EthClient on evmreader service Create is nil")
+	}
+	chainId, err := c.EthClient.ChainID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if chainId.Uint64() != c.Config.BlockchainId {
+		return nil, fmt.Errorf("EthClient chainId mismatch: network %d != provided %d",
+			chainId.Uint64(), c.Config.BlockchainId)
+	}
 
-		err = s.SetupNodeConfig(s.Context, c.Repository, &c.NodeConfig)
-		if err != nil {
-			return err
-		}
+	if c.EthWsClient == nil {
+		return nil, fmt.Errorf("EthWsClient on evmreader service Create is nil")
+	}
+	chainId, err = c.EthWsClient.ChainID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if chainId.Uint64() != c.Config.BlockchainId {
+		return nil, fmt.Errorf("EthWsClient chainId mismatch: network %d != provided %d",
+			chainId.Uint64(), c.Config.BlockchainId)
+	}
 
-		inputSource, err := NewInputSourceAdapter(common.HexToAddress(c.Value.InputBoxAddress), client)
-		if err != nil {
-			return err
-		}
+	s.repository = c.Repository
+	if s.repository == nil {
+		return nil, fmt.Errorf("repository on evmreader service Create is nil")
+	}
 
-		contractFactory := NewEvmReaderContractFactory(client, c.MaxRetries, c.MaxDelay)
+	nodeConfig, err := s.setupPersistentConfig(ctx, &c.Config)
+	if err != nil {
+		return nil, err
+	}
+	if chainId.Uint64() != nodeConfig.ChainID {
+		return nil, fmt.Errorf("NodeConfig chainId mismatch: network %d != config %d",
+			chainId.Uint64(), nodeConfig.ChainID)
+	}
 
-		s.client = NewEhtClientWithRetryPolicy(client, c.MaxRetries, c.MaxDelay, s.Logger)
-		s.wsClient = NewEthWsClientWithRetryPolicy(wsClient, c.MaxRetries, c.MaxDelay, s.Logger)
-		s.inputSource = NewInputSourceWithRetryPolicy(inputSource, c.MaxRetries, c.MaxDelay, s.Logger)
-		s.repository = c.Repository
-		s.inputBoxDeploymentBlock = c.Value.InputBoxDeploymentBlock
-		s.defaultBlock = c.Value.DefaultBlock
-		s.contractFactory = contractFactory
-		s.hasEnabledApps = true
-		s.inputReaderEnabled = c.EnableInputReader
+	maxRetries := c.Config.EvmReaderRetryPolicyMaxRetries
+	maxDelay := c.Config.EvmReaderRetryPolicyMaxDelay
+	s.client = NewEhtClientWithRetryPolicy(c.EthClient, maxRetries, maxDelay, s.Logger)
+	s.wsClient = NewEthWsClientWithRetryPolicy(c.EthWsClient, maxRetries, maxDelay, s.Logger)
 
-		return nil
-	})
+	inputSource, err := NewInputSourceAdapter(c.Config.ContractsInputBoxAddress, c.EthClient)
+	if err != nil {
+		return nil, err
+	}
+	s.inputSource = NewInputSourceWithRetryPolicy(inputSource, maxRetries, maxDelay, s.Logger)
+	s.contractFactory = NewEvmReaderContractFactory(c.EthClient, maxRetries, maxDelay)
+
+	s.chainId = nodeConfig.ChainID
+	s.inputBoxDeploymentBlock = nodeConfig.InputBoxDeploymentBlock
+	s.defaultBlock = nodeConfig.DefaultBlock
+	s.inputReaderEnabled = nodeConfig.InputReaderEnabled
+	s.hasEnabledApps = true
+
+	return s, nil
 }
 
 func (s *Service) Alive() bool {
@@ -157,24 +166,35 @@ func (s *Service) String() string {
 	return s.Name
 }
 
-func (s *Service) SetupNodeConfig(
+func (s *Service) setupPersistentConfig(
 	ctx context.Context,
-	r repository.Repository,
-	c *model.NodeConfig[model.NodeConfigValue],
-) error {
-	config, err := repository.LoadNodeConfig[model.NodeConfigValue](ctx, r, BaseConfigKey)
+	c *config.Config,
+) (*PersistentConfig, error) {
+	config, err := repository.LoadNodeConfig[PersistentConfig](ctx, s.repository, EvmReaderConfigKey)
 	if config == nil && err == nil {
-		s.Logger.Debug("Initializing node config", "config", c)
-		err = repository.SaveNodeConfig(ctx, r, c)
-		if err != nil {
-			return err
+		nc := model.NodeConfig[PersistentConfig]{
+			Key: EvmReaderConfigKey,
+			Value: PersistentConfig{
+				DefaultBlock:            c.BlockchainDefaultBlock,
+				InputReaderEnabled:      c.FeatureInputReaderEnabled,
+				InputBoxDeploymentBlock: c.ContractsInputBoxDeploymentBlockNumber,
+				InputBoxAddress:         c.ContractsInputBoxAddress.String(),
+				ChainID:                 c.BlockchainId,
+			},
 		}
+		s.Logger.Info("Initializing evm-reader persistent config", "config", nc.Value)
+		err = repository.SaveNodeConfig(ctx, s.repository, &nc)
+		if err != nil {
+			return nil, err
+		}
+		return &nc.Value, nil
 	} else if err == nil {
-		s.Logger.Info("Node was already configured. Using previous persistent config", "config", config.Value)
-	} else {
-		s.Logger.Error("Could not retrieve persistent config from Database. %w", "error", err)
+		s.Logger.Info("Evm-reader was already configured. Using previous persistent config", "config", config.Value)
+		return &config.Value, nil
 	}
-	return err
+
+	s.Logger.Error("Could not retrieve persistent config from Database. %w", "error", err)
+	return nil, err
 }
 
 // Interface for Input reading
@@ -257,6 +277,7 @@ type appContracts struct {
 }
 
 func (r *Service) Run(ctx context.Context, ready chan struct{}) error {
+	// TODO: check if chainId matches
 	for {
 		err := r.watchForNewBlocks(ctx, ready)
 		// If the error is a SubscriptionError, re run watchForNewBlocks

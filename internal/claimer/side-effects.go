@@ -60,7 +60,7 @@ func (s *Service) selectClaimPairsPerApp() (
 	map[common.Address]*ClaimRow,
 	error,
 ) {
-	computed, accepted, err := s.Repository.SelectClaimPairsPerApp(s.Context)
+	computed, accepted, err := s.repository.SelectClaimPairsPerApp(s.Context)
 	if err != nil {
 		s.Logger.Error("selectClaimPairsPerApp:failed",
 			"error", err)
@@ -77,7 +77,7 @@ func (s *Service) updateEpochWithSubmittedClaim(
 	claim *ClaimRow,
 	txHash common.Hash,
 ) error {
-	err := s.Repository.UpdateEpochWithSubmittedClaim(s.Context, claim.ApplicationID, claim.Index, txHash)
+	err := s.repository.UpdateEpochWithSubmittedClaim(s.Context, claim.ApplicationID, claim.Index, txHash)
 	if err != nil {
 		s.Logger.Error("updateEpochWithSubmittedClaim:failed",
 			"appContractAddress", claim.IApplicationAddress,
@@ -101,7 +101,7 @@ func (s *Service) updateApplicationState(
 	reason *string,
 ) error {
 	ctx := context.Background()
-	err := s.Repository.UpdateApplicationState(ctx, appID, state, reason)
+	err := s.repository.UpdateApplicationState(ctx, appID, state, reason)
 	if err != nil {
 		s.Logger.Error("updateApplicationState:failed",
 			"appID", appID,
@@ -146,7 +146,7 @@ func (s *Service) submitClaimToBlockchain(
 ) (common.Hash, error) {
 	txHash := common.Hash{}
 	lastBlockNumber := new(big.Int).SetUint64(claim.LastBlock)
-	tx, err := ic.SubmitClaim(s.TxOpts, claim.IApplicationAddress,
+	tx, err := ic.SubmitClaim(s.txOpts, claim.IApplicationAddress,
 		lastBlockNumber, *claim.ClaimHash)
 	if err != nil {
 		s.Logger.Error("submitClaimToBlockchain:failed",
@@ -194,7 +194,7 @@ func (s *Service) FindClaimSubmissionEventAndSucc(
 	*iconsensus.IConsensusClaimSubmission,
 	error,
 ) {
-	ic, err := iconsensus.NewIConsensus(claim.IConsensusAddress, s.EthConn)
+	ic, err := iconsensus.NewIConsensus(claim.IConsensusAddress, s.ethConn)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -231,12 +231,12 @@ func (s *Service) FindClaimSubmissionEventAndSucc(
 
 /* poll a transaction hash for its submission status and receipt */
 func (s *Service) PollTransaction(txHash common.Hash) (bool, *types.Receipt, error) {
-	_, isPending, err := s.EthConn.TransactionByHash(s.Context, txHash)
+	_, isPending, err := s.ethConn.TransactionByHash(s.Context, txHash)
 	if err != nil || isPending {
 		return false, nil, err
 	}
 
-	receipt, err := s.EthConn.TransactionReceipt(s.Context, txHash)
+	receipt, err := s.ethConn.TransactionReceipt(s.Context, txHash)
 	if err != nil {
 		return false, nil, err
 	}

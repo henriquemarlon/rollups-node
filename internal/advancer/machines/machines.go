@@ -13,6 +13,7 @@ import (
 
 	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/repository"
+	"github.com/ethereum/go-ethereum/common"
 
 	nm "github.com/cartesi/rollups-node/internal/nodemachine"
 	"github.com/cartesi/rollups-node/pkg/emulator"
@@ -45,7 +46,8 @@ type Machines struct {
 	mutex      sync.RWMutex
 	machines   map[int64]*nm.NodeMachine
 	repository MachinesRepository
-	verbosity  cm.ServerVerbosity
+	verbosity  cm.MachineLogLevel
+	checkHash  bool
 	Logger     *slog.Logger
 }
 
@@ -62,8 +64,9 @@ func getAllRunningApplications(ctx context.Context, mr MachinesRepository) ([]*A
 func Load(
 	ctx context.Context,
 	repo MachinesRepository,
-	verbosity cm.ServerVerbosity,
+	verbosity cm.MachineLogLevel,
 	logger *slog.Logger,
+	checkHash bool,
 ) (*Machines, error) {
 	apps, err := getAllRunningApplications(ctx, repo)
 	if err != nil {
@@ -75,7 +78,7 @@ func Load(
 
 	for _, app := range apps {
 		// Creates the machine.
-		machine, err := createMachine(ctx, verbosity, app, logger)
+		machine, err := createMachine(ctx, verbosity, app, logger, checkHash)
 		if err != nil {
 			err = fmt.Errorf("failed to create machine from snapshot %s (%s): %w", app.TemplateURI, app.Name, err)
 			errs = errors.Join(errs, err)
@@ -97,6 +100,7 @@ func Load(
 		machines:   machines,
 		repository: repo,
 		verbosity:  verbosity,
+		checkHash:  checkHash,
 		Logger:     logger,
 	}, errs
 }
@@ -112,7 +116,7 @@ func (m *Machines) UpdateMachines(ctx context.Context) error {
 			continue
 		}
 
-		machine, err := createMachine(ctx, m.verbosity, app, m.Logger)
+		machine, err := createMachine(ctx, m.verbosity, app, m.Logger, m.checkHash)
 		if err != nil {
 			m.Logger.Error("Failed to create machine", "application", app.IApplicationAddress, "error", err)
 			continue
@@ -242,9 +246,10 @@ func closeMachines(machines map[int64]*nm.NodeMachine) (err error) {
 }
 
 func createMachine(ctx context.Context,
-	verbosity cm.ServerVerbosity,
+	verbosity cm.MachineLogLevel,
 	app *Application,
 	logger *slog.Logger,
+	checkHash bool,
 ) (*nm.NodeMachine, error) {
 	appAddress := app.IApplicationAddress.String()
 	logger.Info("Creating machine", "application", app.Name, "address", appAddress,
@@ -267,6 +272,23 @@ func createMachine(ctx context.Context,
 
 	logger.Debug("Machine loaded on server", "application", app.Name, "address", appAddress,
 		"remote-machine", address, "template-path", app.TemplateURI)
+
+	if checkHash {
+		logger.Debug("Machine checking machine hash", "application", app.Name, "address", appAddress,
+			"remote-machine", address, "template-path", app.TemplateURI)
+		var machineHash common.Hash
+		machineHash, err := cartesiMachine.ReadHash(ctx)
+		if err != nil {
+			return nil, errors.Join(err, cm.StopServer(address, logger))
+		}
+		if machineHash != app.TemplateHash {
+			logger.Error("Machine hash mismatch", "application", app.Name, "address", appAddress,
+				"remote-machine", address, "template-path", app.TemplateURI,
+				"machine-hash", machineHash.Hex(), "expected-hash", app.TemplateHash.Hex())
+			err = fmt.Errorf("machine hash mismatch: expected %s, got %s", app.TemplateHash, machineHash)
+			return nil, errors.Join(err, cartesiMachine.Close(ctx))
+		}
+	}
 
 	// Creates a RollupsMachine from the CartesiMachine.
 	rollupsMachine, err := rm.New(ctx,

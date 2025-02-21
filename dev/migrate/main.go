@@ -9,7 +9,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/internal/repository/postgres/schema"
 )
 
@@ -17,26 +16,28 @@ func main() {
 	var s *schema.Schema
 	var err error
 
-	postgresEndpoint := config.GetPostgresEndpoint()
+	dbConnString, ok := os.LookupEnv("CARTESI_DATABASE_CONNECTION")
+	if !ok || dbConnString == "" {
+		slog.Error("Error: CARTESI_DATABASE_CONNECTION not defined")
+		os.Exit(1)
+	}
 
-	uri, err := url.Parse(postgresEndpoint)
-	if err == nil {
-		uri.User = nil
-	} else {
-		slog.Error("Failed to parse PostgresEndpoint.", "error", err)
+	uri, err := url.Parse(dbConnString)
+	if err != nil {
+		slog.Error("Failed to parse database connection.", "error", err)
 		os.Exit(1)
 	}
 
 	for i := 0; i < 5; i++ {
-		s, err = schema.New(postgresEndpoint)
+		s, err = schema.New(uri.String())
 		if err == nil {
 			break
 		}
-		slog.Warn("Connection to database failed. Trying again.", "PostgresEndpoint", uri.String())
 		if i == 4 {
 			slog.Error("Failed to connect to database.", "error", err)
 			os.Exit(1)
 		}
+		slog.Warn("Connection to database failed. Trying again.", "PostgresEndpoint", uri.Redacted())
 		time.Sleep(5 * time.Second) // wait before retrying
 	}
 	defer s.Close()

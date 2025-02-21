@@ -1,7 +1,7 @@
 // (c) Cartesi and individual authors (see AUTHORS)
 // SPDX-License-Identifier: Apache-2.0 (see LICENSE)
 
-package status
+package remove
 
 import (
 	"fmt"
@@ -15,8 +15,9 @@ import (
 )
 
 var Cmd = &cobra.Command{
-	Use:     "status",
-	Short:   "Display and set application status",
+	Use:     "remove",
+	Aliases: []string{"rm"},
+	Short:   "Remove registered applications",
 	Example: examples,
 	Run:     run,
 }
@@ -27,8 +28,6 @@ cartesi-rollups-cli app status -n echo-dapp`
 var (
 	name    string
 	address string
-	enable  bool
-	disable bool
 )
 
 func init() {
@@ -36,19 +35,12 @@ func init() {
 
 	Cmd.Flags().StringVarP(&address, "address", "a", "", "Application contract address")
 
-	Cmd.Flags().BoolVarP(&enable, "enable", "e", false, "Enable the application")
-
-	Cmd.Flags().BoolVarP(&disable, "disable", "d", false, "Disable the application")
-
 	Cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		if name == "" && address == "" {
 			return fmt.Errorf("either 'name' or 'address' must be specified")
 		}
 		if name != "" && address != "" {
 			return fmt.Errorf("only one of 'name' or 'address' can be specified")
-		}
-		if cmd.Flags().Changed("enable") && cmd.Flags().Changed("disable") {
-			return fmt.Errorf("Cannot enable and disable at the same time")
 		}
 		return nil
 	}
@@ -79,32 +71,13 @@ func run(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	if (!cmd.Flags().Changed("enable")) && (!cmd.Flags().Changed("disable")) {
-		fmt.Println(app.State)
-		os.Exit(0)
-	}
-
-	if app.State == model.ApplicationState_Inoperable {
-		fmt.Fprintf(os.Stderr, "Error: Cannot execute operation. Application %s is on %s state\n", app.Name, app.State)
+	if app.State == model.ApplicationState_Enabled {
+		fmt.Fprintf(os.Stderr, "Error: Application %s is ENABLED. Must disable it first\n", app.Name)
 		os.Exit(1)
 	}
 
-	dirty := false
-	if cmd.Flags().Changed("enable") && app.State == model.ApplicationState_Disabled {
-		app.State = model.ApplicationState_Enabled
-		dirty = true
-	} else if cmd.Flags().Changed("disable") && app.State == model.ApplicationState_Enabled {
-		app.State = model.ApplicationState_Disabled
-		dirty = true
-	}
-
-	if !dirty {
-		fmt.Printf("Application %s status was already %s\n", app.Name, app.State)
-		os.Exit(0)
-	}
-
-	err = repo.UpdateApplicationState(ctx, app.ID, app.State, nil)
+	err = repo.DeleteApplication(ctx, app.ID)
 	cobra.CheckErr(err)
 
-	fmt.Printf("Application %s status updated to %s\n", app.Name, app.State)
+	fmt.Printf("Application %s successfully removed\n", app.Name)
 }

@@ -10,8 +10,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	cmdcommon "github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/common"
+	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/internal/repository"
+	"github.com/cartesi/rollups-node/internal/repository/factory"
 )
 
 var Cmd = &cobra.Command{
@@ -40,9 +41,12 @@ func init() {
 func run(cmd *cobra.Command, args []string) {
 	ctx := cmd.Context()
 
-	if cmdcommon.Repository == nil {
-		panic("Repository was not initialized")
-	}
+	dsn, err := config.GetDatabaseConnection()
+	cobra.CheckErr(err)
+
+	repo, err := factory.NewRepositoryFromConnectionString(ctx, dsn.String())
+	cobra.CheckErr(err)
+	defer repo.Close()
 
 	var nameOrAddress string
 	pFlags := cmd.Flags()
@@ -58,21 +62,21 @@ func run(cmd *cobra.Command, args []string) {
 			fmt.Fprintf(os.Stderr, "Error: Only one of 'output-index' or 'input-index' can be used at a time.\n")
 			os.Exit(1)
 		}
-		reports, err := cmdcommon.Repository.GetReport(ctx, nameOrAddress, reportIndex)
+		reports, err := repo.GetReport(ctx, nameOrAddress, reportIndex)
 		cobra.CheckErr(err)
 		result, err = json.MarshalIndent(reports, "", "    ")
 		cobra.CheckErr(err)
 	} else if cmd.Flags().Changed("input-index") {
 		f := repository.ReportFilter{InputIndex: &inputIndex}
 		p := repository.Pagination{}
-		reports, err := cmdcommon.Repository.ListReports(ctx, nameOrAddress, f, p)
+		reports, err := repo.ListReports(ctx, nameOrAddress, f, p)
 		cobra.CheckErr(err)
 		result, err = json.MarshalIndent(reports, "", "    ")
 		cobra.CheckErr(err)
 	} else {
 		f := repository.ReportFilter{}
 		p := repository.Pagination{}
-		reports, err := cmdcommon.Repository.ListReports(ctx, nameOrAddress, f, p)
+		reports, err := repo.ListReports(ctx, nameOrAddress, f, p)
 		cobra.CheckErr(err)
 		result, err = json.MarshalIndent(reports, "", "    ")
 		cobra.CheckErr(err)

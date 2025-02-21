@@ -6,9 +6,7 @@ package validator
 import (
 	"context"
 	crand "crypto/rand"
-	"log/slog"
 	"testing"
-	"time"
 
 	"github.com/cartesi/rollups-node/internal/merkle"
 	. "github.com/cartesi/rollups-node/internal/model"
@@ -35,15 +33,10 @@ var (
 
 func (s *ValidatorSuite) SetupSubTest() {
 	repo = newMockrepo()
-	validator = &Service{}
-	s.Require().Nil(Create(&CreateInfo{
-		Repository:     repo,
-		MaxStartupTime: 5 * time.Second,
-		CreateInfo: service.CreateInfo{
-			Impl:     validator,
-			LogLevel: service.LogLevel(slog.LevelInfo),
-		},
-	}, validator))
+	validator = &Service{repository: repo}
+	serviceArgs := &service.CreateInfo{Name: "validator", Impl: validator}
+	err := service.Create(context.Background(), serviceArgs, &validator.Service)
+	s.Require().Nil(err)
 	dummyEpochs = []Epoch{
 		{Index: 0, VirtualIndex: 0, FirstBlock: 0, LastBlock: 9},
 		{Index: 1, VirtualIndex: 1, FirstBlock: 10, LastBlock: 19},

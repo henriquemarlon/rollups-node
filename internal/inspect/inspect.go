@@ -60,7 +60,7 @@ func NewInspector(
 	repo InspectRepository,
 	machines IInspectMachines,
 	address string,
-	logLevel service.LogLevel,
+	logLevel slog.Level,
 	logPretty bool,
 ) (*Inspector, *http.Server, func() error) {
 	logger := service.NewLogger(slog.Level(logLevel), logPretty)

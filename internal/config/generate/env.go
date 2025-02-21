@@ -19,6 +19,9 @@ type Env struct {
 	// A brief description of the environment variable.
 	// This field is required.
 	Description string `toml:"description"`
+
+	// If defined omit the field from the generated Config struct
+	Omit bool `toml:"omit"`
 }
 
 // Validates whether the fields of the environment variables were initialized correctly

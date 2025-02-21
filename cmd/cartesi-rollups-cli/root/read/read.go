@@ -6,13 +6,14 @@ package read
 import (
 	"fmt"
 
-	"github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/common"
 	"github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/read/epochs"
 	"github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/read/inputs"
 	"github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/read/outputs"
 	"github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/read/reports"
+	"github.com/cartesi/rollups-node/internal/config"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var Cmd = &cobra.Command{
@@ -21,34 +22,18 @@ var Cmd = &cobra.Command{
 }
 
 var (
-	name    string
-	address string
+	name               string
+	address            string
+	databaseConnection string
 )
 
 func init() {
-	Cmd.PersistentFlags().StringVarP(
-		&name,
-		"name",
-		"n",
-		"",
-		"Application name",
-	)
+	Cmd.PersistentFlags().StringVarP(&name, "name", "n", "", "Application name")
 
-	Cmd.PersistentFlags().StringVarP(
-		&address,
-		"address",
-		"a",
-		"",
-		"Application contract address",
-	)
+	Cmd.PersistentFlags().StringVarP(&address, "address", "a", "", "Application contract address")
 
-	Cmd.PersistentFlags().StringVarP(
-		&common.PostgresEndpoint,
-		"postgres-endpoint",
-		"p",
-		"postgres://postgres:password@localhost:5432/rollupsdb?sslmode=disable",
-		"Postgres endpoint",
-	)
+	Cmd.Flags().StringVar(&databaseConnection, "database-connection", "", "Database connection string in the URL format\n(eg.: 'postgres://user:password@hostname:port/database') ")
+	viper.BindPFlag(config.DATABASE_CONNECTION, Cmd.Flags().Lookup("database-connection"))
 
 	Cmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
 		if name == "" && address == "" {
@@ -57,7 +42,7 @@ func init() {
 		if name != "" && address != "" {
 			return fmt.Errorf("only one of 'name' or 'address' can be specified")
 		}
-		return common.PersistentPreRun(cmd, args)
+		return nil
 	}
 
 	Cmd.AddCommand(epochs.Cmd)

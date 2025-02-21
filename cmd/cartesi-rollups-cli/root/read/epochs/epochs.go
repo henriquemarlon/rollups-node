@@ -7,8 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	cmdcommon "github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/common"
+	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/internal/repository"
+	"github.com/cartesi/rollups-node/internal/repository/factory"
 
 	"github.com/spf13/cobra"
 )
@@ -20,7 +21,7 @@ var Cmd = &cobra.Command{
 	Run:     run,
 }
 
-const examples = `# Read all reports:
+const examples = `# Read all epochs:
 cartesi-rollups-cli read epochs -n echo-dapp`
 
 var (
@@ -34,9 +35,12 @@ func init() {
 func run(cmd *cobra.Command, args []string) {
 	ctx := cmd.Context()
 
-	if cmdcommon.Repository == nil {
-		panic("Repository was not initialized")
-	}
+	dsn, err := config.GetDatabaseConnection()
+	cobra.CheckErr(err)
+
+	repo, err := factory.NewRepositoryFromConnectionString(ctx, dsn.String())
+	cobra.CheckErr(err)
+	defer repo.Close()
 
 	var nameOrAddress string
 	pFlags := cmd.Flags()
@@ -48,14 +52,14 @@ func run(cmd *cobra.Command, args []string) {
 
 	var result []byte
 	if cmd.Flags().Changed("epoch-index") {
-		reports, err := cmdcommon.Repository.GetEpoch(ctx, nameOrAddress, epochIndex)
+		epoch, err := repo.GetEpoch(ctx, nameOrAddress, epochIndex)
 		cobra.CheckErr(err)
-		result, err = json.MarshalIndent(reports, "", "    ")
+		result, err = json.MarshalIndent(epoch, "", "    ")
 		cobra.CheckErr(err)
 	} else {
-		reports, err := cmdcommon.Repository.ListEpochs(ctx, nameOrAddress, repository.EpochFilter{}, repository.Pagination{})
+		epochs, err := repo.ListEpochs(ctx, nameOrAddress, repository.EpochFilter{}, repository.Pagination{})
 		cobra.CheckErr(err)
-		result, err = json.MarshalIndent(reports, "", "    ")
+		result, err = json.MarshalIndent(epochs, "", "    ")
 		cobra.CheckErr(err)
 	}
 

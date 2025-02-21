@@ -40,12 +40,11 @@ package claimer
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/cartesi/rollups-node/internal/config"
+	"github.com/cartesi/rollups-node/internal/config/auth"
 	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/repository"
-	"github.com/cartesi/rollups-node/internal/repository/factory"
 	"github.com/cartesi/rollups-node/pkg/contracts/iconsensus"
 	"github.com/cartesi/rollups-node/pkg/service"
 
@@ -63,79 +62,81 @@ var (
 type CreateInfo struct {
 	service.CreateInfo
 
-	Auth config.Auth
+	Config config.Config
 
-	BlockchainHttpEndpoint config.Redacted[string]
-	EthConn                *ethclient.Client
-	PostgresEndpoint       config.Redacted[string]
-	Repository             repository.Repository
-	EnableSubmission       bool
-	MaxStartupTime         time.Duration
+	EthConn    *ethclient.Client
+	Repository repository.Repository
 }
 
 type Service struct {
 	service.Service
 
-	submissionEnabled bool
-	Repository        repository.Repository
-	EthConn           *ethclient.Client
-	TxOpts            *bind.TransactOpts
+	repository        repository.Repository
+	ethConn           *ethclient.Client
+	txOpts            *bind.TransactOpts
 	claimsInFlight    map[common.Address]common.Hash // -> txHash
+	submissionEnabled bool
 }
 
-func (c *CreateInfo) LoadEnv() {
-	c.EnableSubmission = config.GetFeatureClaimSubmissionEnabled()
-	if c.EnableSubmission {
-		c.Auth = config.AuthFromEnv()
-	}
-	c.BlockchainHttpEndpoint.Value = config.GetBlockchainHttpEndpoint()
-	c.PostgresEndpoint.Value = config.GetPostgresEndpoint()
-	c.PollInterval = config.GetClaimerPollingInterval()
-	c.MaxStartupTime = config.GetMaxStartupTime()
-	c.LogLevel = service.LogLevel(config.GetLogLevel())
-	c.LogPretty = config.GetLogPrettyEnabled()
+const ClaimerConfigKey = "claimer"
+
+type PersistentConfig struct {
+	DefaultBlock           DefaultBlock
+	ClaimSubmissionEnabled bool
+	ChainID                uint64
 }
 
-func Create(c *CreateInfo, s *Service) error {
+func Create(ctx context.Context, c *CreateInfo) (*Service, error) {
 	var err error
-
-	err = service.Create(&c.CreateInfo, &s.Service)
-	if err != nil {
-		return err
+	if err = ctx.Err(); err != nil {
+		return nil, err // This returns context.Canceled or context.DeadlineExceeded.
 	}
 
-	return service.WithTimeout(c.MaxStartupTime, func() error {
-		s.submissionEnabled = c.EnableSubmission
-		if s.EthConn == nil {
-			if c.EthConn == nil {
-				c.EthConn, err = ethclient.Dial(c.BlockchainHttpEndpoint.Value)
-				if err != nil {
-					return err
-				}
-			}
-			s.EthConn = c.EthConn
-		}
+	s := &Service{}
+	c.CreateInfo.Impl = s
 
-		if s.Repository == nil {
-			c.Repository, err = factory.NewRepositoryFromConnectionString(s.Context, c.PostgresEndpoint.Value)
-			if err != nil {
-				return err
-			}
-			s.Repository = c.Repository
-		}
+	err = service.Create(ctx, &c.CreateInfo, &s.Service)
+	if err != nil {
+		return nil, err
+	}
 
-		if s.claimsInFlight == nil {
-			s.claimsInFlight = map[common.Address]common.Hash{}
-		}
+	s.ethConn = c.EthConn
+	if s.ethConn == nil {
+		return nil, fmt.Errorf("ethclient on claimer service Create is nil")
+	}
 
-		if s.submissionEnabled && s.TxOpts == nil {
-			s.TxOpts, err = CreateTxOptsFromAuth(c.Auth, s.Context, s.EthConn)
-			if err != nil {
-				return err
-			}
+	chainId, err := s.ethConn.ChainID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if chainId.Uint64() != c.Config.BlockchainId {
+		return nil, fmt.Errorf("chainId mismatch: network %d != provided %d", chainId.Uint64(), c.Config.BlockchainId)
+	}
+
+	s.repository = c.Repository
+	if s.repository == nil {
+		return nil, fmt.Errorf("repository on claimer service Create is nil")
+	}
+
+	nodeConfig, err := s.setupPersistentConfig(ctx, &c.Config)
+	if err != nil {
+		return nil, err
+	}
+	if chainId.Uint64() != nodeConfig.ChainID {
+		return nil, fmt.Errorf("NodeConfig chainId mismatch: network %d != config %d",
+			chainId.Uint64(), nodeConfig.ChainID)
+	}
+
+	s.claimsInFlight = map[common.Address]common.Hash{}
+	s.submissionEnabled = nodeConfig.ClaimSubmissionEnabled
+
+	if s.submissionEnabled && s.txOpts == nil {
+		s.txOpts, err = auth.GetTransactOpts(chainId)
+		if err != nil {
+			return nil, err
 		}
-		return nil
-	})
+	}
+	return s, nil
 }
 
 func (s *Service) Alive() bool {
@@ -361,6 +362,34 @@ func (s *Service) submitClaimsAndUpdateDatabase(se sideEffects) []error {
 	return errs
 }
 
+func (s *Service) setupPersistentConfig(
+	ctx context.Context,
+	c *config.Config,
+) (*PersistentConfig, error) {
+	config, err := repository.LoadNodeConfig[PersistentConfig](ctx, s.repository, ClaimerConfigKey)
+	if config == nil && err == nil {
+		nc := NodeConfig[PersistentConfig]{
+			Key: ClaimerConfigKey,
+			Value: PersistentConfig{
+				DefaultBlock:           c.BlockchainDefaultBlock,
+				ClaimSubmissionEnabled: c.FeatureClaimSubmissionEnabled,
+				ChainID:                c.BlockchainId,
+			},
+		}
+		s.Logger.Info("Initializing claimer persistent config", "config", nc.Value)
+		err = repository.SaveNodeConfig(ctx, s.repository, &nc)
+		if err != nil {
+			return nil, err
+		}
+		return &nc.Value, nil
+	} else if err == nil {
+		s.Logger.Info("Claimer was already configured. Using previous persistent config", "config", config.Value)
+		return &config.Value, nil
+	}
+
+	s.Logger.Error("Could not retrieve persistent config from Database. %w", "error", err)
+	return nil, err
+}
 func checkClaimConstraint(c *ClaimRow) error {
 	zeroAddress := common.Address{}
 
@@ -407,10 +436,6 @@ func claimMatchesEvent(c *ClaimRow, e *iconsensus.IConsensusClaimSubmission) boo
 		c.LastBlock == e.LastProcessedBlockNumber.Uint64()
 }
 
-func (s *Service) Start(context context.Context, ready chan<- struct{}) error {
-	ready <- struct{}{}
-	return s.Serve()
-}
 func (s *Service) String() string {
 	return s.Name
 }

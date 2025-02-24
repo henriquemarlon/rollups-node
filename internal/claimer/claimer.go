@@ -40,6 +40,7 @@ package claimer
 import (
 	"context"
 	"fmt"
+	"math/big"
 
 	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/internal/config/auth"
@@ -159,10 +160,17 @@ func (s *Service) Stop(bool) []error {
 }
 
 func (s *Service) Tick() []error {
-	return s.submitClaimsAndUpdateDatabase(s)
+	errs := []error{}
+	endBlock, err := GetBlockNumber(s.Context, s.ethConn, s.defaultBlock)
+	if err != nil {
+		errs = append(errs, err)
+		return errs
+	}
+
+	return s.submitClaimsAndUpdateDatabase(s, endBlock)
 }
 
-func (s *Service) submitClaimsAndUpdateDatabase(se sideEffects) []error {
+func (s *Service) submitClaimsAndUpdateDatabase(se sideEffects, endBlock *big.Int) []error {
 	errs := []error{}
 	prevClaims, currClaims, err := se.selectClaimPairsPerApp()
 	if err != nil {
@@ -172,7 +180,7 @@ func (s *Service) submitClaimsAndUpdateDatabase(se sideEffects) []error {
 
 	// check claims in flight
 	for key, txHash := range s.claimsInFlight {
-		ready, receipt, err := se.pollTransaction(txHash)
+		ready, receipt, err := se.pollTransaction(txHash, endBlock)
 		if err != nil {
 			errs = append(errs, err)
 			s.Logger.Warn("claim submission failed, retrying.",
@@ -239,7 +247,7 @@ func (s *Service) submitClaimsAndUpdateDatabase(se sideEffects) []error {
 
 			// if prevClaimRow exists, there must be a matching event
 			ic, prevEvent, currEvent, err =
-				se.findClaimSubmissionEventAndSucc(prevClaimRow)
+				se.findClaimSubmissionEventAndSucc(prevClaimRow, endBlock)
 			if err != nil {
 				delete(currClaims, key)
 				errs = append(errs, err)
@@ -285,7 +293,7 @@ func (s *Service) submitClaimsAndUpdateDatabase(se sideEffects) []error {
 		} else {
 			// first claim
 			ic, currEvent, _, err =
-				se.findClaimSubmissionEventAndSucc(currClaimRow)
+				se.findClaimSubmissionEventAndSucc(currClaimRow, endBlock)
 			if err != nil {
 				delete(currClaims, key)
 				errs = append(errs, err)

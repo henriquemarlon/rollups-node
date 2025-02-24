@@ -52,13 +52,14 @@ func (m *serviceMock) updateApplicationState(appID int64, state ApplicationState
 
 func (m *serviceMock) findClaimSubmissionEventAndSucc(
 	claim *ClaimRow,
+	endBlock *big.Int,
 ) (
 	*iconsensus.IConsensus,
 	*iconsensus.IConsensusClaimSubmission,
 	*iconsensus.IConsensusClaimSubmission,
 	error,
 ) {
-	args := m.Called(claim)
+	args := m.Called(claim, endBlock)
 	return args.Get(0).(*iconsensus.IConsensus),
 		args.Get(1).(*iconsensus.IConsensusClaimSubmission),
 		args.Get(2).(*iconsensus.IConsensusClaimSubmission),
@@ -71,8 +72,8 @@ func (m *serviceMock) submitClaimToBlockchain(
 	args := m.Called(nil, claim)
 	return args.Get(0).(common.Hash), args.Error(1)
 }
-func (m *serviceMock) pollTransaction(txHash common.Hash) (bool, *types.Receipt, error) {
-	args := m.Called(txHash)
+func (m *serviceMock) pollTransaction(txHash common.Hash, endBlock *big.Int) (bool, *types.Receipt, error) {
+	args := m.Called(txHash, endBlock)
 	return args.Bool(0),
 		args.Get(1).(*types.Receipt),
 		args.Error(2)
@@ -109,12 +110,13 @@ func TestDoNothing(t *testing.T) {
 	m.On("selectClaimPairsPerApp").
 		Return(prevClaims, currClaims, nil)
 
-	errs := m.submitClaimsAndUpdateDatabase(m)
+	errs := m.submitClaimsAndUpdateDatabase(m, big.NewInt(0))
 	assert.Equal(t, len(errs), 0)
 }
 
 func TestSubmitFirstClaim(t *testing.T) {
 	m := newServiceMock()
+	endBlock := big.NewInt(0)
 	appContractAddress := common.HexToAddress("0x01")
 	claimTransactionHash := common.HexToHash("0x10")
 	claimHash := common.HexToHash("0x100")
@@ -138,12 +140,12 @@ func TestSubmitFirstClaim(t *testing.T) {
 
 	m.On("selectClaimPairsPerApp").
 		Return(prevClaims, currClaims, nil)
-	m.On("findClaimSubmissionEventAndSucc", &currClaim).
+	m.On("findClaimSubmissionEventAndSucc", &currClaim, endBlock).
 		Return(&iconsensus.IConsensus{}, prevEvent, currEvent, nil)
 	m.On("submitClaimToBlockchain", nil, &currClaim).
 		Return(claimTransactionHash, nil)
 
-	errs := m.submitClaimsAndUpdateDatabase(m)
+	errs := m.submitClaimsAndUpdateDatabase(m, endBlock)
 	assert.Equal(t, len(errs), 0)
 	assert.Equal(t, len(m.claimsInFlight), 1)
 	m.AssertNumberOfCalls(t, "findClaimSubmissionEventAndSucc", 1)
@@ -155,6 +157,7 @@ func TestSubmitFirstClaim(t *testing.T) {
 
 func TestSubmitClaimWithAntecessor(t *testing.T) {
 	m := newServiceMock()
+	endBlock := big.NewInt(0)
 	appContractAddress := common.HexToAddress("0x01")
 	claimTransactionHash := common.HexToHash("0x10")
 	claimHash := common.HexToHash("0x100")
@@ -196,12 +199,12 @@ func TestSubmitClaimWithAntecessor(t *testing.T) {
 
 	m.On("selectClaimPairsPerApp").
 		Return(prevClaims, currClaims, nil)
-	m.On("findClaimSubmissionEventAndSucc", &prevClaim).
+	m.On("findClaimSubmissionEventAndSucc", &prevClaim, endBlock).
 		Return(&iconsensus.IConsensus{}, prevEvent, currEvent, nil)
 	m.On("submitClaimToBlockchain", nil, &currClaim).
 		Return(claimTransactionHash, nil)
 
-	errs := m.submitClaimsAndUpdateDatabase(m)
+	errs := m.submitClaimsAndUpdateDatabase(m, endBlock)
 	assert.Equal(t, len(errs), 0)
 	assert.Equal(t, len(m.claimsInFlight), 1)
 	m.AssertNumberOfCalls(t, "findClaimSubmissionEventAndSucc", 1)
@@ -213,6 +216,7 @@ func TestSubmitClaimWithAntecessor(t *testing.T) {
 
 func TestSkipSubmitFirstClaim(t *testing.T) {
 	m := newServiceMock()
+	endBlock := big.NewInt(0)
 	m.submissionEnabled = false
 	appContractAddress := common.HexToAddress("0x01")
 	claimTransactionHash := common.HexToHash("0x10")
@@ -237,12 +241,12 @@ func TestSkipSubmitFirstClaim(t *testing.T) {
 
 	m.On("selectClaimPairsPerApp").
 		Return(prevClaims, currClaims, nil)
-	m.On("findClaimSubmissionEventAndSucc", &currClaim).
+	m.On("findClaimSubmissionEventAndSucc", &currClaim, endBlock).
 		Return(&iconsensus.IConsensus{}, prevEvent, currEvent, nil)
 	m.On("submitClaimToBlockchain", nil, &currClaim).
 		Return(claimTransactionHash, nil)
 
-	errs := m.submitClaimsAndUpdateDatabase(m)
+	errs := m.submitClaimsAndUpdateDatabase(m, endBlock)
 	assert.Equal(t, len(errs), 0)
 	assert.Equal(t, len(m.claimsInFlight), 0)
 	m.AssertNumberOfCalls(t, "findClaimSubmissionEventAndSucc", 1)
@@ -254,6 +258,7 @@ func TestSkipSubmitFirstClaim(t *testing.T) {
 
 func TestSkipSubmitClaimWithAntecessor(t *testing.T) {
 	m := newServiceMock()
+	endBlock := big.NewInt(0)
 	m.submissionEnabled = false
 	appContractAddress := common.HexToAddress("0x01")
 	claimTransactionHash := common.HexToHash("0x10")
@@ -295,12 +300,12 @@ func TestSkipSubmitClaimWithAntecessor(t *testing.T) {
 
 	m.On("selectClaimPairsPerApp").
 		Return(prevClaims, currClaims, nil)
-	m.On("findClaimSubmissionEventAndSucc", &prevClaim).
+	m.On("findClaimSubmissionEventAndSucc", &prevClaim, endBlock).
 		Return(&iconsensus.IConsensus{}, prevEvent, currEvent, nil)
 	m.On("submitClaimToBlockchain", nil, &currClaim).
 		Return(claimTransactionHash, nil)
 
-	errs := m.submitClaimsAndUpdateDatabase(m)
+	errs := m.submitClaimsAndUpdateDatabase(m, endBlock)
 	assert.Equal(t, len(errs), 0)
 	assert.Equal(t, len(m.claimsInFlight), 0)
 	m.AssertNumberOfCalls(t, "findClaimSubmissionEventAndSucc", 1)
@@ -312,6 +317,7 @@ func TestSkipSubmitClaimWithAntecessor(t *testing.T) {
 
 func TestInFlightCompleted(t *testing.T) {
 	m := newServiceMock()
+	endBlock := big.NewInt(0)
 	appContractAddress := common.HexToAddress("0x01")
 	reqHash := common.HexToHash("0x10")
 	claimHash := common.HexToHash("0x100")
@@ -334,7 +340,7 @@ func TestInFlightCompleted(t *testing.T) {
 
 	m.On("selectClaimPairsPerApp").
 		Return(prevClaims, currClaims, nil)
-	m.On("pollTransaction", reqHash).
+	m.On("pollTransaction", reqHash, endBlock).
 		Return(true, &types.Receipt{
 			ContractAddress: appContractAddress,
 			TxHash:          txHash,
@@ -342,7 +348,7 @@ func TestInFlightCompleted(t *testing.T) {
 	m.On("updateEpochWithSubmittedClaim", &currClaim, txHash).
 		Return(nil)
 
-	errs := m.submitClaimsAndUpdateDatabase(m)
+	errs := m.submitClaimsAndUpdateDatabase(m, endBlock)
 	assert.Equal(t, len(errs), 0)
 	assert.Equal(t, len(m.claimsInFlight), 0)
 	m.AssertNumberOfCalls(t, "findClaimSubmissionEventAndSucc", 0)
@@ -354,6 +360,7 @@ func TestInFlightCompleted(t *testing.T) {
 
 func TestUpdateFirstClaim(t *testing.T) {
 	m := newServiceMock()
+	endBlock := big.NewInt(0)
 	appContractAddress := common.HexToAddress("0x01")
 	claimHash := common.HexToHash("0x100")
 	currClaim := ClaimRow{
@@ -379,12 +386,12 @@ func TestUpdateFirstClaim(t *testing.T) {
 	}
 	m.On("selectClaimPairsPerApp").
 		Return(prevClaims, currClaims, nil)
-	m.On("findClaimSubmissionEventAndSucc", &currClaim).
+	m.On("findClaimSubmissionEventAndSucc", &currClaim, endBlock).
 		Return(&iconsensus.IConsensus{}, &currEvent, nilEvent, nil)
 	m.On("updateEpochWithSubmittedClaim", &currClaim, currEvent.Raw.TxHash).
 		Return(nil)
 
-	errs := m.submitClaimsAndUpdateDatabase(m)
+	errs := m.submitClaimsAndUpdateDatabase(m, endBlock)
 	assert.Equal(t, len(errs), 0)
 	assert.Equal(t, len(m.claimsInFlight), 0)
 	m.AssertNumberOfCalls(t, "findClaimSubmissionEventAndSucc", 1)
@@ -396,6 +403,7 @@ func TestUpdateFirstClaim(t *testing.T) {
 
 func TestUpdateClaimWithAntecessor(t *testing.T) {
 	m := newServiceMock()
+	endBlock := big.NewInt(0)
 	appContractAddress := common.HexToAddress("0x01")
 	claimHash := common.HexToHash("0x100")
 	prevClaimHash := common.HexToHash("0x101")
@@ -438,12 +446,12 @@ func TestUpdateClaimWithAntecessor(t *testing.T) {
 	}
 	m.On("selectClaimPairsPerApp").
 		Return(prevClaims, currClaims, nil)
-	m.On("findClaimSubmissionEventAndSucc", &prevClaim).
+	m.On("findClaimSubmissionEventAndSucc", &prevClaim, endBlock).
 		Return(&iconsensus.IConsensus{}, &prevEvent, &currEvent, nil)
 	m.On("updateEpochWithSubmittedClaim", &currClaim, currEvent.Raw.TxHash).
 		Return(nil)
 
-	errs := m.submitClaimsAndUpdateDatabase(m)
+	errs := m.submitClaimsAndUpdateDatabase(m, endBlock)
 	assert.Equal(t, len(errs), 0)
 	assert.Equal(t, len(m.claimsInFlight), 0)
 	m.AssertNumberOfCalls(t, "findClaimSubmissionEventAndSucc", 1)
@@ -460,6 +468,7 @@ func TestUpdateClaimWithAntecessor(t *testing.T) {
 // !claimMatchesEvent(prevClaim, prevEvent)
 func TestSubmitClaimWithAntecessorMismatch(t *testing.T) {
 	m := newServiceMock()
+	endBlock := big.NewInt(0)
 	appContractAddress := common.HexToAddress("0x01")
 	claimTransactionHash := common.HexToHash("0x10")
 	claimHash := common.HexToHash("0x100")
@@ -500,14 +509,14 @@ func TestSubmitClaimWithAntecessorMismatch(t *testing.T) {
 
 	m.On("selectClaimPairsPerApp").
 		Return(prevClaims, currClaims, nil)
-	m.On("findClaimSubmissionEventAndSucc", &prevClaim).
+	m.On("findClaimSubmissionEventAndSucc", &prevClaim, endBlock).
 		Return(&iconsensus.IConsensus{}, prevEvent, currEvent, nil)
 	m.On("updateApplicationState", int64(0), model.ApplicationState_Inoperable, mock.Anything).
 		Return(nil)
 	m.On("submitClaimToBlockchain", nil, &currClaim).
 		Return(claimTransactionHash, nil)
 
-	errs := m.submitClaimsAndUpdateDatabase(m)
+	errs := m.submitClaimsAndUpdateDatabase(m, endBlock)
 	assert.Equal(t, len(errs), 1)
 	assert.Equal(t, errs[0], ErrEventMismatch)
 }
@@ -515,6 +524,7 @@ func TestSubmitClaimWithAntecessorMismatch(t *testing.T) {
 // !claimMatchesEvent(currClaim, currEvent)
 func TestSubmitClaimWithEventMismatch(t *testing.T) {
 	m := newServiceMock()
+	endBlock := big.NewInt(0)
 	appContractAddress := common.HexToAddress("0x01")
 	claimHash := common.HexToHash("0x100")
 	prevClaimHash := common.HexToHash("0x101")
@@ -557,14 +567,14 @@ func TestSubmitClaimWithEventMismatch(t *testing.T) {
 	}
 	m.On("selectClaimPairsPerApp").
 		Return(prevClaims, currClaims, nil)
-	m.On("findClaimSubmissionEventAndSucc", &prevClaim).
+	m.On("findClaimSubmissionEventAndSucc", &prevClaim, endBlock).
 		Return(&iconsensus.IConsensus{}, &prevEvent, &currEvent, nil)
 	m.On("updateApplicationState", int64(0), model.ApplicationState_Inoperable, mock.Anything).
 		Return(nil)
 	m.On("updateEpochWithSubmittedClaim", &currClaim, currEvent.Raw.TxHash).
 		Return(nil)
 
-	errs := m.submitClaimsAndUpdateDatabase(m)
+	errs := m.submitClaimsAndUpdateDatabase(m, endBlock)
 	assert.Equal(t, len(errs), 1)
 	assert.Equal(t, errs[0], ErrEventMismatch)
 }
@@ -619,7 +629,7 @@ func TestSubmitClaimWithAntecessorOutOfOrder(t *testing.T) {
 	m.On("submitClaimToBlockchain", nil, &currClaim).
 		Return(claimTransactionHash, nil)
 
-	errs := m.submitClaimsAndUpdateDatabase(m)
+	errs := m.submitClaimsAndUpdateDatabase(m, big.NewInt(0))
 	assert.Equal(t, len(errs), 1)
 	assert.Equal(t, errs[0], ErrClaimMismatch)
 }

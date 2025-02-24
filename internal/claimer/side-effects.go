@@ -38,6 +38,7 @@ type sideEffects interface {
 	// blockchain
 	findClaimSubmissionEventAndSucc(
 		claim *ClaimRow,
+		endBlock *big.Int,
 	) (
 		*iconsensus.IConsensus,
 		*iconsensus.IConsensusClaimSubmission,
@@ -51,7 +52,10 @@ type sideEffects interface {
 		common.Hash,
 		error,
 	)
-	pollTransaction(txHash common.Hash) (
+	pollTransaction(
+		txHash common.Hash,
+		endBlock *big.Int,
+	) (
 		bool,
 		*types.Receipt,
 		error,
@@ -122,13 +126,14 @@ func (s *Service) updateApplicationState(
 
 func (s *Service) findClaimSubmissionEventAndSucc(
 	claim *ClaimRow,
+	endBlock *big.Int,
 ) (
 	*iconsensus.IConsensus,
 	*iconsensus.IConsensusClaimSubmission,
 	*iconsensus.IConsensusClaimSubmission,
 	error,
 ) {
-	ic, curr, next, err := s.FindClaimSubmissionEventAndSucc(claim)
+	ic, curr, next, err := s.FindClaimSubmissionEventAndSucc(claim, endBlock)
 	if err != nil {
 		s.Logger.Error("findClaimSubmissionEventAndSucc:failed",
 			"claim", claim,
@@ -168,8 +173,8 @@ func (s *Service) submitClaimToBlockchain(
 	return txHash, err
 }
 
-func (s *Service) pollTransaction(txHash common.Hash) (bool, *types.Receipt, error) {
-	ready, receipt, err := s.PollTransaction(txHash)
+func (s *Service) pollTransaction(txHash common.Hash, endBlock *big.Int) (bool, *types.Receipt, error) {
+	ready, receipt, err := s.PollTransaction(txHash, endBlock)
 	if err != nil {
 		s.Logger.Error("PollTransaction:failed",
 			"tx", txHash,
@@ -207,6 +212,7 @@ func unwrapClaimSubmission(
 // return this event and its successor
 func (s *Service) FindClaimSubmissionEventAndSucc(
 	claim *ClaimRow,
+	endBlock *big.Int,
 ) (
 	*iconsensus.IConsensus,
 	*iconsensus.IConsensusClaimSubmission,
@@ -232,13 +238,9 @@ func (s *Service) FindClaimSubmissionEventAndSucc(
 		return nil, nil, nil, err
 	}
 
-	endBig, err := GetBlockNumber(s.Context, s.ethConn, s.defaultBlock)
-	if err != nil {
-		return nil, nil, nil, err
-	}
 	it, err := ethutil.ChunkedFilterLogs(s.Context, s.ethConn, ethereum.FilterQuery{
 		FromBlock: new(big.Int).SetUint64(claim.Epoch.LastBlock),
-		ToBlock: endBig,
+		ToBlock: endBlock,
 		Addresses: []common.Address{claim.IConsensusAddress},
 		Topics: topics,
 	})
@@ -271,7 +273,7 @@ func (s *Service) FindClaimSubmissionEventAndSucc(
 }
 
 /* poll a transaction hash for its submission status and receipt */
-func (s *Service) PollTransaction(txHash common.Hash) (bool, *types.Receipt, error) {
+func (s *Service) PollTransaction(txHash common.Hash, endBlock *big.Int) (bool, *types.Receipt, error) {
 	_, isPending, err := s.ethConn.TransactionByHash(s.Context, txHash)
 	if err != nil || isPending {
 		return false, nil, err
@@ -282,13 +284,7 @@ func (s *Service) PollTransaction(txHash common.Hash) (bool, *types.Receipt, err
 		return false, nil, err
 	}
 
-	// additionally wait for Default Block
-	// TODO: hoist this value out of "check computed claims" loop
-	endBig, err := GetBlockNumber(s.Context, s.ethConn, s.defaultBlock)
-	if err != nil {
-		return false, nil, err
-	}
-	if receipt.BlockNumber.Cmp(endBig) >= 0 {
+	if receipt.BlockNumber.Cmp(endBlock) >= 0 {
 		return false, receipt, err
 	}
 

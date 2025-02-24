@@ -64,8 +64,8 @@ type CreateInfo struct {
 
 	Config config.Config
 
-	EthConn    *ethclient.Client
-	Repository repository.Repository
+	EthConn      *ethclient.Client
+	Repository   repository.Repository
 }
 
 type Service struct {
@@ -76,6 +76,7 @@ type Service struct {
 	txOpts            *bind.TransactOpts
 	claimsInFlight    map[common.Address]common.Hash // -> txHash
 	submissionEnabled bool
+	defaultBlock      config.DefaultBlock
 }
 
 const ClaimerConfigKey = "claimer"
@@ -136,6 +137,8 @@ func Create(ctx context.Context, c *CreateInfo) (*Service, error) {
 			return nil, err
 		}
 	}
+	s.defaultBlock = c.Config.BlockchainDefaultBlock
+
 	return s, nil
 }
 

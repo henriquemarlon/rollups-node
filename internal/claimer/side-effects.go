@@ -199,9 +199,17 @@ func (s *Service) FindClaimSubmissionEventAndSucc(
 		return nil, nil, nil, err
 	}
 
+	// get the end block considering to block labels: finalized, latest...
+	endBig, err := GetBlockNumber(s.Context, s.ethConn, s.defaultBlock)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	endnr := endBig.Uint64()
+
 	it, err := ic.FilterClaimSubmission(&bind.FilterOpts{
 		Context: s.Context,
 		Start:   claim.LastBlock,
+		End:     &endnr,
 	}, nil, []common.Address{claim.IApplicationAddress})
 	if err != nil {
 		return nil, nil, nil, err
@@ -239,6 +247,16 @@ func (s *Service) PollTransaction(txHash common.Hash) (bool, *types.Receipt, err
 	receipt, err := s.ethConn.TransactionReceipt(s.Context, txHash)
 	if err != nil {
 		return false, nil, err
+	}
+
+	// additionally wait for Default Block
+	// TODO: hoist this value out of "check computed claims" loop
+	endBig, err := GetBlockNumber(s.Context, s.ethConn, s.defaultBlock)
+	if err != nil {
+		return false, nil, err
+	}
+	if receipt.BlockNumber.Cmp(endBig) >= 0 {
+		return false, receipt, err
 	}
 
 	return receipt.Status == 1, receipt, err

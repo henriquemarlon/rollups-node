@@ -110,15 +110,12 @@ type NodeConfigRepository interface {
 
 // TODO: migrate ClaimRow -> Application + Epoch and use the other interfaces
 type ClaimerRepository interface {
-	SelectOldestComputedClaimPerApp(ctx context.Context) (
+	SelectSubmissionClaimPairsPerApp(ctx context.Context) (
+		map[common.Address]*ClaimRow,
 		map[common.Address]*ClaimRow,
 		error,
 	)
-	SelectNewestSubmittedOrAcceptedClaimPerApp(ctx context.Context) (
-		map[common.Address]*ClaimRow,
-		error,
-	)
-	SelectClaimPairsPerApp(ctx context.Context) (
+	SelectAcceptanceClaimPairsPerApp(ctx context.Context) (
 		map[common.Address]*ClaimRow,
 		map[common.Address]*ClaimRow,
 		error,
@@ -128,6 +125,11 @@ type ClaimerRepository interface {
 		application_id int64,
 		index uint64,
 		transaction_hash common.Hash,
+	) error
+	UpdateEpochWithAcceptedClaim(
+		ctx context.Context,
+		application_id int64,
+		index uint64,
 	) error
 }
 

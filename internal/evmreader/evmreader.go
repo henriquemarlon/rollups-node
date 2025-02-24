@@ -382,8 +382,6 @@ func (r *Service) watchForNewBlocks(ctx context.Context, ready chan<- struct{}) 
 
 			r.checkForNewInputs(ctx, apps, blockNumber)
 
-			r.checkForClaimStatus(ctx, apps, blockNumber)
-
 			r.checkForOutputExecution(ctx, apps, blockNumber)
 
 		}

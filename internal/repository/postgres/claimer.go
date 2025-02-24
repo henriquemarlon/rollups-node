@@ -19,12 +19,19 @@ var (
 	ErrNoUpdate = fmt.Errorf("update did not take effect")
 )
 
-// Retrieve the computed claim of each application with the smallest index.
+// Retrieve the claim of each application with the smallest index.
 // The query may return either 0 or 1 entries per application.
-func (r *PostgresRepository) SelectOldestComputedClaimPerApp(ctx context.Context) (
+func (r *PostgresRepository) selectOldestClaimPerApp(
+	ctx context.Context,
+	epochStatus model.EpochStatus,
+) (
 	map[common.Address]*model.ClaimRow,
 	error,
 ) {
+	if (epochStatus != model.EpochStatus_ClaimSubmitted) && (epochStatus != model.EpochStatus_ClaimComputed) {
+		return nil, fmt.Errorf("Invalid epoch status: %v", epochStatus)
+	}
+
 	// NOTE(mpolitzer): DISTINCT ON is a postgres extension. To implement
 	// this in SQLite there is an alternative using GROUP BY and HAVING
 	// clauses instead.
@@ -50,10 +57,7 @@ func (r *PostgresRepository) SelectOldestComputedClaimPerApp(ctx context.Context
 					table.Epoch.ApplicationID.EQ(table.Application.ID),
 				),
 		).
-		WHERE(
-			table.Epoch.Status.EQ(postgres.NewEnumValue(model.EpochStatus_ClaimComputed.String())).
-				AND(table.Application.State.EQ(postgres.NewEnumValue(model.ApplicationState_Enabled.String()))),
-		).
+		WHERE(table.Epoch.Status.EQ(postgres.NewEnumValue(epochStatus.String())).AND(table.Application.State.EQ(postgres.NewEnumValue(model.ApplicationState_Enabled.String())))).
 		ORDER_BY(
 			table.Epoch.ApplicationID,
 			table.Epoch.Index.ASC(),
@@ -92,10 +96,18 @@ func (r *PostgresRepository) SelectOldestComputedClaimPerApp(ctx context.Context
 }
 
 // Retrieve the newest accepted claim of each application
-func (r *PostgresRepository) SelectNewestSubmittedOrAcceptedClaimPerApp(ctx context.Context) (
+func (r *PostgresRepository) selectNewestAcceptedClaimPerApp(
+	ctx context.Context,
+	includeSubmitted bool,
+) (
 	map[common.Address]*model.ClaimRow,
 	error,
 ) {
+	expr := table.Epoch.Status.EQ(postgres.NewEnumValue(model.EpochStatus_ClaimAccepted.String()))
+	if includeSubmitted {
+		expr = expr.OR(table.Epoch.Status.EQ(postgres.NewEnumValue(model.EpochStatus_ClaimSubmitted.String())))
+	}
+
 	// NOTE(mpolitzer): DISTINCT ON is a postgres extension. To implement
 	// this in SQLite there is an alternative using GROUP BY and HAVING
 	// clauses instead.
@@ -121,11 +133,7 @@ func (r *PostgresRepository) SelectNewestSubmittedOrAcceptedClaimPerApp(ctx cont
 					table.Epoch.ApplicationID.EQ(table.Application.ID),
 				),
 		).
-		WHERE(
-			table.Epoch.Status.EQ(postgres.NewEnumValue(model.EpochStatus_ClaimSubmitted.String())).
-				OR(table.Epoch.Status.EQ(postgres.NewEnumValue(model.EpochStatus_ClaimAccepted.String()))).
-				AND(table.Application.State.EQ(postgres.NewEnumValue(model.ApplicationState_Enabled.String()))),
-		).
+		WHERE(expr.AND(table.Application.State.EQ(postgres.NewEnumValue(model.ApplicationState_Enabled.String())))).
 		ORDER_BY(
 			table.Epoch.ApplicationID,
 			table.Epoch.Index.DESC(),
@@ -163,7 +171,7 @@ func (r *PostgresRepository) SelectNewestSubmittedOrAcceptedClaimPerApp(ctx cont
 	return results, nil
 }
 
-func (r *PostgresRepository) SelectClaimPairsPerApp(ctx context.Context) (
+func (r *PostgresRepository) SelectSubmissionClaimPairsPerApp(ctx context.Context) (
 	map[common.Address]*model.ClaimRow,
 	map[common.Address]*model.ClaimRow,
 	error,
@@ -177,17 +185,44 @@ func (r *PostgresRepository) SelectClaimPairsPerApp(ctx context.Context) (
 	}
 	defer tx.Commit(ctx)
 
-	computed, err := r.SelectOldestComputedClaimPerApp(ctx)
+	computed, err := r.selectOldestClaimPerApp(ctx, model.EpochStatus_ClaimComputed)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	accepted, err := r.SelectNewestSubmittedOrAcceptedClaimPerApp(ctx)
+	acceptedOrSubmitted, err := r.selectNewestAcceptedClaimPerApp(ctx, true)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return computed, accepted, err
+	return acceptedOrSubmitted, computed, err
+}
+
+func (r *PostgresRepository) SelectAcceptanceClaimPairsPerApp(ctx context.Context) (
+	map[common.Address]*model.ClaimRow,
+	map[common.Address]*model.ClaimRow,
+	error,
+) {
+	tx, err := r.db.BeginTx(ctx, pgx.TxOptions{
+		IsoLevel:   pgx.RepeatableRead,
+		AccessMode: pgx.ReadOnly,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	defer tx.Commit(ctx)
+
+	submitted, err := r.selectOldestClaimPerApp(ctx, model.EpochStatus_ClaimSubmitted)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	accepted, err := r.selectNewestAcceptedClaimPerApp(ctx, false)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return accepted, submitted, err
 }
 
 func (r *PostgresRepository) UpdateEpochWithSubmittedClaim(
@@ -212,6 +247,38 @@ func (r *PostgresRepository) UpdateEpochWithSubmittedClaim(
 			table.Epoch.ApplicationID.EQ(postgres.Int64(application_id)).
 				AND(table.Epoch.Index.EQ(postgres.RawFloat(fmt.Sprintf("%d", index)))).
 				AND(table.Epoch.Status.EQ(postgres.NewEnumValue(model.EpochStatus_ClaimComputed.String()))),
+		)
+
+	sqlStr, args := updStmt.Sql()
+	cmd, err := r.db.Exec(ctx, sqlStr, args...)
+	if err != nil {
+		return err
+	}
+	if cmd.RowsAffected() == 0 {
+		return ErrNoUpdate
+	}
+	return nil
+}
+
+func (r *PostgresRepository) UpdateEpochWithAcceptedClaim(
+	ctx context.Context,
+	application_id int64,
+	index uint64,
+) error {
+	updStmt := table.Epoch.
+		UPDATE(
+			table.Epoch.Status,
+		).
+		SET(
+			postgres.NewEnumValue(model.EpochStatus_ClaimAccepted.String()),
+		).
+		FROM(
+			table.Application,
+		).
+		WHERE(
+			table.Epoch.ApplicationID.EQ(postgres.Int64(application_id)).
+				AND(table.Epoch.Index.EQ(postgres.RawFloat(fmt.Sprintf("%d", index)))).
+				AND(table.Epoch.Status.EQ(postgres.NewEnumValue(model.EpochStatus_ClaimSubmitted.String()))),
 		)
 
 	sqlStr, args := updStmt.Sql()

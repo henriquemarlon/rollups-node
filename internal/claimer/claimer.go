@@ -172,7 +172,12 @@ func (s *Service) submitClaimsAndUpdateDatabase(se sideEffects) []error {
 		ready, receipt, err := se.pollTransaction(txHash)
 		if err != nil {
 			errs = append(errs, err)
-			return errs
+			s.Logger.Warn("claim submission failed, retrying.",
+				"txHash", txHash,
+				"err", err,
+				)
+			delete(s.claimsInFlight, key)
+			continue
 		}
 		if !ready {
 			continue

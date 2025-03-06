@@ -22,6 +22,10 @@ import (
 type Service struct {
 	service.Service
 	repository ValidatorRepository
+
+	// cached constants
+	pristineRootHash    common.Hash
+	pristinePostContext []common.Hash
 }
 
 type CreateInfo struct {
@@ -51,6 +55,9 @@ func Create(ctx context.Context, c *CreateInfo) (*Service, error) {
 		return nil, fmt.Errorf("repository on validator service Create is nil")
 	}
 
+	s.pristinePostContext = merkle.CreatePostContext()
+	s.pristineRootHash = s.pristinePostContext[merkle.TREE_DEPTH-1]
+
 	return s, nil
 }
 
@@ -73,20 +80,16 @@ func (v *Service) String() string {
 
 // The maximum height for the Merkle tree of all outputs produced
 // by an application
-const MAX_OUTPUT_TREE_HEIGHT = 63
+const MAX_OUTPUT_TREE_HEIGHT = merkle.TREE_DEPTH
 
 type ValidatorRepository interface {
 	ListApplications(ctx context.Context, f repository.ApplicationFilter, p repository.Pagination) ([]*Application, error)
 	UpdateApplicationState(ctx context.Context, appID int64, state ApplicationState, reason *string) error
-
 	ListOutputs(ctx context.Context, nameOrAddress string, f repository.OutputFilter, p repository.Pagination) ([]*Output, error)
-
+	GetLastOutputBeforeBlock(ctx context.Context, nameOrAddress string, block uint64) (*Output, error)
 	ListEpochs(ctx context.Context, nameOrAddress string, f repository.EpochFilter, p repository.Pagination) ([]*Epoch, error)
-
 	GetLastInput(ctx context.Context, appAddress string, epochIndex uint64) (*Input, error) // FIXME migrate to list
-
 	GetEpochByVirtualIndex(ctx context.Context, nameOrAddress string, index uint64) (*Epoch, error)
-
 	StoreClaimAndProofs(ctx context.Context, epoch *Epoch, outputs []*Output) error
 }
 
@@ -118,6 +121,25 @@ func getProcessedEpochs(ctx context.Context, er ValidatorRepository, address str
 	return er.ListEpochs(ctx, address, f, repository.Pagination{})
 }
 
+// setApplicationInoperable marks an application as inoperable with the given reason,
+// logs any error that occurs during the update, and returns an error with the reason.
+func (v *Service) setApplicationInoperable(ctx context.Context, app *Application, reasonFmt string, args ...interface{}) error {
+	reason := fmt.Sprintf(reasonFmt, args...)
+	appAddress := app.IApplicationAddress.String()
+
+	// Log the reason first
+	v.Logger.Error(reason, "application", appAddress)
+
+	// Update application state
+	err := v.repository.UpdateApplicationState(ctx, app.ID, ApplicationState_Inoperable, &reason)
+	if err != nil {
+		v.Logger.Error("failed to update application state to inoperable", "app", appAddress, "err", err)
+	}
+
+	// Return the error with the reason
+	return errors.New(reason)
+}
+
 // validateApplication calculates, validates and stores the claim and/or proofs
 // for each processed epoch of the application.
 func (v *Service) validateApplication(ctx context.Context, app *Application) error {
@@ -133,13 +155,13 @@ func (v *Service) validateApplication(ctx context.Context, app *Application) err
 
 	for _, epoch := range processedEpochs {
 		v.Logger.Debug("Started calculating claim",
-			"app", app.IApplicationAddress,
+			"application", appAddress,
 			"epoch_index", epoch.Index,
 			"last_block", epoch.LastBlock,
 		)
 		claim, outputs, err := v.createClaimAndProofs(ctx, app, epoch)
 		v.Logger.Info("Claim Computed",
-			"app", app.IApplicationAddress,
+			"application", appAddress,
 			"epoch_index", epoch.Index,
 			"last_block", epoch.LastBlock,
 		)
@@ -159,34 +181,22 @@ func (v *Service) validateApplication(ctx context.Context, app *Application) err
 		)
 		if err != nil {
 			return fmt.Errorf(
-				"failed to get the machine claim for epoch %v of application %v. %w",
-				epoch.Index, app.IApplicationAddress, err,
+				"failed to get the last Input for epoch %v of application %v. %w",
+				epoch.Index, appAddress, err,
 			)
 		}
 
 		if input.OutputsHash == nil {
-			reason := fmt.Sprintf(
+			return v.setApplicationInoperable(ctx, app,
 				"inconsistent state: machine claim for epoch %v of application %v was not found",
-				epoch.Index, app.IApplicationAddress,
-			)
-			err := v.repository.UpdateApplicationState(ctx, app.ID, ApplicationState_Inoperable, &reason)
-			if err != nil {
-				v.Logger.Error("failed to update application state to inoperable", "app", app.IApplicationAddress, "err", err)
-			}
-			return errors.New(reason)
+				epoch.Index, appAddress)
 		}
 
 		// ...and compare it to the hash calculated by the Validator
 		if *input.OutputsHash != *claim {
-			reason := fmt.Sprintf(
-				"validator claim does not match machine claim for epoch %v of application %v",
-				epoch.Index, app.IApplicationAddress,
-			)
-			err := v.repository.UpdateApplicationState(ctx, app.ID, ApplicationState_Inoperable, &reason)
-			if err != nil {
-				v.Logger.Error("failed to update application state to inoperable", "app", app.IApplicationAddress, "err", err)
-			}
-			return errors.New(reason)
+			return v.setApplicationInoperable(ctx, app,
+				"validator claim does not match machine claim for epoch %v of application %v. Expected: %v, Got %v",
+				epoch.Index, appAddress, *input.OutputsHash, *claim)
 		}
 
 		// update the epoch status and its claim
@@ -198,7 +208,7 @@ func (v *Service) validateApplication(ctx context.Context, app *Application) err
 		if err != nil {
 			return fmt.Errorf(
 				"failed to store claim and proofs for epoch %v of application %v. %w",
-				epoch.Index, app.IApplicationAddress, err,
+				epoch.Index, appAddress, err,
 			)
 		}
 	}
@@ -212,18 +222,6 @@ func (v *Service) validateApplication(ctx context.Context, app *Application) err
 	return nil
 }
 
-func getOutputsProducedInBlockRange(
-	ctx context.Context,
-	vr ValidatorRepository,
-	address string,
-	start uint64,
-	end uint64,
-) ([]*Output, error) {
-	r := repository.Range{Start: start, End: end}
-	f := repository.OutputFilter{BlockRange: Pointer(r)}
-	return vr.ListOutputs(ctx, address, f, repository.Pagination{})
-}
-
 // createClaimAndProofs calculates the claim and proofs for an epoch. It returns
 // the claim and the epoch outputs updated with their hash and proofs. In case
 // the epoch has no outputs, there are no proofs and it returns the pristine
@@ -234,12 +232,12 @@ func (v *Service) createClaimAndProofs(
 	epoch *Epoch,
 ) (*common.Hash, []*Output, error) {
 	appAddress := app.IApplicationAddress.String()
-	epochOutputs, err := getOutputsProducedInBlockRange(
-		ctx,
-		v.repository,
-		appAddress,
-		epoch.FirstBlock,
-		epoch.LastBlock,
+	epochOutputs, err := v.repository.ListOutputs(ctx, appAddress, repository.OutputFilter{
+		BlockRange: &repository.Range{
+			Start: epoch.FirstBlock,
+			End:   epoch.LastBlock,
+		}},
+		repository.Pagination{},
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf(
@@ -264,97 +262,79 @@ func (v *Service) createClaimAndProofs(
 		// and there is no previous epoch
 		if previousEpoch == nil {
 			// this is the first epoch, return the pristine claim
-			claim, _, err := merkle.CreateProofs(nil, MAX_OUTPUT_TREE_HEIGHT)
-			if err != nil {
-				reason := fmt.Sprintf(
-					"failed to create proofs for epoch %v (%v) of application %v. %s",
-					epoch.Index, epoch.VirtualIndex, appAddress, err.Error(),
-				)
-				err := v.repository.UpdateApplicationState(ctx, app.ID, ApplicationState_Inoperable, &reason)
-				if err != nil {
-					v.Logger.Error("failed to update application state to inoperable", "app", appAddress, "err", err)
-				}
-				return nil, nil, errors.New(reason)
-			}
-			return &claim, nil, nil
+			return &v.pristineRootHash, nil, nil
 		}
+		// if there are no outputs and there is a previous epoch, return its claim
+		if previousEpoch.ClaimHash == nil {
+			return nil, nil, v.setApplicationInoperable(ctx, app,
+				"invalid application state for epoch %v (%v) of application %v. Previous epoch has no claim.",
+				epoch.Index, epoch.VirtualIndex, appAddress)
+		}
+		return previousEpoch.ClaimHash, nil, nil
+	}
+
+	var pre []common.Hash
+	var index uint64
+	// it there is no previous epoch
+	if previousEpoch == nil {
+		// there are only new outputs, use a dummy pre context
+		pre = v.pristinePostContext
+		index = 0
 	} else {
-		// if epoch has outputs, calculate a new claim and proofs
-		var previousOutputs []*Output
-		if previousEpoch != nil {
-			// get all outputs created before the current epoch
-			previousOutputs, err = getOutputsProducedInBlockRange(
-				ctx,
-				v.repository,
-				appAddress,
-				0, // Current implementation requires all outputs
-				previousEpoch.LastBlock,
+		// retrieve the previous output, one not existing is ok... handled below
+		lastOutput, err := v.repository.GetLastOutputBeforeBlock(ctx, appAddress, epoch.FirstBlock)
+		if err != nil {
+			return nil, nil, fmt.Errorf(
+				"failed to get previous output for epoch %v (%v) of application %v. %w",
+				epoch.Index, epoch.VirtualIndex, appAddress, err,
 			)
-			if err != nil {
-				return nil, nil, fmt.Errorf(
-					"failed to get all outputs of application %v before epoch %d. %w",
-					appAddress, epoch.Index, err,
-				)
-			}
 		}
-		// the leaves of the Merkle tree are the Keccak256 hashes of all the
-		// outputs
-		leaves := make([]common.Hash, 0, len(epochOutputs)+len(previousOutputs))
-		for idx := range previousOutputs {
-			if previousOutputs[idx].Hash == nil {
-				// should never happen
-				reason := fmt.Sprintf(
-					"missing hash of output %d from input %d",
-					previousOutputs[idx].Index, previousOutputs[idx].InputIndex,
-				)
-				err := v.repository.UpdateApplicationState(ctx, app.ID, ApplicationState_Inoperable, &reason)
-				if err != nil {
-					v.Logger.Error("failed to update application state to inoperable", "app", appAddress, "err", err)
-				}
-				return nil, nil, errors.New(reason)
+		if lastOutput == nil {
+			// there are only new outputs, use a dummy pre context
+			pre = v.pristinePostContext
+			index = 0
+		} else {
+			// there are previous outputs, create a pre context from the last output.
+			if lastOutput.Hash == nil || len(lastOutput.OutputHashesSiblings) != merkle.TREE_DEPTH {
+				return nil, nil, v.setApplicationInoperable(ctx, app,
+					"Inconsistent application state (%v). Last output (%d) before epoch %d has no hash or invalid hash siblings.",
+					app.Name, lastOutput.Index, epoch.Index)
 			}
-			leaves = append(leaves, *previousOutputs[idx].Hash)
-		}
-		for idx := range epochOutputs {
-			hash := crypto.Keccak256Hash(epochOutputs[idx].RawData[:])
-			// update outputs with their hash
-			epochOutputs[idx].Hash = &hash
-			// add them to the leaves slice
-			leaves = append(leaves, hash)
+			pre = merkle.CreatePreContextFromProof(lastOutput.Index, *lastOutput.Hash, lastOutput.OutputHashesSiblings)
+			index = lastOutput.Index + 1
+
+			// make sure no output got skipped
+			if index != epochOutputs[0].Index {
+				return nil, nil, v.setApplicationInoperable(ctx, app,
+					"Inconsistent application state (%v). Output index mismatch. "+
+						"Last output (%d) before epoch %d and first output (%d) are not sequential.",
+					app.Name, lastOutput.Index, epoch.Index, epochOutputs[0].Index)
+			}
 		}
 
-		claim, proofs, err := merkle.CreateProofs(leaves, MAX_OUTPUT_TREE_HEIGHT)
-		if err != nil {
-			reason := fmt.Sprintf(
-				"failed to create proofs for epoch %v (%v) of application %v. %s",
-				epoch.Index, epoch.VirtualIndex, appAddress, err.Error(),
-			)
-			err := v.repository.UpdateApplicationState(ctx, app.ID, ApplicationState_Inoperable, &reason)
-			if err != nil {
-				v.Logger.Error("failed to update application state to inoperable", "app", appAddress, "err", err)
-			}
-			return nil, nil, errors.New(reason)
-		}
+	}
 
-		// update outputs with their proof
-		for idx := range epochOutputs {
-			start := epochOutputs[idx].Index * MAX_OUTPUT_TREE_HEIGHT
-			end := (epochOutputs[idx].Index * MAX_OUTPUT_TREE_HEIGHT) + MAX_OUTPUT_TREE_HEIGHT
-			epochOutputs[idx].OutputHashesSiblings = proofs[start:end]
-		}
-		return &claim, epochOutputs, nil
+	// we have outputs to compute, gather the values to call ComputeSiblingsMatrix
+	outputHashes := make([]common.Hash, 0, len(epochOutputs))
+	for _, output := range epochOutputs {
+		hash := crypto.Keccak256Hash(output.RawData[:])
+		// update outputs with their hash
+		output.Hash = &hash
+		// add them to the leaves slice
+		outputHashes = append(outputHashes, hash)
 	}
-	// if there are no outputs and there is a previous epoch, return its claim
-	if previousEpoch.ClaimHash == nil {
-		reason := fmt.Sprintf(
-			"missing claim for previous epoch %v (current %v) of application %v. This should never happen",
-			previousEpoch.Index, epoch.Index, appAddress,
-		)
-		err := v.repository.UpdateApplicationState(ctx, app.ID, ApplicationState_Inoperable, &reason)
-		if err != nil {
-			v.Logger.Error("failed to update application state to inoperable", "app", appAddress, "err", err)
-		}
-		return nil, nil, errors.New(reason)
+
+	// compute and store siblings
+	siblings, err := merkle.ComputeSiblingsMatrix(pre, outputHashes, v.pristinePostContext, index)
+	if err != nil {
+		return nil, nil, err
 	}
-	return previousEpoch.ClaimHash, nil, nil
+	// update outputs with their siblings
+	for idx, output := range epochOutputs {
+		start := merkle.TREE_DEPTH * idx
+		end := merkle.TREE_DEPTH * (idx + 1)
+		output.OutputHashesSiblings = siblings[start:end]
+	}
+	rootHash := merkle.ComputeRootHashFromProof(epochOutputs[0].Index, *epochOutputs[0].Hash, epochOutputs[0].OutputHashesSiblings)
+	return &rootHash, epochOutputs, nil
 }

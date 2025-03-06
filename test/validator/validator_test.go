@@ -5,6 +5,7 @@ package validator
 
 import (
 	"context"
+	"log/slog"
 	"math/big"
 	"testing"
 	"time"
@@ -59,6 +60,7 @@ func (s *ValidatorRepositoryIntegrationSuite) SetupSubTest() {
 	serviceArgs := validator.CreateInfo{
 		CreateInfo: service.CreateInfo{
 			Name: "validator",
+			LogLevel: slog.LevelDebug,
 		},
 		Repository: s.repository,
 	}
@@ -89,6 +91,11 @@ func (s *ValidatorRepositoryIntegrationSuite) TestItReturnsPristineClaim() {
 		_, err := s.repository.CreateApplication(s.ctx, app)
 		s.Require().Nil(err)
 
+		// if there are no outputs and no previous claim,
+		// a pristine claim is expected with no proofs
+		pristinePostContext := merkle.CreatePostContext()
+		pristineRootHash := pristinePostContext[merkle.TREE_DEPTH-1]
+
 		epoch := model.Epoch{
 			ApplicationID: 1,
 			Index:         0,
@@ -98,10 +105,6 @@ func (s *ValidatorRepositoryIntegrationSuite) TestItReturnsPristineClaim() {
 			LastBlock:     9,
 		}
 
-		// if there are no outputs and no previous claim,
-		// a pristine claim is expected with no proofs
-		expectedClaim, _, err := merkle.CreateProofs(nil, validator.MAX_OUTPUT_TREE_HEIGHT)
-		s.Require().Nil(err)
 
 		input := model.Input{
 			Index:                0,
@@ -121,14 +124,14 @@ func (s *ValidatorRepositoryIntegrationSuite) TestItReturnsPristineClaim() {
 		advanceResult := model.AdvanceResult{
 			InputIndex:  input.Index,
 			Status:      model.InputCompletionStatus_Accepted,
-			OutputsHash: expectedClaim,
+			OutputsHash: pristineRootHash,
 			MachineHash: &machinehash1,
 		}
 		err = s.repository.StoreAdvanceResult(s.ctx, 1, &advanceResult)
 		s.Require().Nil(err)
 
-		err = s.validator.Run(s.ctx)
-		s.Require().Nil(err)
+		errs := s.validator.Tick()
+		s.Require().Equal(0, len(errs))
 
 		updatedEpoch, err := s.repository.GetEpoch(s.ctx, app.IApplicationAddress.String(), epoch.Index)
 		s.Require().Nil(err)
@@ -138,7 +141,7 @@ func (s *ValidatorRepositoryIntegrationSuite) TestItReturnsPristineClaim() {
 		// epoch status was updated
 		s.Equal(model.EpochStatus_ClaimComputed, updatedEpoch.Status)
 		// claim is pristine claim
-		s.Equal(expectedClaim, *updatedEpoch.ClaimHash)
+		s.Equal(pristineRootHash, *updatedEpoch.ClaimHash)
 	})
 }
 
@@ -156,8 +159,11 @@ func (s *ValidatorRepositoryIntegrationSuite) TestItReturnsPreviousClaim() {
 		_, err := s.repository.CreateApplication(s.ctx, app)
 		s.Require().Nil(err)
 
+		pristinePostContext := merkle.CreatePostContext()
+		pristineRootHash := pristinePostContext[merkle.TREE_DEPTH-1]
+
 		// insert the first epoch with a claim
-		firstEpochClaim := common.BytesToHash([]byte("claim"))
+		firstEpochClaim := pristineRootHash
 		firstEpoch := model.Epoch{
 			ApplicationID: 1,
 			Index:         0,
@@ -229,8 +235,8 @@ func (s *ValidatorRepositoryIntegrationSuite) TestItReturnsPreviousClaim() {
 		err = s.repository.StoreAdvanceResult(s.ctx, 1, &advanceResult)
 		s.Require().Nil(err)
 
-		err = s.validator.Run(s.ctx)
-		s.Require().Nil(err)
+		errs := s.validator.Tick()
+		s.Require().Equal(0, len(errs))
 
 		updatedEpoch, err := s.repository.GetEpoch(s.ctx, app.IApplicationAddress.String(), secondEpoch.Index)
 		s.Require().Nil(err)
@@ -263,13 +269,13 @@ func (s *ValidatorRepositoryIntegrationSuite) TestItReturnsANewClaimAndProofs() 
 			Index:         0,
 			VirtualIndex:  0,
 			Status:        model.EpochStatus_InputsProcessed,
-			FirstBlock:    0,
-			LastBlock:     9,
+			FirstBlock:    10,
+			LastBlock:     19,
 		}
 
 		input := model.Input{
 			Index:                0,
-			BlockNumber:          9,
+			BlockNumber:          19,
 			RawData:              []byte("data"),
 			Status:               model.InputCompletionStatus_Accepted,
 			TransactionReference: common.BigToHash(big.NewInt(0)),
@@ -281,7 +287,9 @@ func (s *ValidatorRepositoryIntegrationSuite) TestItReturnsANewClaimAndProofs() 
 		s.Require().Nil(err)
 
 		outputRawData := []byte("output")
-		output := model.Output{RawData: outputRawData}
+		output := model.Output{
+			RawData: outputRawData,
+		}
 
 		// calculate the expected claim and proofs
 		expectedOutputHash := crypto.Keccak256Hash(outputRawData)
@@ -305,8 +313,8 @@ func (s *ValidatorRepositoryIntegrationSuite) TestItReturnsANewClaimAndProofs() 
 		err = s.repository.StoreAdvanceResult(s.ctx, 1, &advanceResult)
 		s.Require().Nil(err)
 
-		err = s.validator.Run(s.ctx)
-		s.Require().Nil(err)
+		errs := s.validator.Tick()
+		s.Require().Equal(0, len(errs))
 
 		updatedEpoch, err := s.repository.GetEpoch(s.ctx, app.IApplicationAddress.String(), epoch.Index)
 		s.Require().Nil(err)
@@ -444,8 +452,8 @@ func (s *ValidatorRepositoryIntegrationSuite) TestItReturnsANewClaimAndProofs() 
 		err = s.repository.StoreAdvanceResult(s.ctx, 1, &advanceResult)
 		s.Require().Nil(err)
 
-		err = s.validator.Run(s.ctx)
-		s.Require().Nil(err)
+		errs := s.validator.Tick()
+		s.Require().Equal(0, len(errs))
 
 		updatedSecondEpoch, err := s.repository.GetEpoch(
 			s.ctx,

@@ -248,3 +248,71 @@ func (r *PostgresRepository) ListOutputs(
 	}
 	return outputs, nil
 }
+
+func (r *PostgresRepository) GetLastOutputBeforeBlock(
+	ctx context.Context,
+	nameOrAddress string,
+	block uint64,
+) (*model.Output, error) {
+
+	whereClause, err := getWhereClauseFromNameOrAddress(nameOrAddress)
+	if err != nil {
+		return nil, err
+	}
+
+	sel := table.Output.
+		SELECT(
+			table.Output.InputEpochApplicationID,
+			table.Output.InputIndex,
+			table.Output.Index,
+			table.Output.RawData,
+			table.Output.Hash,
+			table.Output.OutputHashesSiblings,
+			table.Output.ExecutionTransactionHash,
+			table.Output.CreatedAt,
+			table.Output.UpdatedAt,
+		).
+		FROM(
+			table.Output.INNER_JOIN(
+				table.Application,
+				table.Output.InputEpochApplicationID.EQ(table.Application.ID),
+			).INNER_JOIN(
+				table.Input,
+				table.Output.InputEpochApplicationID.EQ(table.Input.EpochApplicationID).AND(
+					table.Output.InputIndex.EQ(table.Input.Index),
+				),
+			),
+		).
+		WHERE(
+			postgres.AND(
+				whereClause,
+				table.Input.BlockNumber.LT(postgres.RawFloat(fmt.Sprintf("%d", block))),
+				table.Input.Status.EQ(postgres.NewEnumValue(model.InputCompletionStatus_Accepted.String())),
+			),
+		).
+		ORDER_BY(table.Output.Index.DESC()).
+		LIMIT(1)
+
+	sqlStr, args := sel.Sql()
+	row := r.db.QueryRow(ctx, sqlStr, args...)
+
+	var out model.Output
+	err = row.Scan(
+		&out.InputEpochApplicationID,
+		&out.InputIndex,
+		&out.Index,
+		&out.RawData,
+		&out.Hash,
+		&out.OutputHashesSiblings,
+		&out.ExecutionTransactionHash,
+		&out.CreatedAt,
+		&out.UpdatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &out, nil
+}

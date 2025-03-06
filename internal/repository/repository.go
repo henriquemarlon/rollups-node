@@ -88,6 +88,7 @@ type OutputRepository interface {
 	GetOutput(ctx context.Context, nameOrAddress string, outputIndex uint64) (*Output, error)
 	UpdateOutputsExecution(ctx context.Context, nameOrAddress string, executedOutputs []*Output, blockNumber uint64) error
 	ListOutputs(ctx context.Context, nameOrAddress string, f OutputFilter, p Pagination) ([]*Output, error)
+	GetLastOutputBeforeBlock(ctx context.Context, nameOrAddress string, block uint64) (*Output, error)
 }
 
 type ReportRepository interface {

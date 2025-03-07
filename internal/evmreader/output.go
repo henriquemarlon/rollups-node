@@ -64,8 +64,9 @@ func (r *Service) readAndUpdateOutputs(
 	contract := app.applicationContract
 
 	opts := &bind.FilterOpts{
-		Start: lastOutputCheck + 1,
-		End:   &mostRecentBlockNumber,
+		Context: ctx,
+		Start:   lastOutputCheck + 1,
+		End:     &mostRecentBlockNumber,
 	}
 
 	outputExecutedEvents, err := contract.RetrieveOutputExecutionEvents(opts)

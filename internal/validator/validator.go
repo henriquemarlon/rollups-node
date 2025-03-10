@@ -64,11 +64,23 @@ func Create(ctx context.Context, c *CreateInfo) (*Service, error) {
 func (s *Service) Alive() bool     { return true }
 func (s *Service) Ready() bool     { return true }
 func (s *Service) Reload() []error { return nil }
+
+// Tick executes the Validator main logic of producing claims and/or proofs
+// for processed epochs of all running applications.
 func (s *Service) Tick() []error {
-	if err := s.Run(s.Context); err != nil {
-		return []error{err}
+	apps, err := getAllRunningApplications(s.Context, s.repository)
+	if err != nil {
+		return []error{fmt.Errorf("failed to get running applications. %w", err)}
 	}
-	return []error{}
+
+	// validate each application
+	errs := []error{}
+	for idx := range apps {
+		if err := s.validateApplication(s.Context, apps[idx]); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errs
 }
 func (s *Service) Stop(b bool) []error {
 	return nil
@@ -96,24 +108,6 @@ type ValidatorRepository interface {
 func getAllRunningApplications(ctx context.Context, er ValidatorRepository) ([]*Application, error) {
 	f := repository.ApplicationFilter{State: Pointer(ApplicationState_Enabled)}
 	return er.ListApplications(ctx, f, repository.Pagination{})
-}
-
-// Run executes the Validator main logic of producing claims and/or proofs
-// for processed epochs of all running applications. It is meant to be executed
-// inside a loop. If an error occurs while processing any epoch, it halts and
-// returns the error.
-func (v *Service) Run(ctx context.Context) error {
-	apps, err := getAllRunningApplications(ctx, v.repository)
-	if err != nil {
-		return fmt.Errorf("failed to get running applications. %w", err)
-	}
-
-	for idx := range apps {
-		if err := v.validateApplication(ctx, apps[idx]); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func getProcessedEpochs(ctx context.Context, er ValidatorRepository, address string) ([]*Epoch, error) {

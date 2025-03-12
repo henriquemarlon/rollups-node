@@ -39,7 +39,9 @@ package claimer
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"math/big"
 
 	"github.com/cartesi/rollups-node/internal/config"
@@ -72,12 +74,10 @@ type CreateInfo struct {
 type Service struct {
 	service.Service
 
-	repository        repository.Repository
-	ethConn           *ethclient.Client
-	txOpts            *bind.TransactOpts
+	repository        iclaimerRepository
+	blockchain        iclaimerBlockchain
 	claimsInFlight    map[common.Address]common.Hash // -> txHash
 	submissionEnabled bool
-	defaultBlock      config.DefaultBlock
 }
 
 const ClaimerConfigKey = "claimer"
@@ -93,6 +93,12 @@ func Create(ctx context.Context, c *CreateInfo) (*Service, error) {
 	if err = ctx.Err(); err != nil {
 		return nil, err // This returns context.Canceled or context.DeadlineExceeded.
 	}
+	if c.Repository == nil {
+		return nil, fmt.Errorf("repository on claimer service Create is nil")
+	}
+	if c.EthConn == nil {
+		return nil, fmt.Errorf("ethclient on claimer service Create is nil")
+	}
 
 	s := &Service{}
 	c.CreateInfo.Impl = s
@@ -102,12 +108,12 @@ func Create(ctx context.Context, c *CreateInfo) (*Service, error) {
 		return nil, err
 	}
 
-	s.ethConn = c.EthConn
-	if s.ethConn == nil {
-		return nil, fmt.Errorf("ethclient on claimer service Create is nil")
+	nodeConfig, err := setupPersistentConfig(ctx, s.Logger, c.Repository, &c.Config)
+	if err != nil {
+		return nil, err
 	}
 
-	chainId, err := s.ethConn.ChainID(ctx)
+	chainId, err := c.EthConn.ChainID(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -115,30 +121,29 @@ func Create(ctx context.Context, c *CreateInfo) (*Service, error) {
 		return nil, fmt.Errorf("chainId mismatch: network %d != provided %d", chainId.Uint64(), c.Config.BlockchainId)
 	}
 
-	s.repository = c.Repository
-	if s.repository == nil {
-		return nil, fmt.Errorf("repository on claimer service Create is nil")
-	}
-
-	nodeConfig, err := s.setupPersistentConfig(ctx, &c.Config)
-	if err != nil {
-		return nil, err
-	}
 	if chainId.Uint64() != nodeConfig.ChainID {
 		return nil, fmt.Errorf("NodeConfig chainId mismatch: network %d != config %d",
 			chainId.Uint64(), nodeConfig.ChainID)
 	}
-
-	s.claimsInFlight = map[common.Address]common.Hash{}
 	s.submissionEnabled = nodeConfig.ClaimSubmissionEnabled
+	s.claimsInFlight = map[common.Address]common.Hash{}
 
-	if s.submissionEnabled && s.txOpts == nil {
-		s.txOpts, err = auth.GetTransactOpts(chainId)
+	var txOpts *bind.TransactOpts = nil
+	if s.submissionEnabled {
+		txOpts, err = auth.GetTransactOpts(chainId)
 		if err != nil {
 			return nil, err
 		}
 	}
-	s.defaultBlock = c.Config.BlockchainDefaultBlock
+
+	s.repository = c.Repository
+
+	s.blockchain = &claimerBlockchain{
+		logger:       s.Logger,
+		client:       c.EthConn,
+		txOpts:       txOpts,
+		defaultBlock: c.Config.BlockchainDefaultBlock,
+	}
 
 	return s, nil
 }
@@ -161,22 +166,22 @@ func (s *Service) Stop(bool) []error {
 
 func (s *Service) Tick() []error {
 	errs := []error{}
-	endBlock, err := GetBlockNumber(s.Context, s.ethConn, s.defaultBlock)
+	endBlock, err := s.blockchain.getBlockNumber(s.Context)
 	if err != nil {
 		errs = append(errs, err)
 		return errs
 	}
 
-	errs = append(errs, s.submitClaimsAndUpdateDatabase(s, endBlock)...)
-	errs = append(errs, s.acceptClaimsAndUpdateDatabase(s, endBlock)...)
+	errs = append(errs, s.submitClaimsAndUpdateDatabase(endBlock)...)
+	errs = append(errs, s.acceptClaimsAndUpdateDatabase(endBlock)...)
 
 	return errs
 }
 
 /* transition claims from computed to submitted */
-func (s *Service) submitClaimsAndUpdateDatabase(se sideEffects, endBlock *big.Int) []error {
+func (s *Service) submitClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 	errs := []error{}
-	acceptedOrSubmittedClaims, computedClaims, err := se.selectSubmissionClaimPairsPerApp()
+	acceptedOrSubmittedClaims, computedClaims, err := s.repository.SelectSubmissionClaimPairsPerApp(s.Context)
 	if err != nil {
 		errs = append(errs, err)
 		return errs
@@ -184,7 +189,7 @@ func (s *Service) submitClaimsAndUpdateDatabase(se sideEffects, endBlock *big.In
 
 	// check claims in flight
 	for key, txHash := range s.claimsInFlight {
-		ready, receipt, err := se.pollTransaction(txHash, endBlock)
+		ready, receipt, err := s.blockchain.pollTransaction(s.Context, txHash, endBlock)
 		if err != nil {
 			s.Logger.Warn("Claim submission failed, retrying.",
 				"txHash", txHash,
@@ -197,7 +202,7 @@ func (s *Service) submitClaimsAndUpdateDatabase(se sideEffects, endBlock *big.In
 			continue
 		}
 		if claim, ok := computedClaims[key]; ok {
-			err = se.updateEpochWithSubmittedClaim(claim, receipt.TxHash)
+			err = s.repository.UpdateEpochWithSubmittedClaim(s.Context, claim.ApplicationID, claim.Index, receipt.TxHash)
 			if err != nil {
 				errs = append(errs, err)
 				return errs
@@ -230,49 +235,42 @@ func (s *Service) submitClaimsAndUpdateDatabase(se sideEffects, endBlock *big.In
 		if prevExists {
 			err := checkClaimsConstraint(prevClaimRow, computedClaim)
 			if err != nil {
-				s.Logger.Error("database mismatch",
-					"prevClaim", prevClaimRow,
-					"currClaim", computedClaim,
-					"err", err,
+				err = s.setApplicationInoperable(
+					s.Context,
+					prevClaimRow.IApplicationAddress,
+					prevClaimRow.ApplicationID,
+					"database mismatch on epochs. application: %v, epochs: %v (%v), %v (%v).",
+					prevClaimRow.IApplicationAddress,
+					prevClaimRow.Index,
+					prevClaimRow.VirtualIndex,
+					computedClaim.Index,
+					computedClaim.VirtualIndex,
 				)
 				delete(computedClaims, key)
 				errs = append(errs, err)
-				// update application state to inoperable
-				err = se.updateApplicationState(
-					prevClaimRow.ApplicationID,
-					ApplicationState_Inoperable,
-					Pointer(err.Error()),
-				)
-				if err != nil {
-					errs = append(errs, err)
-				}
 				goto nextApp
 			}
 
 			// if prevClaimRow exists, there must be a matching event
 			ic, prevEvent, currEvent, err =
-				se.findClaimSubmissionEventAndSucc(prevClaimRow, endBlock)
+				s.blockchain.findClaimSubmissionEventAndSucc(s.Context, prevClaimRow, endBlock)
 			if err != nil {
 				delete(computedClaims, key)
 				errs = append(errs, err)
 				goto nextApp
 			}
 			if prevEvent == nil {
-				s.Logger.Error("missing event",
-					"claim", prevClaimRow,
-					"err", ErrMissingEvent,
+				err = s.setApplicationInoperable(
+					s.Context,
+					prevClaimRow.IApplicationAddress,
+					prevClaimRow.ApplicationID,
+					"epoch has no matching event. application: %v, epoch: %v (%v).",
+					prevClaimRow.IApplicationAddress,
+					prevClaimRow.Index,
+					prevClaimRow.VirtualIndex,
 				)
 				delete(computedClaims, key)
-				errs = append(errs, ErrMissingEvent)
-				// update application state to inoperable
-				err = se.updateApplicationState(
-					prevClaimRow.ApplicationID,
-					ApplicationState_Inoperable,
-					Pointer(ErrMissingEvent.Error()),
-				)
-				if err != nil {
-					errs = append(errs, err)
-				}
+				errs = append(errs, err)
 				goto nextApp
 			}
 			if !claimSubmissionMatch(prevClaimRow, prevEvent) {
@@ -281,23 +279,24 @@ func (s *Service) submitClaimsAndUpdateDatabase(se sideEffects, endBlock *big.In
 					"event", prevEvent,
 					"err", ErrEventMismatch,
 				)
-				delete(computedClaims, key)
-				errs = append(errs, ErrEventMismatch)
-				// update application state to inoperable
-				err = se.updateApplicationState(
+				err = s.setApplicationInoperable(
+					s.Context,
+					prevClaimRow.IApplicationAddress,
 					prevClaimRow.ApplicationID,
-					ApplicationState_Inoperable,
-					Pointer(ErrEventMismatch.Error()),
+					"epoch has an invalid event: %v, epoch: %v (%v). event: %v",
+					computedClaim.Index,
+					prevClaimRow.Index,
+					prevClaimRow.VirtualIndex,
+					prevEvent,
 				)
-				if err != nil {
-					errs = append(errs, err)
-				}
+				delete(computedClaims, key)
+				errs = append(errs, err)
 				goto nextApp
 			}
 		} else {
 			// first claim
 			ic, currEvent, _, err =
-				se.findClaimSubmissionEventAndSucc(computedClaim, endBlock)
+				s.blockchain.findClaimSubmissionEventAndSucc(s.Context, computedClaim, endBlock)
 			if err != nil {
 				delete(computedClaims, key)
 				errs = append(errs, err)
@@ -312,22 +311,15 @@ func (s *Service) submitClaimsAndUpdateDatabase(se sideEffects, endBlock *big.In
 				"last_block", currEvent.LastProcessedBlockNumber.Uint64(),
 			)
 			if !claimSubmissionMatch(computedClaim, currEvent) {
-				s.Logger.Error("event mismatch",
-					"claim", computedClaim,
-					"event", currEvent,
-					"err", ErrEventMismatch,
+				err = s.setApplicationInoperable(
+					s.Context,
+					computedClaim.IApplicationAddress,
+					computedClaim.ApplicationID,
+					"computed claim does not match event. computed_claim=%v, current_event=%v",
+					computedClaim, currEvent,
 				)
 				delete(computedClaims, key)
-				errs = append(errs, ErrEventMismatch)
-				// update application state to inoperable
-				err = se.updateApplicationState(
-					computedClaim.ApplicationID,
-					ApplicationState_Inoperable,
-					Pointer(ErrEventMismatch.Error()),
-				)
-				if err != nil {
-					errs = append(errs, err)
-				}
+				errs = append(errs, err)
 				goto nextApp
 			}
 			s.Logger.Debug("Updating claim status to submitted",
@@ -336,7 +328,12 @@ func (s *Service) submitClaimsAndUpdateDatabase(se sideEffects, endBlock *big.In
 				"last_block", computedClaim.LastBlock,
 			)
 			txHash := currEvent.Raw.TxHash
-			err = se.updateEpochWithSubmittedClaim(computedClaim, txHash)
+			err = s.repository.UpdateEpochWithSubmittedClaim(
+				s.Context,
+				computedClaim.ApplicationID,
+				computedClaim.Index,
+				txHash,
+			)
 			if err != nil {
 				delete(computedClaims, key)
 				errs = append(errs, err)
@@ -363,7 +360,7 @@ func (s *Service) submitClaimsAndUpdateDatabase(se sideEffects, endBlock *big.In
 				"claim_hash", fmt.Sprintf("%x", computedClaim.ClaimHash),
 				"last_block", computedClaim.LastBlock,
 			)
-			txHash, err := se.submitClaimToBlockchain(ic, computedClaim)
+			txHash, err := s.blockchain.submitClaimToBlockchain(ic, computedClaim)
 			if err != nil {
 				delete(computedClaims, key)
 				errs = append(errs, err)
@@ -383,11 +380,13 @@ func (s *Service) submitClaimsAndUpdateDatabase(se sideEffects, endBlock *big.In
 	return errs
 }
 
-func (s *Service) setupPersistentConfig(
+func setupPersistentConfig(
 	ctx context.Context,
+	logger *slog.Logger,
+	repo iclaimerRepository,
 	c *config.Config,
 ) (*PersistentConfig, error) {
-	config, err := repository.LoadNodeConfig[PersistentConfig](ctx, s.repository, ClaimerConfigKey)
+	config, err := repository.LoadNodeConfig[PersistentConfig](ctx, repo, ClaimerConfigKey)
 	if config == nil && err == nil {
 		nc := NodeConfig[PersistentConfig]{
 			Key: ClaimerConfigKey,
@@ -397,25 +396,25 @@ func (s *Service) setupPersistentConfig(
 				ChainID:                c.BlockchainId,
 			},
 		}
-		s.Logger.Info("Initializing claimer persistent config", "config", nc.Value)
-		err = repository.SaveNodeConfig(ctx, s.repository, &nc)
+		logger.Info("Initializing claimer persistent config", "config", nc.Value)
+		err = repository.SaveNodeConfig(ctx, repo, &nc)
 		if err != nil {
 			return nil, err
 		}
 		return &nc.Value, nil
 	} else if err == nil {
-		s.Logger.Info("Claimer was already configured. Using previous persistent config", "config", config.Value)
+		logger.Info("Claimer was already configured. Using previous persistent config", "config", config.Value)
 		return &config.Value, nil
 	}
 
-	s.Logger.Error("Could not retrieve persistent config from Database. %w", "error", err)
+	logger.Error("Could not retrieve persistent config from Database. %w", "error", err)
 	return nil, err
 }
 
 /* transition claims from submitted to accepted */
-func (s *Service) acceptClaimsAndUpdateDatabase(se sideEffects, endBlock *big.Int) []error {
+func (s *Service) acceptClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 	errs := []error{}
-	acceptedClaims, submittedClaims, err := se.selectAcceptanceClaimPairsPerApp()
+	acceptedClaims, submittedClaims, err := s.repository.SelectAcceptanceClaimPairsPerApp(s.Context)
 	if err != nil {
 		errs = append(errs, err)
 		return errs
@@ -442,7 +441,7 @@ func (s *Service) acceptClaimsAndUpdateDatabase(se sideEffects, endBlock *big.In
 
 			// if prevClaimRow exists, there must be a matching event
 			_, prevEvent, currEvent, err =
-				se.findClaimAcceptanceEventAndSucc(acceptedClaim, endBlock)
+				s.blockchain.findClaimAcceptanceEventAndSucc(s.Context, acceptedClaim, endBlock)
 			if err != nil {
 				delete(submittedClaims, key)
 				errs = append(errs, err)
@@ -470,7 +469,7 @@ func (s *Service) acceptClaimsAndUpdateDatabase(se sideEffects, endBlock *big.In
 		} else {
 			// first claim
 			_, currEvent, _, err =
-				se.findClaimAcceptanceEventAndSucc(submittedClaim, endBlock)
+				s.blockchain.findClaimAcceptanceEventAndSucc(s.Context, submittedClaim, endBlock)
 			if err != nil {
 				delete(submittedClaims, key)
 				errs = append(errs, err)
@@ -500,7 +499,7 @@ func (s *Service) acceptClaimsAndUpdateDatabase(se sideEffects, endBlock *big.In
 				"last_block", submittedClaim.LastBlock,
 			)
 			txHash := currEvent.Raw.TxHash
-			err = se.updateEpochWithAcceptedClaim(submittedClaim, txHash)
+			err = s.repository.UpdateEpochWithAcceptedClaim(s.Context, submittedClaim.ApplicationID, submittedClaim.Index)
 			if err != nil {
 				delete(submittedClaims, key)
 				errs = append(errs, err)
@@ -517,6 +516,25 @@ func (s *Service) acceptClaimsAndUpdateDatabase(se sideEffects, endBlock *big.In
 	nextApp:
 	}
 	return errs
+}
+
+// setApplicationInoperable marks an application as inoperable with the given reason,
+// logs any error that occurs during the update, and returns an error with the reason.
+func (s *Service) setApplicationInoperable(ctx context.Context, iApplicationAddress common.Address, id int64, reasonFmt string, args ...any) error {
+	reason := fmt.Sprintf(reasonFmt, args...)
+	appAddress := iApplicationAddress.String()
+
+	// Log the reason first
+	s.Logger.Error(reason, "application", appAddress)
+
+	// Update application state
+	err := s.repository.UpdateApplicationState(ctx, id, ApplicationState_Inoperable, &reason)
+	if err != nil {
+		s.Logger.Error("failed to update application state to inoperable", "app", appAddress, "err", err)
+	}
+
+	// Return the error with the reason
+	return errors.New(reason)
 }
 
 func checkClaimConstraint(c *ClaimRow) error {

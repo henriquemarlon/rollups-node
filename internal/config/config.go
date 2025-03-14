@@ -175,7 +175,7 @@ var (
 	notDefinedDefaultBlock    = func() model.DefaultBlock { return model.DefaultBlock_Finalized }
 	notDefinedRedactedString  = func() RedactedString { return RedactedString{""} }
 	notDefinedRedactedUint    = func() RedactedUint { return RedactedUint{0} }
-	notDefinedURL             = func() URL { return nil }
+	notDefinedURL             = func() URL { return &url.URL{} }
 	notDefinedMachineLogLevel = func() MachineLogLevel { return cartesimachine.MachineLogLevelInfo }
 	notDefinedAddress         = func() Address { return common.Address{} }
 )

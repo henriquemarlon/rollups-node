@@ -326,10 +326,6 @@ func (r *PostgresRepository) ListApplications(
 		conditions = append(conditions, table.Application.State.EQ(postgres.NewEnumValue(f.State.String())))
 	}
 
-	if f.Name != nil {
-		conditions = append(conditions, table.Application.Name.EQ(postgres.VarChar()(*f.Name)))
-	}
-
 	if len(conditions) > 0 {
 		sel = sel.WHERE(postgres.AND(conditions...))
 	}

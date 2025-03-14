@@ -243,12 +243,22 @@ func (r *PostgresRepository) ListInputs(
 		)
 
 	conditions := []postgres.BoolExpression{whereClause}
+	if f.EpochIndex != nil {
+		conditions = append(conditions, table.Input.EpochIndex.EQ(postgres.RawFloat(fmt.Sprintf("%d", *f.EpochIndex))))
+	}
+
 	if f.Status != nil {
 		conditions = append(conditions, table.Input.Status.EQ(postgres.NewEnumValue(f.Status.String())))
 	}
 
 	if f.NotStatus != nil {
 		conditions = append(conditions, table.Input.Status.NOT_EQ(postgres.NewEnumValue(f.NotStatus.String())))
+	}
+
+	if f.Sender != nil {
+		conditions = append(conditions,
+			postgres.SUBSTR(table.Input.RawData, postgres.Int(81), postgres.Int(20)).EQ(postgres.Bytea(f.Sender.Bytes())),
+		)
 	}
 
 	sel = sel.WHERE(postgres.AND(conditions...)).ORDER_BY(table.Input.Index.ASC())

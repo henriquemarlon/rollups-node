@@ -102,6 +102,24 @@ func (r *PostgresRepository) ListReports(
 		conditions = append(conditions, table.Report.InputIndex.EQ(postgres.RawFloat(fmt.Sprintf("%d", *f.InputIndex))))
 	}
 
+	if f.EpochIndex != nil {
+		sel = sel.
+			FROM( // Overwrite FROM clause to include input table
+				table.Report.INNER_JOIN(
+					table.Application,
+					table.Report.InputEpochApplicationID.EQ(table.Application.ID),
+				).
+					INNER_JOIN(
+						table.Input,
+						table.Report.InputIndex.EQ(table.Input.Index).
+							AND(table.Report.InputEpochApplicationID.EQ(table.Input.EpochApplicationID)),
+					),
+			)
+
+		conditions = append(conditions, table.Input.EpochIndex.EQ(postgres.RawFloat(fmt.Sprintf("%d", *f.EpochIndex))))
+		conditions = append(conditions, table.Input.Status.EQ(postgres.NewEnumValue(model.InputCompletionStatus_Accepted.String())))
+	}
+
 	sel = sel.WHERE(postgres.AND(conditions...)).ORDER_BY(table.Report.Index.ASC())
 
 	if p.Limit > 0 {

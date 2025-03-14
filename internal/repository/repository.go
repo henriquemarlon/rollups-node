@@ -19,9 +19,7 @@ type Pagination struct {
 }
 
 type ApplicationFilter struct {
-	State   *ApplicationState
-	Name    *string
-	Address *string
+	State *ApplicationState
 }
 
 type EpochFilter struct {
@@ -30,10 +28,10 @@ type EpochFilter struct {
 }
 
 type InputFilter struct {
-	EpochIndex           *uint64
-	Status               *InputCompletionStatus
-	NotStatus            *InputCompletionStatus
-	TransactionReference *common.Hash
+	EpochIndex *uint64
+	Status     *InputCompletionStatus
+	NotStatus  *InputCompletionStatus
+	Sender     *common.Address
 }
 
 type Range struct {
@@ -42,11 +40,15 @@ type Range struct {
 }
 
 type OutputFilter struct {
-	InputIndex *uint64
-	BlockRange *Range
+	EpochIndex     *uint64
+	InputIndex     *uint64
+	BlockRange     *Range
+	OutputType     *[]byte
+	VoucherAddress *common.Address
 }
 
 type ReportFilter struct {
+	EpochIndex *uint64
 	InputIndex *uint64
 }
 

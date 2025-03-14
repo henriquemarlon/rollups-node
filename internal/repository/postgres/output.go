@@ -208,8 +208,38 @@ func (r *PostgresRepository) ListOutputs(
 		conditions = append(conditions, table.Input.Status.EQ(postgres.NewEnumValue(model.InputCompletionStatus_Accepted.String())))
 	}
 
+	if f.EpochIndex != nil {
+		sel = sel.
+			FROM( // Overwrite FROM clause to include input table
+				table.Output.INNER_JOIN(
+					table.Application,
+					table.Output.InputEpochApplicationID.EQ(table.Application.ID),
+				).
+					INNER_JOIN(
+						table.Input,
+						table.Output.InputIndex.EQ(table.Input.Index).
+							AND(table.Output.InputEpochApplicationID.EQ(table.Input.EpochApplicationID)),
+					),
+			)
+
+		conditions = append(conditions, table.Input.EpochIndex.EQ(postgres.RawFloat(fmt.Sprintf("%d", *f.EpochIndex))))
+		conditions = append(conditions, table.Input.Status.EQ(postgres.NewEnumValue(model.InputCompletionStatus_Accepted.String())))
+	}
+
 	if f.InputIndex != nil {
 		conditions = append(conditions, table.Output.InputIndex.EQ(postgres.RawFloat(fmt.Sprintf("%d", *f.InputIndex))))
+	}
+
+	if f.OutputType != nil {
+		conditions = append(conditions,
+			postgres.SUBSTR(table.Output.RawData, postgres.Int(1), postgres.Int(4)).EQ(postgres.Bytea(*f.OutputType)),
+		)
+	}
+
+	if f.VoucherAddress != nil {
+		conditions = append(conditions,
+			postgres.SUBSTR(table.Output.RawData, postgres.Int(17), postgres.Int(20)).EQ(postgres.Bytea(f.VoucherAddress.Bytes())),
+		)
 	}
 
 	sel = sel.WHERE(postgres.AND(conditions...)).ORDER_BY(table.Output.Index.ASC())

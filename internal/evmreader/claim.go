@@ -63,7 +63,7 @@ func (r *Service) checkForClaimStatus(
 	}
 }
 
-func getPreviousEpochsWithSubmittedClaims(ctx context.Context, er EvmReaderRepository, appAddress string, block uint64) ([]*Epoch, error) {
+func getPreviousEpochsWithSubmittedClaims(ctx context.Context, er EvmReaderRepository, appAddress string, block uint64) ([]*Epoch, uint64, error) {
 	f := repository.EpochFilter{Status: Pointer(EpochStatus_ClaimSubmitted), BeforeBlock: Pointer(block)}
 	return er.ListEpochs(ctx, appAddress, f, repository.Pagination{})
 }
@@ -114,7 +114,7 @@ func (r *Service) readAndUpdateClaims(
 
 				// Get Previous Epochs with submitted claims, If is there any,
 				// Application is in an invalid State.
-				previousEpochs, err := getPreviousEpochsWithSubmittedClaims(
+				previousEpochs, _, err := getPreviousEpochsWithSubmittedClaims(
 					ctx, r.repository, appHexAddress, claimAcceptance.LastProcessedBlockNumber.Uint64())
 				if err != nil {
 					r.Logger.Error("Error retrieving previous submitted claims",

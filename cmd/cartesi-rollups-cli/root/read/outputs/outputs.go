@@ -171,12 +171,12 @@ func run(cmd *cobra.Command, args []string) {
 		if cmd.Flags().Changed("input-index") {
 			f := repository.OutputFilter{InputIndex: &inputIndex}
 			p := repository.Pagination{}
-			outputList, err = repo.ListOutputs(ctx, nameOrAddress, f, p)
+			outputList, _, err = repo.ListOutputs(ctx, nameOrAddress, f, p)
 			cobra.CheckErr(err)
 		} else {
 			f := repository.OutputFilter{}
 			p := repository.Pagination{}
-			outputList, err = repo.ListOutputs(ctx, nameOrAddress, f, p)
+			outputList, _, err = repo.ListOutputs(ctx, nameOrAddress, f, p)
 			cobra.CheckErr(err)
 		}
 		if decodeOutput {

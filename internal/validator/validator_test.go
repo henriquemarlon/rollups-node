@@ -138,7 +138,7 @@ func (s *ValidatorSuite) TestCreateClaimAndProofSuccess() {
 	s.Run("FirstEpochNoOutputs", func() {
 		repo.On("ListOutputs",
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		).Return([]*Output{}, nil)
+		).Return([]*Output{}, uint64(0), nil)
 
 		claimHash, _, err := validator.createClaimAndProofs(nil, &app, &dummyEpochs[0])
 		s.ErrorIs(nil, err)
@@ -154,7 +154,7 @@ func (s *ValidatorSuite) TestCreateClaimAndProofSuccess() {
 
 		repo.On("ListOutputs",
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		).Return([]*Output{&output}, nil)
+		).Return([]*Output{&output}, uint64(1), nil)
 
 		claimHash, _, err := validator.createClaimAndProofs(nil, &app, &dummyEpochs[0])
 		s.ErrorIs(nil, err)
@@ -165,7 +165,7 @@ func (s *ValidatorSuite) TestCreateClaimAndProofSuccess() {
 	s.Run("SecondEpochNoOutputs", func() {
 		repo.On("ListOutputs",
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		).Return([]*Output{}, nil).Once()
+		).Return([]*Output{}, uint64(0), nil).Once()
 
 		repo.On("GetEpochByVirtualIndex",
 			mock.Anything, mock.Anything, mock.Anything,
@@ -188,7 +188,7 @@ func (s *ValidatorSuite) TestCreateClaimAndProofSuccess() {
 		}
 		repo.On("ListOutputs",
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		).Return([]*Output{&newOutput0, &newOutput1}, nil).Once()
+		).Return([]*Output{&newOutput0, &newOutput1}, uint64(2), nil).Once()
 
 		repo.On("GetEpochByVirtualIndex",
 			mock.Anything, mock.Anything, mock.Anything,
@@ -214,7 +214,7 @@ func (s *ValidatorSuite) TestCreateClaimAndProofFailures() {
 	s.Run("ListOutputsFailure", func() {
 		repo.On("ListOutputs",
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		).Return([]*Output{}, xerror).Once()
+		).Return([]*Output{}, uint64(0), xerror).Once()
 
 		_, _, err := validator.createClaimAndProofs(nil, &app, &dummyEpochs[0])
 		s.NotNil(err)
@@ -225,7 +225,7 @@ func (s *ValidatorSuite) TestCreateClaimAndProofFailures() {
 	s.Run("GetEpochByVirtualIndex", func() {
 		repo.On("ListOutputs",
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		).Return([]*Output{}, nil).Once()
+		).Return([]*Output{}, uint64(0), nil).Once()
 
 		repo.On("GetEpochByVirtualIndex",
 			mock.Anything, mock.Anything, mock.Anything,
@@ -240,7 +240,7 @@ func (s *ValidatorSuite) TestCreateClaimAndProofFailures() {
 	s.Run("InvalidPreviousEpoch", func() {
 		repo.On("ListOutputs",
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		).Return([]*Output{}, nil).Once()
+		).Return([]*Output{}, uint64(0), nil).Once()
 
 		invalidEpoch := dummyEpochs[0]
 		invalidEpoch.ClaimHash = nil
@@ -261,7 +261,7 @@ func (s *ValidatorSuite) TestCreateClaimAndProofFailures() {
 	s.Run("GetLastOutputBeforeBlockFailure", func() {
 		repo.On("ListOutputs",
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		).Return([]*Output{&dummyOutputs[0]}, nil).Once()
+		).Return([]*Output{&dummyOutputs[0]}, uint64(1), nil).Once()
 
 		repo.On("GetEpochByVirtualIndex",
 			mock.Anything, mock.Anything, mock.Anything,
@@ -280,7 +280,7 @@ func (s *ValidatorSuite) TestCreateClaimAndProofFailures() {
 	s.Run("InvalidLastOutputiFailure", func() {
 		repo.On("ListOutputs",
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		).Return([]*Output{&dummyOutputs[0]}, nil).Once()
+		).Return([]*Output{&dummyOutputs[0]}, uint64(1), nil).Once()
 
 		repo.On("GetEpochByVirtualIndex",
 			mock.Anything, mock.Anything, mock.Anything,
@@ -303,7 +303,7 @@ func (s *ValidatorSuite) TestCreateClaimAndProofFailures() {
 	s.Run("OutputIndexMismatchFailure", func() {
 		repo.On("ListOutputs",
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		).Return([]*Output{{Index: 2}}, nil).Once()
+		).Return([]*Output{{Index: 2}}, uint64(1), nil).Once()
 
 		repo.On("GetEpochByVirtualIndex",
 			mock.Anything, mock.Anything, mock.Anything,
@@ -329,7 +329,7 @@ func (s *ValidatorSuite) TestValidateApplicationSuccess() {
 		Name: "dummy-application-name",
 	}
 	s.Run("NoEpoch", func() {
-		repo.On("ListEpochs", mock.Anything, app.IApplicationAddress.String(), mock.Anything, mock.Anything).Return(([]*Epoch)(nil), nil).Once()
+		repo.On("ListEpochs", mock.Anything, app.IApplicationAddress.String(), mock.Anything, mock.Anything).Return(([]*Epoch)(nil), uint64(0), nil).Once()
 
 		err := validator.validateApplication(nil, &app)
 		s.ErrorIs(nil, err)
@@ -344,11 +344,11 @@ func (s *ValidatorSuite) TestValidateApplicationSuccess() {
 
 		repo.On("ListEpochs",
 			mock.Anything, app.IApplicationAddress.String(), mock.Anything, mock.Anything,
-		).Return([]*Epoch{&dummyEpochs[0]}, nil).Once()
+		).Return([]*Epoch{&dummyEpochs[0]}, uint64(1), nil).Once()
 
 		repo.On("ListOutputs",
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		).Return([]*Output{}, nil).Once()
+		).Return([]*Output{}, uint64(0), nil).Once()
 
 		repo.On("GetLastInput",
 			mock.Anything, app.IApplicationAddress.String(), dummyEpochs[0].Index,
@@ -373,7 +373,7 @@ func (s *ValidatorSuite) TestValidateApplicationFailure() {
 	s.Run("getProcessedEpochsFailure", func() {
 		repo.On("ListEpochs",
 			mock.Anything, app.IApplicationAddress.String(), mock.Anything, mock.Anything,
-		).Return([]*Epoch{&dummyEpochs[0]}, xerror).Once()
+		).Return([]*Epoch{}, uint64(0), xerror).Once()
 
 		err := validator.validateApplication(nil, &app)
 		s.NotNil(err)
@@ -383,11 +383,11 @@ func (s *ValidatorSuite) TestValidateApplicationFailure() {
 	s.Run("createClaimAndProofsFailure", func() {
 		repo.On("ListEpochs",
 			mock.Anything, app.IApplicationAddress.String(), mock.Anything, mock.Anything,
-		).Return([]*Epoch{&dummyEpochs[0]}, nil).Once()
+		).Return([]*Epoch{&dummyEpochs[0]}, uint64(1), nil).Once()
 
 		repo.On("ListOutputs",
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		).Return([]*Output{}, xerror).Once()
+		).Return([]*Output{}, uint64(0), xerror).Once()
 
 		err := validator.validateApplication(nil, &app)
 		s.NotNil(err)
@@ -402,11 +402,11 @@ func (s *ValidatorSuite) TestValidateApplicationFailure() {
 
 		repo.On("ListEpochs",
 			mock.Anything, app.IApplicationAddress.String(), mock.Anything, mock.Anything,
-		).Return([]*Epoch{&dummyEpochs[0]}, nil).Once()
+		).Return([]*Epoch{&dummyEpochs[0]}, uint64(1), nil).Once()
 
 		repo.On("ListOutputs",
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		).Return([]*Output{}, nil).Once()
+		).Return([]*Output{}, uint64(0), nil).Once()
 
 		repo.On("GetLastInput",
 			mock.Anything, app.IApplicationAddress.String(), dummyEpochs[0].Index,
@@ -425,11 +425,11 @@ func (s *ValidatorSuite) TestValidateApplicationFailure() {
 
 		repo.On("ListEpochs",
 			mock.Anything, app.IApplicationAddress.String(), mock.Anything, mock.Anything,
-		).Return([]*Epoch{&dummyEpochs[0]}, nil).Once()
+		).Return([]*Epoch{&dummyEpochs[0]}, uint64(1), nil).Once()
 
 		repo.On("ListOutputs",
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		).Return([]*Output{}, nil).Once()
+		).Return([]*Output{}, uint64(0), nil).Once()
 
 		repo.On("GetLastInput",
 			mock.Anything, app.IApplicationAddress.String(), dummyEpochs[0].Index,
@@ -453,11 +453,11 @@ func (s *ValidatorSuite) TestValidateApplicationFailure() {
 
 		repo.On("ListEpochs",
 			mock.Anything, app.IApplicationAddress.String(), mock.Anything, mock.Anything,
-		).Return([]*Epoch{&dummyEpochs[0]}, nil).Once()
+		).Return([]*Epoch{&dummyEpochs[0]}, uint64(1), nil).Once()
 
 		repo.On("ListOutputs",
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		).Return([]*Output{}, nil).Once()
+		).Return([]*Output{}, uint64(0), nil).Once()
 
 		repo.On("GetLastInput",
 			mock.Anything, app.IApplicationAddress.String(), dummyEpochs[0].Index,
@@ -480,11 +480,11 @@ func (s *ValidatorSuite) TestValidateApplicationFailure() {
 
 		repo.On("ListEpochs",
 			mock.Anything, app.IApplicationAddress.String(), mock.Anything, mock.Anything,
-		).Return([]*Epoch{&dummyEpochs[0]}, nil).Once()
+		).Return([]*Epoch{&dummyEpochs[0]}, uint64(1), nil).Once()
 
 		repo.On("ListOutputs",
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
-		).Return([]*Output{}, nil).Once()
+		).Return([]*Output{}, uint64(0), nil).Once()
 
 		repo.On("GetLastInput",
 			mock.Anything, app.IApplicationAddress.String(), dummyEpochs[0].Index,
@@ -512,9 +512,9 @@ func (m *Mockrepo) ListApplications(
 	ctx context.Context,
 	f repository.ApplicationFilter,
 	pagination repository.Pagination,
-) ([]*Application, error) {
+) ([]*Application, uint64, error) {
 	args := m.Called(ctx, f, pagination)
-	return args.Get(0).([]*Application), args.Error(1)
+	return args.Get(0).([]*Application), args.Get(1).(uint64), args.Error(2)
 }
 
 func (m *Mockrepo) ListOutputs(
@@ -522,9 +522,9 @@ func (m *Mockrepo) ListOutputs(
 	nameOrAddress string,
 	f repository.OutputFilter,
 	p repository.Pagination,
-) ([]*Output, error) {
+) ([]*Output, uint64, error) {
 	args := m.Called(ctx, nameOrAddress, f, p)
-	return args.Get(0).([]*Output), args.Error(1)
+	return args.Get(0).([]*Output), args.Get(1).(uint64), args.Error(2)
 }
 
 func (m *Mockrepo) GetLastOutputBeforeBlock(
@@ -541,9 +541,9 @@ func (m *Mockrepo) ListEpochs(
 	nameOrAddress string,
 	f repository.EpochFilter,
 	p repository.Pagination,
-) ([]*Epoch, error) {
+) ([]*Epoch, uint64, error) {
 	args := m.Called(ctx, nameOrAddress, f, p)
-	return args.Get(0).([]*Epoch), args.Error(1)
+	return args.Get(0).([]*Epoch), args.Get(1).(uint64), args.Error(2)
 }
 
 func (m *Mockrepo) GetLastInput(ctx context.Context, appAddress string, epochIndex uint64) (*Input, error) {
@@ -551,7 +551,7 @@ func (m *Mockrepo) GetLastInput(ctx context.Context, appAddress string, epochInd
 	if input, ok := args.Get(0).(*Input); ok {
 		return input, args.Error(1)
 	}
-	return nil, args.Error(1)
+	return args.Get(0).(*Input), args.Error(1)
 }
 
 func (m *Mockrepo) GetEpochByVirtualIndex(ctx context.Context, nameOrAddress string, index uint64) (*Epoch, error) {
@@ -559,7 +559,7 @@ func (m *Mockrepo) GetEpochByVirtualIndex(ctx context.Context, nameOrAddress str
 	if epoch, ok := args.Get(0).(*Epoch); ok {
 		return epoch, args.Error(1)
 	}
-	return nil, args.Error(1)
+	return args.Get(0).(*Epoch), args.Error(1)
 }
 
 func (m *Mockrepo) StoreClaimAndProofs(ctx context.Context, epoch *Epoch, outputs []*Output) error {

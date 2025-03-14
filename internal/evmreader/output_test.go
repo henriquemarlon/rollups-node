@@ -34,7 +34,7 @@ func (s *EvmReaderSuite) TestOutputExecution() {
 		IConsensusAddress:    common.HexToAddress("0xdeadbeef"),
 		EpochLength:          10,
 		LastOutputCheckBlock: 0x10,
-	}}, nil).Once()
+	}}, uint64(1), nil).Once()
 	s.repository.On(
 		"ListApplications",
 		mock.Anything,
@@ -45,7 +45,7 @@ func (s *EvmReaderSuite) TestOutputExecution() {
 		IConsensusAddress:    common.HexToAddress("0xdeadbeef"),
 		EpochLength:          10,
 		LastOutputCheckBlock: 0x11,
-	}}, nil).Once()
+	}}, uint64(1), nil).Once()
 
 	s.repository.Unset("UpdateOutputsExecution")
 	s.repository.On("UpdateOutputsExecution",
@@ -181,7 +181,7 @@ func (s *EvmReaderSuite) TestReadOutputExecution() {
 		IConsensusAddress:    common.HexToAddress("0xdeadbeef"),
 		EpochLength:          10,
 		LastOutputCheckBlock: 0x10,
-	}}, nil).Once()
+	}}, uint64(1), nil).Once()
 
 	output := &Output{
 		Index:   1,
@@ -313,7 +313,7 @@ func (s *EvmReaderSuite) TestCheckOutputFails() {
 			IConsensusAddress:    common.HexToAddress("0xdeadbeef"),
 			EpochLength:          10,
 			LastOutputCheckBlock: 0x10,
-		}}, nil).Once()
+		}}, uint64(1), nil).Once()
 
 		output := &Output{
 			Index:   1,
@@ -434,7 +434,7 @@ func (s *EvmReaderSuite) TestCheckOutputFails() {
 			IConsensusAddress:    common.HexToAddress("0xdeadbeef"),
 			EpochLength:          10,
 			LastOutputCheckBlock: 0x10,
-		}}, nil).Once()
+		}}, uint64(1), nil).Once()
 
 		repository.Unset("GetOutput")
 		repository.On("GetOutput",
@@ -550,7 +550,7 @@ func (s *EvmReaderSuite) TestCheckOutputFails() {
 			IConsensusAddress:    common.HexToAddress("0xdeadbeef"),
 			EpochLength:          10,
 			LastOutputCheckBlock: 0x10,
-		}}, nil).Once()
+		}}, uint64(1), nil).Once()
 
 		output := &Output{
 			Index:   1,

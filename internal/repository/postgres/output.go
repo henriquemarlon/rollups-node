@@ -157,11 +157,11 @@ func (r *PostgresRepository) ListOutputs(
 	nameOrAddress string,
 	f repository.OutputFilter,
 	p repository.Pagination,
-) ([]*model.Output, error) {
+) ([]*model.Output, uint64, error) {
 
 	whereClause, err := getWhereClauseFromNameOrAddress(nameOrAddress)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	sel := table.Output.
@@ -175,6 +175,7 @@ func (r *PostgresRepository) ListOutputs(
 			table.Output.ExecutionTransactionHash,
 			table.Output.CreatedAt,
 			table.Output.UpdatedAt,
+			postgres.COUNT(postgres.STAR).OVER().AS("total_count"),
 		).
 		FROM(
 			table.Output.
@@ -214,20 +215,21 @@ func (r *PostgresRepository) ListOutputs(
 	sel = sel.WHERE(postgres.AND(conditions...)).ORDER_BY(table.Output.Index.ASC())
 
 	if p.Limit > 0 {
-		sel = sel.LIMIT(p.Limit)
+		sel = sel.LIMIT(int64(p.Limit))
 	}
 	if p.Offset > 0 {
-		sel = sel.OFFSET(p.Offset)
+		sel = sel.OFFSET(int64(p.Offset))
 	}
 
 	sqlStr, args := sel.Sql()
 	rows, err := r.db.Query(ctx, sqlStr, args...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
 	var outputs []*model.Output
+	var total uint64
 	for rows.Next() {
 		var out model.Output
 		err := rows.Scan(
@@ -240,13 +242,14 @@ func (r *PostgresRepository) ListOutputs(
 			&out.ExecutionTransactionHash,
 			&out.CreatedAt,
 			&out.UpdatedAt,
+			&total,
 		)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		outputs = append(outputs, &out)
 	}
-	return outputs, nil
+	return outputs, total, nil
 }
 
 func (r *PostgresRepository) GetLastOutputBeforeBlock(

@@ -42,32 +42,32 @@ func init() {
 }
 
 type EvmAdvance struct {
-	ChainId     string `json:"chainId"`
-	AppContract string `json:"appContract"`
-	MsgSender   string `json:"msgSender"`
-	BlockNumber string `json:"blockNumber"`
-	BlockTime   string `json:"blockTimestamp"`
-	PrevRandao  string `json:"prevRandao"`
-	Index       string `json:"index"`
-	Payload     string `json:"payload"`
+	ChainId        string `json:"chainId"`
+	AppContract    string `json:"appContract"`
+	MsgSender      string `json:"msgSender"`
+	BlockNumber    string `json:"blockNumber"`
+	BlockTimestamp string `json:"blockTimestamp"`
+	PrevRandao     string `json:"prevRandao"`
+	Index          string `json:"index"`
+	Payload        string `json:"payload"`
 }
 
 func decodeInputData(input *model.Input, parsedAbi *abi.ABI) (EvmAdvance, error) {
-	decoded := make(map[string]interface{})
+	decoded := make(map[string]any)
 	err := parsedAbi.Methods["EvmAdvance"].Inputs.UnpackIntoMap(decoded, input.RawData[4:])
 	if err != nil {
 		return EvmAdvance{}, err
 	}
 
 	params := EvmAdvance{
-		ChainId:     decoded["chainId"].(*big.Int).String(),
-		AppContract: decoded["appContract"].(common.Address).Hex(),
-		MsgSender:   decoded["msgSender"].(common.Address).Hex(),
-		BlockNumber: decoded["blockNumber"].(*big.Int).String(),
-		BlockTime:   decoded["blockTimestamp"].(*big.Int).String(),
-		PrevRandao:  decoded["prevRandao"].(*big.Int).String(),
-		Index:       decoded["index"].(*big.Int).String(),
-		Payload:     "0x" + hex.EncodeToString(decoded["payload"].([]byte)),
+		ChainId:        decoded["chainId"].(*big.Int).String(),
+		AppContract:    decoded["appContract"].(common.Address).Hex(),
+		MsgSender:      decoded["msgSender"].(common.Address).Hex(),
+		BlockNumber:    decoded["blockNumber"].(*big.Int).String(),
+		BlockTimestamp: decoded["blockTimestamp"].(*big.Int).String(),
+		PrevRandao:     decoded["prevRandao"].(*big.Int).String(),
+		Index:          decoded["index"].(*big.Int).String(),
+		Payload:        "0x" + hex.EncodeToString(decoded["payload"].([]byte)),
 	}
 
 	return params, nil
@@ -111,7 +111,7 @@ func run(cmd *cobra.Command, args []string) {
 		}
 
 	} else {
-		inputList, err := repo.ListInputs(ctx, nameOrAddress, repository.InputFilter{}, repository.Pagination{})
+		inputList, _, err := repo.ListInputs(ctx, nameOrAddress, repository.InputFilter{}, repository.Pagination{})
 		cobra.CheckErr(err)
 
 		if decodeInput {

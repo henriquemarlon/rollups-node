@@ -23,11 +23,11 @@ import (
 
 type MachinesRepository interface {
 	// GetMachineConfigurations retrieves a machine configuration for each application.
-	ListApplications(ctx context.Context, f repository.ApplicationFilter, p repository.Pagination) ([]*Application, error)
+	ListApplications(ctx context.Context, f repository.ApplicationFilter, p repository.Pagination) ([]*Application, uint64, error)
 
 	// GetProcessedInputs retrieves the processed inputs of an application with indexes greater or
 	// equal to the given input index.
-	ListInputs(ctx context.Context, nameOrAddress string, f repository.InputFilter, p repository.Pagination) ([]*Input, error)
+	ListInputs(ctx context.Context, nameOrAddress string, f repository.InputFilter, p repository.Pagination) ([]*Input, uint64, error)
 }
 
 // AdvanceMachine masks nodemachine.NodeMachine to only expose methods required by the Advancer.
@@ -51,7 +51,7 @@ type Machines struct {
 	Logger     *slog.Logger
 }
 
-func getAllRunningApplications(ctx context.Context, mr MachinesRepository) ([]*Application, error) {
+func getAllRunningApplications(ctx context.Context, mr MachinesRepository) ([]*Application, uint64, error) {
 	f := repository.ApplicationFilter{State: Pointer(ApplicationState_Enabled)}
 	return mr.ListApplications(ctx, f, repository.Pagination{})
 }
@@ -68,7 +68,7 @@ func Load(
 	logger *slog.Logger,
 	checkHash bool,
 ) (*Machines, error) {
-	apps, err := getAllRunningApplications(ctx, repo)
+	apps, _, err := getAllRunningApplications(ctx, repo)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func Load(
 }
 
 func (m *Machines) UpdateMachines(ctx context.Context) error {
-	apps, err := getAllRunningApplications(ctx, m.repository)
+	apps, _, err := getAllRunningApplications(ctx, m.repository)
 	if err != nil {
 		return err
 	}
@@ -316,8 +316,8 @@ func createMachine(ctx context.Context,
 	return nodeMachine, err
 }
 
-func getProcessedInputs(ctx context.Context, mr MachinesRepository, appAddress string, index uint64) ([]*Input, error) {
-	f := repository.InputFilter{InputIndex: Pointer(index), NotStatus: Pointer(InputCompletionStatus_None)}
+func getProcessedInputs(ctx context.Context, mr MachinesRepository, appAddress string) ([]*Input, uint64, error) {
+	f := repository.InputFilter{NotStatus: Pointer(InputCompletionStatus_None)}
 	return mr.ListInputs(ctx, appAddress, f, repository.Pagination{})
 }
 
@@ -334,7 +334,7 @@ func catchUp(ctx context.Context,
 		"processed_inputs", app.ProcessedInputs,
 	)
 
-	inputs, err := getProcessedInputs(ctx, repo, appAddress, 0)
+	inputs, _, err := getProcessedInputs(ctx, repo, appAddress)
 	if err != nil {
 		return err
 	}

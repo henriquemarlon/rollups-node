@@ -504,11 +504,11 @@ func (r *PostgresRepository) ListEpochs(
 	nameOrAddress string,
 	f repository.EpochFilter,
 	p repository.Pagination,
-) ([]*model.Epoch, error) {
+) ([]*model.Epoch, uint64, error) {
 
 	whereClause, err := getWhereClauseFromNameOrAddress(nameOrAddress)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	sel := table.Epoch.
@@ -523,6 +523,7 @@ func (r *PostgresRepository) ListEpochs(
 			table.Epoch.VirtualIndex,
 			table.Epoch.CreatedAt,
 			table.Epoch.UpdatedAt,
+			postgres.COUNT(postgres.STAR).OVER().AS("total_count"),
 		).
 		FROM(
 			table.Epoch.
@@ -544,20 +545,21 @@ func (r *PostgresRepository) ListEpochs(
 
 	// pagination
 	if p.Limit > 0 {
-		sel = sel.LIMIT(p.Limit)
+		sel = sel.LIMIT(int64(p.Limit))
 	}
 	if p.Offset > 0 {
-		sel = sel.OFFSET(p.Offset)
+		sel = sel.OFFSET(int64(p.Offset))
 	}
 
 	sqlStr, args := sel.Sql()
 	rows, err := r.db.Query(ctx, sqlStr, args...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
 	var epochs []*model.Epoch
+	var total uint64
 	for rows.Next() {
 		var ep model.Epoch
 		err := rows.Scan(
@@ -571,11 +573,12 @@ func (r *PostgresRepository) ListEpochs(
 			&ep.VirtualIndex,
 			&ep.CreatedAt,
 			&ep.UpdatedAt,
+			&total,
 		)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		epochs = append(epochs, &ep)
 	}
-	return epochs, nil
+	return epochs, total, nil
 }

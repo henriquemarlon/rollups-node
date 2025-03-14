@@ -33,7 +33,7 @@ func run(cmd *cobra.Command, args []string) {
 	cobra.CheckErr(err)
 	defer repo.Close()
 
-	applications, err := repo.ListApplications(ctx, repository.ApplicationFilter{}, repository.Pagination{})
+	applications, _, err := repo.ListApplications(ctx, repository.ApplicationFilter{}, repository.Pagination{})
 	cobra.CheckErr(err)
 
 	result, err := json.MarshalIndent(applications, "", "    ")

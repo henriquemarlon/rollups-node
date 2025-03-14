@@ -248,9 +248,9 @@ func (mock *MockRepository) ListInputs(
 	nameOrAddress string,
 	f repository.InputFilter,
 	p repository.Pagination,
-) ([]*Input, error) {
+) ([]*Input, uint64, error) {
 	address := common.HexToAddress(nameOrAddress)
-	return mock.GetInputsReturn[address], mock.GetInputsError
+	return mock.GetInputsReturn[address], uint64(len(mock.GetInputsReturn[address])), mock.GetInputsError
 }
 
 func (mock *MockRepository) StoreAdvanceResult(

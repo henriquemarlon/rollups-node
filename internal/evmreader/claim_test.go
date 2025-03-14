@@ -34,7 +34,7 @@ func (s *EvmReaderSuite) TestNoClaimsAcceptance() {
 		IConsensusAddress:   common.HexToAddress("0xdeadbeef"),
 		EpochLength:         10,
 		LastClaimCheckBlock: 0x10,
-	}}, nil).Once()
+	}}, uint64(1), nil).Once()
 	s.repository.On(
 		"ListApplications",
 		mock.Anything,
@@ -45,7 +45,7 @@ func (s *EvmReaderSuite) TestNoClaimsAcceptance() {
 		IConsensusAddress:   common.HexToAddress("0xdeadbeef"),
 		EpochLength:         10,
 		LastClaimCheckBlock: 0x11,
-	}}, nil).Once()
+	}}, uint64(1), nil).Once()
 
 	s.repository.Unset("UpdateEpochsClaimAccepted")
 	s.repository.On("UpdateEpochsClaimAccepted",
@@ -191,7 +191,7 @@ func (s *EvmReaderSuite) TestReadClaimAcceptance() {
 		IConsensusAddress:   common.HexToAddress("0xdeadbeef"),
 		EpochLength:         10,
 		LastClaimCheckBlock: 0x10,
-	}}, nil).Once()
+	}}, uint64(1), nil).Once()
 	s.repository.On(
 		"ListApplications",
 		mock.Anything,
@@ -202,7 +202,7 @@ func (s *EvmReaderSuite) TestReadClaimAcceptance() {
 		IConsensusAddress:   common.HexToAddress("0xdeadbeef"),
 		EpochLength:         10,
 		LastClaimCheckBlock: 0x11,
-	}}, nil).Once()
+	}}, uint64(1), nil).Once()
 
 	claim1Hash := common.HexToHash("0xdeadbeef")
 	claim0 := &Epoch{
@@ -225,7 +225,7 @@ func (s *EvmReaderSuite) TestReadClaimAcceptance() {
 		mock.Anything,
 		mock.Anything,
 		mock.Anything,
-	).Return([]*Epoch{}, nil)
+	).Return([]*Epoch{}, uint64(0), nil)
 
 	s.repository.Unset("UpdateEpochsClaimAccepted")
 	s.repository.On("UpdateEpochsClaimAccepted",
@@ -350,7 +350,7 @@ func (s *EvmReaderSuite) TestCheckClaimFails() {
 			IConsensusAddress:   common.HexToAddress("0xdeadbeef"),
 			EpochLength:         10,
 			LastClaimCheckBlock: 0x10,
-		}}, nil).Once()
+		}}, uint64(1), nil).Once()
 		repository.On(
 			"ListApplications",
 			mock.Anything,
@@ -361,7 +361,7 @@ func (s *EvmReaderSuite) TestCheckClaimFails() {
 			IConsensusAddress:   common.HexToAddress("0xdeadbeef"),
 			EpochLength:         10,
 			LastClaimCheckBlock: 0x11,
-		}}, nil).Once()
+		}}, uint64(1), nil).Once()
 
 		claim1Hash := common.HexToHash("0xdeadbeef")
 		claim1 := &Epoch{
@@ -384,7 +384,7 @@ func (s *EvmReaderSuite) TestCheckClaimFails() {
 			mock.Anything,
 			mock.Anything,
 			mock.Anything,
-		).Return([]*Epoch{}, fmt.Errorf("No previous epochs for you"))
+		).Return([]*Epoch{}, uint64(0), fmt.Errorf("No previous epochs for you"))
 
 		repository.Unset("UpdateEpochsClaimAccepted")
 		repository.On("UpdateEpochsClaimAccepted",
@@ -509,7 +509,7 @@ func (s *EvmReaderSuite) TestCheckClaimFails() {
 			IConsensusAddress:   common.HexToAddress("0xdeadbeef"),
 			EpochLength:         10,
 			LastClaimCheckBlock: 0x10,
-		}}, nil).Once()
+		}}, uint64(1), nil).Once()
 		repository.On(
 			"ListApplications",
 			mock.Anything,
@@ -520,7 +520,7 @@ func (s *EvmReaderSuite) TestCheckClaimFails() {
 			IConsensusAddress:   common.HexToAddress("0xdeadbeef"),
 			EpochLength:         10,
 			LastClaimCheckBlock: 0x11,
-		}}, nil).Once()
+		}}, uint64(1), nil).Once()
 
 		claim0Hash := common.HexToHash("0xdeadbeef")
 		claim0 := &Epoch{
@@ -543,7 +543,7 @@ func (s *EvmReaderSuite) TestCheckClaimFails() {
 			mock.Anything,
 			mock.Anything,
 			mock.Anything,
-		).Return([]*Epoch{claim0}, nil)
+		).Return([]*Epoch{claim0}, uint64(1), nil)
 
 		repository.Unset("UpdateEpochsClaimAccepted")
 		repository.On("UpdateEpochsClaimAccepted",
@@ -658,7 +658,7 @@ func (s *EvmReaderSuite) TestCheckClaimFails() {
 			IConsensusAddress:   common.HexToAddress("0xdeadbeef"),
 			EpochLength:         10,
 			LastClaimCheckBlock: 0x10,
-		}}, nil).Once()
+		}}, uint64(1), nil).Once()
 		repository.On(
 			"ListApplications",
 			mock.Anything,
@@ -669,7 +669,7 @@ func (s *EvmReaderSuite) TestCheckClaimFails() {
 			IConsensusAddress:   common.HexToAddress("0xdeadbeef"),
 			EpochLength:         10,
 			LastClaimCheckBlock: 0x11,
-		}}, nil).Once()
+		}}, uint64(1), nil).Once()
 
 		claim0Hash := common.HexToHash("0xdeadbeef")
 		claim0 := &Epoch{
@@ -686,7 +686,7 @@ func (s *EvmReaderSuite) TestCheckClaimFails() {
 			mock.Anything,
 			mock.Anything,
 			mock.Anything,
-		).Return([]*Epoch{claim0}, nil)
+		).Return([]*Epoch{claim0}, uint64(1), nil)
 
 		repository.Unset("UpdateEpochsClaimAccepted")
 		repository.On("UpdateEpochsClaimAccepted",

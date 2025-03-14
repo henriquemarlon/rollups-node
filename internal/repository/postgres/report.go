@@ -73,11 +73,11 @@ func (r *PostgresRepository) ListReports(
 	nameOrAddress string,
 	f repository.ReportFilter,
 	p repository.Pagination,
-) ([]*model.Report, error) {
+) ([]*model.Report, uint64, error) {
 
 	whereClause, err := getWhereClauseFromNameOrAddress(nameOrAddress)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	sel := table.Report.
@@ -88,6 +88,7 @@ func (r *PostgresRepository) ListReports(
 			table.Report.RawData,
 			table.Report.CreatedAt,
 			table.Report.UpdatedAt,
+			postgres.COUNT(postgres.STAR).OVER().AS("total_count"),
 		).
 		FROM(
 			table.Report.
@@ -104,20 +105,21 @@ func (r *PostgresRepository) ListReports(
 	sel = sel.WHERE(postgres.AND(conditions...)).ORDER_BY(table.Report.Index.ASC())
 
 	if p.Limit > 0 {
-		sel = sel.LIMIT(p.Limit)
+		sel = sel.LIMIT(int64(p.Limit))
 	}
 	if p.Offset > 0 {
-		sel = sel.OFFSET(p.Offset)
+		sel = sel.OFFSET(int64(p.Offset))
 	}
 
 	sqlStr, args := sel.Sql()
 	rows, err := r.db.Query(ctx, sqlStr, args...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
 	var reports []*model.Report
+	var total uint64
 	for rows.Next() {
 		var rp model.Report
 		err := rows.Scan(
@@ -127,11 +129,12 @@ func (r *PostgresRepository) ListReports(
 			&rp.RawData,
 			&rp.CreatedAt,
 			&rp.UpdatedAt,
+			&total,
 		)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		reports = append(reports, &rp)
 	}
-	return reports, nil
+	return reports, total, nil
 }

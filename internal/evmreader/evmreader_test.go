@@ -214,7 +214,7 @@ func (s *EvmReaderSuite) TestItWrongIConsensus() {
 		IConsensusAddress:   common.HexToAddress("0xFFFFFFFF"),
 		EpochLength:         10,
 		LastProcessedBlock:  0x00,
-	}}, nil).Once()
+	}}, uint64(1), nil).Once()
 
 	// Prepare Client
 	s.client.Unset("HeaderByNumber")
@@ -523,7 +523,7 @@ func newMockRepository() *MockRepository {
 		mock.Anything,
 		mock.Anything,
 		mock.Anything,
-	).Return([]*Epoch{}, nil)
+	).Return([]*Epoch{}, uint64(0), nil)
 
 	repo.On("UpdateEpochsClaimAccepted",
 		mock.Anything,
@@ -579,9 +579,9 @@ func (m *MockRepository) ListApplications(
 	ctx context.Context,
 	f repository.ApplicationFilter,
 	pagination repository.Pagination,
-) ([]*Application, error) {
+) ([]*Application, uint64, error) {
 	args := m.Called(ctx, f, pagination)
-	return args.Get(0).([]*Application), args.Error(1)
+	return args.Get(0).([]*Application), args.Get(1).(uint64), args.Error(2)
 }
 
 func (m *MockRepository) SaveNodeConfigRaw(ctx context.Context, key string, rawJSON []byte) error {
@@ -612,9 +612,9 @@ func (m *MockRepository) GetEpoch(ctx context.Context, nameOrAddress string, ind
 }
 
 func (m *MockRepository) ListEpochs(ctx context.Context, nameOrAddress string,
-	f repository.EpochFilter, p repository.Pagination) ([]*Epoch, error) {
+	f repository.EpochFilter, p repository.Pagination) ([]*Epoch, uint64, error) {
 	args := m.Called(ctx, nameOrAddress, f, p)
-	return args.Get(0).([]*Epoch), args.Error(1)
+	return args.Get(0).([]*Epoch), args.Get(1).(uint64), args.Error(2)
 }
 
 func (m *MockRepository) UpdateEpochsClaimAccepted(ctx context.Context, nameOrAddress string,

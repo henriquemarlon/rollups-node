@@ -276,7 +276,7 @@ func (r *PostgresRepository) ListApplications(
 	ctx context.Context,
 	f repository.ApplicationFilter,
 	p repository.Pagination,
-) ([]*model.Application, error) {
+) ([]*model.Application, uint64, error) {
 
 	sel := table.Application.
 		SELECT(
@@ -312,6 +312,7 @@ func (r *PostgresRepository) ListApplications(
 			table.ExecutionParameters.MaxConcurrentInspects,
 			table.ExecutionParameters.CreatedAt,
 			table.ExecutionParameters.UpdatedAt,
+			postgres.COUNT(postgres.STAR).OVER().AS("total_count"),
 		).
 		FROM(
 			table.Application.INNER_JOIN(
@@ -337,20 +338,21 @@ func (r *PostgresRepository) ListApplications(
 
 	// Apply pagination
 	if p.Limit > 0 {
-		sel = sel.LIMIT(p.Limit)
+		sel = sel.LIMIT(int64(p.Limit))
 	}
 	if p.Offset > 0 {
-		sel = sel.OFFSET(p.Offset)
+		sel = sel.OFFSET(int64(p.Offset))
 	}
 
 	sqlStr, args := sel.Sql()
 	rows, err := r.db.Query(ctx, sqlStr, args...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
 	var apps []*model.Application
+	var total uint64
 	for rows.Next() {
 		var app model.Application
 		err := rows.Scan(
@@ -386,14 +388,15 @@ func (r *PostgresRepository) ListApplications(
 			&app.ExecutionParameters.MaxConcurrentInspects,
 			&app.ExecutionParameters.CreatedAt,
 			&app.ExecutionParameters.UpdatedAt,
+			&total,
 		)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		apps = append(apps, &app)
 	}
 
-	return apps, nil
+	return apps, total, nil
 }
 
 func (r *PostgresRepository) GetExecutionParameters(

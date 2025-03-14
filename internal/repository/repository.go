@@ -14,8 +14,8 @@ import (
 )
 
 type Pagination struct {
-	Limit  int64
-	Offset int64
+	Limit  uint64
+	Offset uint64
 }
 
 type ApplicationFilter struct {
@@ -30,7 +30,7 @@ type EpochFilter struct {
 }
 
 type InputFilter struct {
-	InputIndex           *uint64
+	EpochIndex           *uint64
 	Status               *InputCompletionStatus
 	NotStatus            *InputCompletionStatus
 	TransactionReference *common.Hash
@@ -56,7 +56,7 @@ type ApplicationRepository interface {
 	UpdateApplication(ctx context.Context, app *Application) error
 	UpdateApplicationState(ctx context.Context, appID int64, state ApplicationState, reason *string) error
 	DeleteApplication(ctx context.Context, id int64) error
-	ListApplications(ctx context.Context, f ApplicationFilter, p Pagination) ([]*Application, error)
+	ListApplications(ctx context.Context, f ApplicationFilter, p Pagination) ([]*Application, uint64, error)
 
 	GetExecutionParameters(ctx context.Context, applicationID int64) (*ExecutionParameters, error)
 	UpdateExecutionParameters(ctx context.Context, ep *ExecutionParameters) error
@@ -74,26 +74,26 @@ type EpochRepository interface {
 	UpdateEpochsClaimAccepted(ctx context.Context, nameOrAddress string, epochs []*Epoch, mostRecentBlockNumber uint64) error
 	UpdateEpochsInputsProcessed(ctx context.Context, nameOrAddress string) (int64, error)
 
-	ListEpochs(ctx context.Context, nameOrAddress string, f EpochFilter, p Pagination) ([]*Epoch, error)
+	ListEpochs(ctx context.Context, nameOrAddress string, f EpochFilter, p Pagination) ([]*Epoch, uint64, error)
 }
 
 type InputRepository interface {
 	GetInput(ctx context.Context, nameOrAddress string, inputIndex uint64) (*Input, error)
 	GetInputByTxReference(ctx context.Context, nameOrAddress string, ref *common.Hash) (*Input, error)
-	GetLastInput(ctx context.Context, appAddress string, epochIndex uint64) (*Input, error) // FIXME remove me (list, filter and order)
-	ListInputs(ctx context.Context, nameOrAddress string, f InputFilter, p Pagination) ([]*Input, error)
+	GetLastInput(ctx context.Context, appAddress string, epochIndex uint64) (*Input, error)
+	ListInputs(ctx context.Context, nameOrAddress string, f InputFilter, p Pagination) ([]*Input, uint64, error)
 }
 
 type OutputRepository interface {
 	GetOutput(ctx context.Context, nameOrAddress string, outputIndex uint64) (*Output, error)
 	UpdateOutputsExecution(ctx context.Context, nameOrAddress string, executedOutputs []*Output, blockNumber uint64) error
-	ListOutputs(ctx context.Context, nameOrAddress string, f OutputFilter, p Pagination) ([]*Output, error)
+	ListOutputs(ctx context.Context, nameOrAddress string, f OutputFilter, p Pagination) ([]*Output, uint64, error)
 	GetLastOutputBeforeBlock(ctx context.Context, nameOrAddress string, block uint64) (*Output, error)
 }
 
 type ReportRepository interface {
 	GetReport(ctx context.Context, nameOrAddress string, reportIndex uint64) (*Report, error)
-	ListReports(ctx context.Context, nameOrAddress string, f ReportFilter, p Pagination) ([]*Report, error)
+	ListReports(ctx context.Context, nameOrAddress string, f ReportFilter, p Pagination) ([]*Report, uint64, error)
 }
 
 type BulkOperationsRepository interface {

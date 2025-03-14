@@ -213,11 +213,11 @@ func (r *PostgresRepository) ListInputs(
 	nameOrAddress string,
 	f repository.InputFilter,
 	p repository.Pagination,
-) ([]*model.Input, error) {
+) ([]*model.Input, uint64, error) {
 
 	whereClause, err := getWhereClauseFromNameOrAddress(nameOrAddress)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
 	sel := table.Input.
@@ -233,6 +233,7 @@ func (r *PostgresRepository) ListInputs(
 			table.Input.TransactionReference,
 			table.Input.CreatedAt,
 			table.Input.UpdatedAt,
+			postgres.COUNT(postgres.STAR).OVER().AS("total_count"),
 		).
 		FROM(
 			table.Input.
@@ -250,27 +251,24 @@ func (r *PostgresRepository) ListInputs(
 		conditions = append(conditions, table.Input.Status.NOT_EQ(postgres.NewEnumValue(f.NotStatus.String())))
 	}
 
-	if f.InputIndex != nil {
-		conditions = append(conditions, table.Input.Index.GT_EQ(postgres.RawFloat(fmt.Sprintf("%d", *f.InputIndex))))
-	}
-
 	sel = sel.WHERE(postgres.AND(conditions...)).ORDER_BY(table.Input.Index.ASC())
 
 	if p.Limit > 0 {
-		sel = sel.LIMIT(p.Limit)
+		sel = sel.LIMIT(int64(p.Limit))
 	}
 	if p.Offset > 0 {
-		sel = sel.OFFSET(p.Offset)
+		sel = sel.OFFSET(int64(p.Offset))
 	}
 
 	sqlStr, args := sel.Sql()
 	rows, err := r.db.Query(ctx, sqlStr, args...)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	defer rows.Close()
 
 	var inputs []*model.Input
+	var total uint64
 	for rows.Next() {
 		var in model.Input
 		err := rows.Scan(
@@ -285,11 +283,12 @@ func (r *PostgresRepository) ListInputs(
 			&in.TransactionReference,
 			&in.CreatedAt,
 			&in.UpdatedAt,
+			&total,
 		)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		inputs = append(inputs, &in)
 	}
-	return inputs, nil
+	return inputs, total, nil
 }

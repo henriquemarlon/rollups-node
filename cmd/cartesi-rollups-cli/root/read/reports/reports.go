@@ -69,14 +69,14 @@ func run(cmd *cobra.Command, args []string) {
 	} else if cmd.Flags().Changed("input-index") {
 		f := repository.ReportFilter{InputIndex: &inputIndex}
 		p := repository.Pagination{}
-		reports, err := repo.ListReports(ctx, nameOrAddress, f, p)
+		reports, _, err := repo.ListReports(ctx, nameOrAddress, f, p)
 		cobra.CheckErr(err)
 		result, err = json.MarshalIndent(reports, "", "    ")
 		cobra.CheckErr(err)
 	} else {
 		f := repository.ReportFilter{}
 		p := repository.Pagination{}
-		reports, err := repo.ListReports(ctx, nameOrAddress, f, p)
+		reports, _, err := repo.ListReports(ctx, nameOrAddress, f, p)
 		cobra.CheckErr(err)
 		result, err = json.MarshalIndent(reports, "", "    ")
 		cobra.CheckErr(err)

@@ -207,7 +207,7 @@ type InputSource interface {
 
 // Interface for the node repository
 type EvmReaderRepository interface {
-	ListApplications(ctx context.Context, f repository.ApplicationFilter, p repository.Pagination) ([]*Application, error)
+	ListApplications(ctx context.Context, f repository.ApplicationFilter, p repository.Pagination) ([]*Application, uint64, error)
 	UpdateApplicationState(ctx context.Context, appID int64, state ApplicationState, reason *string) error
 
 	SaveNodeConfigRaw(ctx context.Context, key string, rawJSON []byte) error
@@ -219,7 +219,7 @@ type EvmReaderRepository interface {
 		epochInputMap map[*Epoch][]*Input, blockNumber uint64,
 	) error
 	GetEpoch(ctx context.Context, nameOrAddress string, index uint64) (*Epoch, error)
-	ListEpochs(ctx context.Context, nameOrAddress string, f repository.EpochFilter, p repository.Pagination) ([]*Epoch, error)
+	ListEpochs(ctx context.Context, nameOrAddress string, f repository.EpochFilter, p repository.Pagination) ([]*Epoch, uint64, error)
 
 	// Claim acceptance monitor
 	UpdateEpochsClaimAccepted(ctx context.Context, nameOrAddress string, epochs []*Epoch, lastClaimCheckBlock uint64) error
@@ -290,7 +290,7 @@ func (r *Service) Run(ctx context.Context, ready chan struct{}) error {
 	}
 }
 
-func getAllRunningApplications(ctx context.Context, er EvmReaderRepository) ([]*Application, error) {
+func getAllRunningApplications(ctx context.Context, er EvmReaderRepository) ([]*Application, uint64, error) {
 	f := repository.ApplicationFilter{State: Pointer(ApplicationState_Enabled)}
 	return er.ListApplications(ctx, f, repository.Pagination{})
 }
@@ -319,7 +319,7 @@ func (r *Service) watchForNewBlocks(ctx context.Context, ready chan<- struct{}) 
 			r.Logger.Debug("New block header received", "blockNumber", header.Number, "blockHash", header.Hash())
 
 			r.Logger.Debug("Retrieving enabled applications")
-			runningApps, err := getAllRunningApplications(ctx, r.repository)
+			runningApps, _, err := getAllRunningApplications(ctx, r.repository)
 			if err != nil {
 				r.Logger.Error("Error retrieving running applications",
 					"error",
@@ -465,19 +465,4 @@ func (r *Service) getAppContracts(app *Application,
 
 	}
 	return applicationContract, consensus, nil
-}
-
-// getEpochLength reads the application epoch length given it's consensus contract
-func getEpochLength(consensus ConsensusContract) (uint64, error) {
-	// FIXME: move to ethutil
-
-	epochLengthRaw, err := consensus.GetEpochLength(nil)
-	if err != nil {
-		return 0, errors.Join(
-			fmt.Errorf("error retrieving application epoch length"),
-			err,
-		)
-	}
-
-	return epochLengthRaw.Uint64(), nil
 }

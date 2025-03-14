@@ -26,7 +26,7 @@ var (
 )
 
 type IAdvancerRepository interface {
-	ListInputs(ctx context.Context, nameOrAddress string, f repository.InputFilter, p repository.Pagination) ([]*Input, error)
+	ListInputs(ctx context.Context, nameOrAddress string, f repository.InputFilter, p repository.Pagination) ([]*Input, uint64, error)
 	StoreAdvanceResult(ctx context.Context, appID int64, ar *AdvanceResult) error
 	UpdateEpochsInputsProcessed(ctx context.Context, nameOrAddress string) (int64, error)
 	UpdateApplicationState(ctx context.Context, appID int64, state ApplicationState, reason *string) error
@@ -118,7 +118,7 @@ func (s *Service) String() string {
 	return s.Name
 }
 
-func getUnprocessedInputs(ctx context.Context, mr IAdvancerRepository, appAddress string) ([]*Input, error) {
+func getUnprocessedInputs(ctx context.Context, mr IAdvancerRepository, appAddress string) ([]*Input, uint64, error) {
 	f := repository.InputFilter{Status: Pointer(InputCompletionStatus_None)}
 	return mr.ListInputs(ctx, appAddress, f, repository.Pagination{})
 }
@@ -141,7 +141,7 @@ func (advancer *Service) Step(ctx context.Context) error {
 		// Gets the unprocessed inputs (of all apps) from the repository.
 		advancer.Logger.Debug("Querying for unprocessed inputs")
 
-		inputs, err := getUnprocessedInputs(ctx, advancer.repository, app.IApplicationAddress.String())
+		inputs, _, err := getUnprocessedInputs(ctx, advancer.repository, app.IApplicationAddress.String())
 		if err != nil {
 			return err
 		}

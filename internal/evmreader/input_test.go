@@ -31,7 +31,7 @@ func (s *EvmReaderSuite) TestItReadsInputsFromNewBlocks() {
 		IConsensusAddress:   common.HexToAddress("0xdeadbeef"),
 		EpochLength:         10,
 		LastProcessedBlock:  0x00,
-	}}, nil).Once()
+	}}, uint64(1), nil).Once()
 	s.repository.On(
 		"ListApplications",
 		mock.Anything,
@@ -42,7 +42,7 @@ func (s *EvmReaderSuite) TestItReadsInputsFromNewBlocks() {
 		IConsensusAddress:   common.HexToAddress("0xdeadbeef"),
 		EpochLength:         10,
 		LastProcessedBlock:  0x11,
-	}}, nil).Once()
+	}}, uint64(1), nil).Once()
 
 	// Prepare Client
 	s.client.Unset("HeaderByNumber")
@@ -136,7 +136,7 @@ func (s *EvmReaderSuite) TestItUpdatesLastProcessedBlockWhenThereIsNoInputs() {
 		IConsensusAddress:   common.HexToAddress("0xdeadbeef"),
 		EpochLength:         10,
 		LastProcessedBlock:  0x00,
-	}}, nil).Once()
+	}}, uint64(1), nil).Once()
 	s.repository.On(
 		"ListApplications",
 		mock.Anything,
@@ -147,7 +147,7 @@ func (s *EvmReaderSuite) TestItUpdatesLastProcessedBlockWhenThereIsNoInputs() {
 		IConsensusAddress:   common.HexToAddress("0xdeadbeef"),
 		EpochLength:         10,
 		LastProcessedBlock:  0x11,
-	}}, nil).Once()
+	}}, uint64(1), nil).Once()
 
 	// Prepare Client
 	s.client.Unset("HeaderByNumber")
@@ -267,7 +267,7 @@ func (s *EvmReaderSuite) TestItReadsMultipleInputsFromSingleNewBlock() {
 		IConsensusAddress:   common.HexToAddress("0xdeadbeef"),
 		EpochLength:         10,
 		LastProcessedBlock:  0x12,
-	}}, nil).Once()
+	}}, uint64(1), nil).Once()
 	s.repository.Unset("CreateEpochsAndInputs")
 	s.repository.On(
 		"CreateEpochsAndInputs",
@@ -341,7 +341,7 @@ func (s *EvmReaderSuite) TestItStartsWhenLasProcessedBlockIsTheMostRecentBlock()
 		IConsensusAddress:   common.HexToAddress("0xdeadbeef"),
 		EpochLength:         10,
 		LastProcessedBlock:  0x13,
-	}}, nil).Once()
+	}}, uint64(1), nil).Once()
 
 	// Start service
 	ready := make(chan struct{}, 1)

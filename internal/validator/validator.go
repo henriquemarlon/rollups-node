@@ -68,7 +68,7 @@ func (s *Service) Reload() []error { return nil }
 // Tick executes the Validator main logic of producing claims and/or proofs
 // for processed epochs of all running applications.
 func (s *Service) Tick() []error {
-	apps, err := getAllRunningApplications(s.Context, s.repository)
+	apps, _, err := getAllRunningApplications(s.Context, s.repository)
 	if err != nil {
 		return []error{fmt.Errorf("failed to get running applications. %w", err)}
 	}
@@ -95,22 +95,22 @@ func (v *Service) String() string {
 const MAX_OUTPUT_TREE_HEIGHT = merkle.TREE_DEPTH
 
 type ValidatorRepository interface {
-	ListApplications(ctx context.Context, f repository.ApplicationFilter, p repository.Pagination) ([]*Application, error)
+	ListApplications(ctx context.Context, f repository.ApplicationFilter, p repository.Pagination) ([]*Application, uint64, error)
 	UpdateApplicationState(ctx context.Context, appID int64, state ApplicationState, reason *string) error
-	ListOutputs(ctx context.Context, nameOrAddress string, f repository.OutputFilter, p repository.Pagination) ([]*Output, error)
+	ListOutputs(ctx context.Context, nameOrAddress string, f repository.OutputFilter, p repository.Pagination) ([]*Output, uint64, error)
 	GetLastOutputBeforeBlock(ctx context.Context, nameOrAddress string, block uint64) (*Output, error)
-	ListEpochs(ctx context.Context, nameOrAddress string, f repository.EpochFilter, p repository.Pagination) ([]*Epoch, error)
+	ListEpochs(ctx context.Context, nameOrAddress string, f repository.EpochFilter, p repository.Pagination) ([]*Epoch, uint64, error)
 	GetLastInput(ctx context.Context, appAddress string, epochIndex uint64) (*Input, error) // FIXME migrate to list
 	GetEpochByVirtualIndex(ctx context.Context, nameOrAddress string, index uint64) (*Epoch, error)
 	StoreClaimAndProofs(ctx context.Context, epoch *Epoch, outputs []*Output) error
 }
 
-func getAllRunningApplications(ctx context.Context, er ValidatorRepository) ([]*Application, error) {
+func getAllRunningApplications(ctx context.Context, er ValidatorRepository) ([]*Application, uint64, error) {
 	f := repository.ApplicationFilter{State: Pointer(ApplicationState_Enabled)}
 	return er.ListApplications(ctx, f, repository.Pagination{})
 }
 
-func getProcessedEpochs(ctx context.Context, er ValidatorRepository, address string) ([]*Epoch, error) {
+func getProcessedEpochs(ctx context.Context, er ValidatorRepository, address string) ([]*Epoch, uint64, error) {
 	f := repository.EpochFilter{Status: Pointer(EpochStatus_InputsProcessed)}
 	return er.ListEpochs(ctx, address, f, repository.Pagination{})
 }
@@ -139,7 +139,7 @@ func (v *Service) setApplicationInoperable(ctx context.Context, app *Application
 func (v *Service) validateApplication(ctx context.Context, app *Application) error {
 	v.Logger.Debug("Starting validation", "application", app.Name)
 	appAddress := app.IApplicationAddress.String()
-	processedEpochs, err := getProcessedEpochs(ctx, v.repository, appAddress)
+	processedEpochs, _, err := getProcessedEpochs(ctx, v.repository, appAddress)
 	if err != nil {
 		return fmt.Errorf(
 			"failed to get processed epochs of application %v. %w",
@@ -226,7 +226,7 @@ func (v *Service) createClaimAndProofs(
 	epoch *Epoch,
 ) (*common.Hash, []*Output, error) {
 	appAddress := app.IApplicationAddress.String()
-	epochOutputs, err := v.repository.ListOutputs(ctx, appAddress, repository.OutputFilter{
+	epochOutputs, _, err := v.repository.ListOutputs(ctx, appAddress, repository.OutputFilter{
 		BlockRange: &repository.Range{
 			Start: epoch.FirstBlock,
 			End:   epoch.LastBlock,

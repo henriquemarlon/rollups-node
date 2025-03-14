@@ -57,7 +57,7 @@ func run(cmd *cobra.Command, args []string) {
 		result, err = json.MarshalIndent(epoch, "", "    ")
 		cobra.CheckErr(err)
 	} else {
-		epochs, err := repo.ListEpochs(ctx, nameOrAddress, repository.EpochFilter{}, repository.Pagination{})
+		epochs, _, err := repo.ListEpochs(ctx, nameOrAddress, repository.EpochFilter{}, repository.Pagination{})
 		cobra.CheckErr(err)
 		result, err = json.MarshalIndent(epochs, "", "    ")
 		cobra.CheckErr(err)

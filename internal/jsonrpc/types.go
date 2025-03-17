@@ -4,6 +4,7 @@
 package jsonrpc
 
 import (
+	"bytes"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -25,24 +26,24 @@ type RPCRequest struct {
 	JSONRPC string          `json:"jsonrpc"`
 	Method  string          `json:"method"`
 	Params  json.RawMessage `json:"params"`
-	ID      interface{}     `json:"id"`
+	ID      any             `json:"id"`
 }
 
 type RPCResponse struct {
-	JSONRPC string      `json:"jsonrpc"`
-	Result  interface{} `json:"result,omitempty"`
-	Error   *RPCError   `json:"error,omitempty"`
-	ID      interface{} `json:"id"`
+	JSONRPC string    `json:"jsonrpc"`
+	Result  any       `json:"result,omitempty"`
+	Error   *RPCError `json:"error,omitempty"`
+	ID      any       `json:"id"`
 }
 
 type RPCError struct {
-	Code    int         `json:"code"`
-	Message string      `json:"message"`
-	Data    interface{} `json:"data,omitempty"`
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Data    any    `json:"data,omitempty"`
 }
 
 // writeRPCError sends a generic error response for internal errors.
-func writeRPCError(w http.ResponseWriter, id interface{}, code int, message string, data interface{}) {
+func writeRPCError(w http.ResponseWriter, id any, code int, message string, data any) {
 	// Hide detailed error info for internal errors.
 	if code == JSONRPC_INTERNAL_ERROR {
 		message = "Internal server error"
@@ -61,7 +62,7 @@ func writeRPCError(w http.ResponseWriter, id interface{}, code int, message stri
 	json.NewEncoder(w).Encode(resp)
 }
 
-func writeRPCResult(w http.ResponseWriter, id interface{}, result interface{}) {
+func writeRPCResult(w http.ResponseWriter, id any, result any) {
 	resp := RPCResponse{
 		JSONRPC: "2.0",
 		Result:  result,
@@ -117,8 +118,8 @@ type ListEpochsParams struct {
 
 // GetEpochParams aligns with the OpenRPC specification
 type GetEpochParams struct {
-	Application string `json:"application"`
-	Index       uint64 `json:"index"`
+	Application string  `json:"application"`
+	EpochIndex  *string `json:"epoch_index"`
 }
 
 // ListInputsParams aligns with the OpenRPC specification
@@ -128,14 +129,12 @@ type ListInputsParams struct {
 	Sender      *string `json:"sender,omitempty"`
 	Limit       uint64  `json:"limit"`
 	Offset      uint64  `json:"offset"`
-	Decode      bool    `json:"decode,omitempty"`
 }
 
 // GetInputParams aligns with the OpenRPC specification
 type GetInputParams struct {
-	Application string `json:"application"`
-	InputIndex  uint64 `json:"input_index"`
-	Decode      bool   `json:"decode,omitempty"`
+	Application string  `json:"application"`
+	InputIndex  *string `json:"input_index"`
 }
 
 // GetProcessedInputCountParams aligns with the OpenRPC specification
@@ -152,14 +151,12 @@ type ListOutputsParams struct {
 	VoucherAddress *string `json:"voucher_address,omitempty"`
 	Limit          uint64  `json:"limit"`
 	Offset         uint64  `json:"offset"`
-	Decode         bool    `json:"decode,omitempty"`
 }
 
 // GetOutputParams aligns with the OpenRPC specification
 type GetOutputParams struct {
-	Application string `json:"application"`
-	OutputIndex uint64 `json:"output_index"`
-	Decode      bool   `json:"decode,omitempty"`
+	Application string  `json:"application"`
+	OutputIndex *string `json:"output_index"`
 }
 
 // ListReportsParams aligns with the OpenRPC specification
@@ -173,8 +170,8 @@ type ListReportsParams struct {
 
 // GetReportParams aligns with the OpenRPC specification
 type GetReportParams struct {
-	Application string `json:"application"`
-	ReportIndex uint64 `json:"report_index"`
+	Application string  `json:"application"`
+	ReportIndex *string `json:"report_index"`
 }
 
 // Result types updated to match the OpenRPC specification
@@ -201,21 +198,21 @@ type EpochGetResult struct {
 }
 
 type InputListResult struct {
-	Data       []interface{} `json:"data"`
-	Pagination Pagination    `json:"pagination"`
+	Data       []any      `json:"data"`
+	Pagination Pagination `json:"pagination"`
 }
 
 type InputGetResult struct {
-	Data interface{} `json:"data"`
+	Data any `json:"data"`
 }
 
 type OutputListResult struct {
-	Data       []interface{} `json:"data"`
-	Pagination Pagination    `json:"pagination"`
+	Data       []any      `json:"data"`
+	Pagination Pagination `json:"pagination"`
 }
 
 type OutputGetResult struct {
-	Data interface{} `json:"data"`
+	Data any `json:"data"`
 }
 
 type ReportListResult struct {
@@ -232,43 +229,72 @@ type ReportGetResult struct {
 // -----------------------------------------------------------------------------
 
 type EvmAdvance struct {
-	ChainId        string `json:"chainId"`
-	AppContract    string `json:"appContract"`
-	MsgSender      string `json:"msgSender"`
-	BlockNumber    string `json:"blockNumber"`
-	BlockTimestamp string `json:"blockTimestamp"`
-	PrevRandao     string `json:"prevRandao"`
+	ChainId        string `json:"chain_id"`
+	AppContract    string `json:"application_contract"`
+	MsgSender      string `json:"sender"`
+	BlockNumber    string `json:"block_number"`
+	BlockTimestamp string `json:"block_timestamp"`
+	PrevRandao     string `json:"prev_randao"`
 	Index          string `json:"index"`
 	Payload        string `json:"payload"`
 }
 
 type DecodedInput struct {
-	model.Input
-	DecodedData EvmAdvance `json:"decoded_data"`
+	*model.Input
+	DecodedData *EvmAdvance `json:"decoded_data"`
 }
 
 func decodeInput(input *model.Input, parsedAbi *abi.ABI) (*DecodedInput, error) {
-	decoded := make(map[string]interface{})
+	decoded := make(map[string]any)
 	err := parsedAbi.Methods["EvmAdvance"].Inputs.UnpackIntoMap(decoded, input.RawData[4:])
 	if err != nil {
-		return nil, err
+		return &DecodedInput{Input: input}, err
 	}
 
 	evmAdvance := EvmAdvance{
-		ChainId:        decoded["chainId"].(*big.Int).String(),
+		ChainId:        fmt.Sprintf("0x%x", decoded["chainId"].(*big.Int)),
 		AppContract:    decoded["appContract"].(common.Address).Hex(),
 		MsgSender:      decoded["msgSender"].(common.Address).Hex(),
-		BlockNumber:    decoded["blockNumber"].(*big.Int).String(),
-		BlockTimestamp: decoded["blockTimestamp"].(*big.Int).String(),
-		PrevRandao:     decoded["prevRandao"].(*big.Int).String(),
-		Index:          decoded["index"].(*big.Int).String(),
+		BlockNumber:    fmt.Sprintf("0x%x", decoded["blockNumber"].(*big.Int)),
+		BlockTimestamp: fmt.Sprintf("0x%x", decoded["blockTimestamp"].(*big.Int)),
+		PrevRandao:     fmt.Sprintf("0x%x", decoded["prevRandao"].(*big.Int)),
+		Index:          fmt.Sprintf("0x%x", decoded["index"].(*big.Int)),
 		Payload:        "0x" + hex.EncodeToString(decoded["payload"].([]byte)),
 	}
 
 	return &DecodedInput{
-		Input:       *input,
-		DecodedData: evmAdvance,
+		Input:       input,
+		DecodedData: &evmAdvance,
 	}, nil
+}
+
+func (d *DecodedInput) MarshalJSON() ([]byte, error) {
+	// Marshal the underlying Input using its custom MarshalJSON.
+	inputJSON, err := d.Input.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	// Ensure inputJSON is a valid JSON object.
+	if len(inputJSON) == 0 || inputJSON[len(inputJSON)-1] != '}' {
+		return nil, fmt.Errorf("unexpected format from Input.MarshalJSON")
+	}
+
+	if d.DecodedData == nil {
+		return inputJSON, nil
+	}
+	// Marshal the DecodedData field.
+	decodedDataJSON, err := json.Marshal(d.DecodedData)
+	if err != nil {
+		return nil, err
+	}
+	// Use a bytes.Buffer to build the final JSON.
+	var buf bytes.Buffer
+	buf.Write(bytes.TrimSuffix(inputJSON, []byte("}")))
+	buf.WriteString(`,"decoded_data":`)
+	buf.Write(decodedDataJSON)
+	buf.WriteByte('}')
+
+	return buf.Bytes(), nil
 }
 
 type Notice struct {
@@ -290,28 +316,29 @@ type DelegateCallVoucher struct {
 }
 
 type DecodedOutput struct {
-	model.Output
+	*model.Output
 	DecodedData any `json:"decoded_data"`
 }
 
 func decodeOutput(output *model.Output, parsedAbi *abi.ABI) (*DecodedOutput, error) {
+	decodedOutput := &DecodedOutput{Output: output}
 	if len(output.RawData) < 4 {
-		return nil, fmt.Errorf("raw data too short")
+		return decodedOutput, fmt.Errorf("raw data too short")
 	}
 	method, err := parsedAbi.MethodById(output.RawData[:4])
 	if err != nil {
-		return nil, err
+		return decodedOutput, err
 	}
-	decoded := make(map[string]interface{})
+	decoded := make(map[string]any)
 	if err := method.Inputs.UnpackIntoMap(decoded, output.RawData[4:]); err != nil {
-		return nil, fmt.Errorf("failed to unpack %s: %w", method.Name, err)
+		return decodedOutput, fmt.Errorf("failed to unpack %s: %w", method.Name, err)
 	}
 	var result any
 	switch method.Name {
 	case "Notice":
 		payload, ok := decoded["payload"].([]byte)
 		if !ok {
-			return nil, fmt.Errorf("unable to decode Notice payload")
+			return decodedOutput, fmt.Errorf("unable to decode Notice payload")
 		}
 		result = Notice{
 			Type:    "Notice",
@@ -322,19 +349,19 @@ func decodeOutput(output *model.Output, parsedAbi *abi.ABI) (*DecodedOutput, err
 		value, ok2 := decoded["value"].(*big.Int)
 		payload, ok3 := decoded["payload"].([]byte)
 		if !ok1 || !ok2 || !ok3 {
-			return nil, fmt.Errorf("unable to decode Voucher parameters")
+			return decodedOutput, fmt.Errorf("unable to decode Voucher parameters")
 		}
 		result = Voucher{
 			Type:        "Voucher",
 			Destination: dest.Hex(),
-			Value:       value.String(),
+			Value:       fmt.Sprintf("0x%x", value),
 			Payload:     "0x" + hex.EncodeToString(payload),
 		}
 	case "DelegateCallVoucher":
 		dest, ok1 := decoded["destination"].(common.Address)
 		payload, ok2 := decoded["payload"].([]byte)
 		if !ok1 || !ok2 {
-			return nil, fmt.Errorf("unable to decode DelegateCallVoucher parameters")
+			return decodedOutput, fmt.Errorf("unable to decode DelegateCallVoucher parameters")
 		}
 		result = DelegateCallVoucher{
 			Type:        "DelegateCallVoucher",
@@ -342,13 +369,40 @@ func decodeOutput(output *model.Output, parsedAbi *abi.ABI) (*DecodedOutput, err
 			Payload:     "0x" + hex.EncodeToString(payload),
 		}
 	default:
-		result = map[string]interface{}{
+		result = map[string]any{
 			"type":    method.Name,
 			"rawData": "0x" + hex.EncodeToString(output.RawData),
 		}
 	}
-	return &DecodedOutput{
-		Output:      *output,
-		DecodedData: result,
-	}, nil
+	decodedOutput.DecodedData = result
+	return decodedOutput, nil
+}
+
+func (d *DecodedOutput) MarshalJSON() ([]byte, error) {
+	// Marshal the underlying Output using its custom MarshalJSON.
+	outputJSON, err := d.Output.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	// Ensure outputJSON is a valid JSON object.
+	if len(outputJSON) == 0 || outputJSON[len(outputJSON)-1] != '}' {
+		return nil, fmt.Errorf("unexpected format from Output.MarshalJSON")
+	}
+
+	if d.DecodedData == nil {
+		return outputJSON, nil
+	}
+	// Marshal the DecodedData field.
+	decodedDataJSON, err := json.Marshal(d.DecodedData)
+	if err != nil {
+		return nil, err
+	}
+	// Use a bytes.Buffer to build the final JSON.
+	var buf bytes.Buffer
+	buf.Write(bytes.TrimSuffix(outputJSON, []byte("}")))
+	buf.WriteString(`,"decoded_data":`)
+	buf.Write(decodedDataJSON)
+	buf.WriteByte('}')
+
+	return buf.Bytes(), nil
 }

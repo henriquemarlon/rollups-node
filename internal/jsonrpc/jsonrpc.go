@@ -29,11 +29,12 @@ const (
 )
 
 const (
-	JSONRPC_PARSE_ERROR      int = -32700
-	JSONRPC_INVALID_REQUEST  int = -32600
-	JSONRPC_METHOD_NOT_FOUND int = -32601
-	JSONRPC_INVALID_PARAMS   int = -32602
-	JSONRPC_INTERNAL_ERROR   int = -32603
+	JSONRPC_RESOURCE_NOT_FOUND int = -32001
+	JSONRPC_PARSE_ERROR        int = -32700
+	JSONRPC_INVALID_REQUEST    int = -32600
+	JSONRPC_METHOD_NOT_FOUND   int = -32601
+	JSONRPC_INVALID_PARAMS     int = -32602
+	JSONRPC_INTERNAL_ERROR     int = -32603
 )
 
 // -----------------------------------------------------------------------------
@@ -131,6 +132,9 @@ func (s *Service) handleListApplications(w http.ResponseWriter, r *http.Request,
 		writeRPCError(w, req.ID, JSONRPC_INTERNAL_ERROR, "Internal server error", nil)
 		return
 	}
+	if apps == nil {
+		apps = []*model.Application{}
+	}
 
 	// Create result with proper pagination format per spec
 	result := struct {
@@ -175,6 +179,10 @@ func (s *Service) handleGetApplication(w http.ResponseWriter, r *http.Request, r
 		writeRPCError(w, req.ID, JSONRPC_INTERNAL_ERROR, "Internal server error", nil)
 		return
 	}
+	if app == nil {
+		writeRPCError(w, req.ID, JSONRPC_RESOURCE_NOT_FOUND, "Application not found", nil)
+		return
+	}
 
 	// Return in the format specified in the OpenRPC spec
 	result := struct {
@@ -210,8 +218,12 @@ func (s *Service) handleListEpochs(w http.ResponseWriter, r *http.Request, req R
 
 	var epochFilter repository.EpochFilter
 	if params.Status != nil {
-		st := model.EpochStatus(*params.Status)
-		epochFilter.Status = &st
+		var status model.EpochStatus
+		if err := status.Scan(*params.Status); err != nil {
+			writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, fmt.Sprintf("Invalid epoch status: %v", err), nil)
+			return
+		}
+		epochFilter.Status = &status
 	}
 
 	epochs, total, err := s.repository.ListEpochs(r.Context(), params.Application, epochFilter, repository.Pagination{
@@ -222,6 +234,9 @@ func (s *Service) handleListEpochs(w http.ResponseWriter, r *http.Request, req R
 		s.Logger.Error("Unable to retrieve epochs from repository", "err", err)
 		writeRPCError(w, req.ID, JSONRPC_INTERNAL_ERROR, "Internal server error", nil)
 		return
+	}
+	if epochs == nil {
+		epochs = []*model.Epoch{}
 	}
 
 	// Format response according to spec
@@ -248,6 +263,21 @@ func (s *Service) handleListEpochs(w http.ResponseWriter, r *http.Request, req R
 	writeRPCResult(w, req.ID, result)
 }
 
+func parseIndex(indexString *string, field string) (uint64, error) {
+	if indexString == nil {
+		return 0, fmt.Errorf("Missing required %s parameter", field)
+	}
+	if len(*indexString) < 3 || (!strings.HasPrefix(*indexString, "0x") && !strings.HasPrefix(*indexString, "0X")) {
+		return 0, fmt.Errorf("Invalid %s: expected hex encoded value", field)
+	}
+	str := (*indexString)[2:]
+	index, err := strconv.ParseUint(str, 16, 64)
+	if err != nil {
+		return 0, fmt.Errorf("Invalid %s: %v", field, "error parsing")
+	}
+	return index, nil
+}
+
 func (s *Service) handleGetEpoch(w http.ResponseWriter, r *http.Request, req RPCRequest) {
 	var params GetEpochParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
@@ -261,10 +291,20 @@ func (s *Service) handleGetEpoch(w http.ResponseWriter, r *http.Request, req RPC
 		return
 	}
 
-	epoch, err := s.repository.GetEpoch(r.Context(), params.Application, params.Index)
+	index, err := parseIndex(params.EpochIndex, "epoch_index")
+	if err != nil {
+		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, err.Error(), nil)
+		return
+	}
+
+	epoch, err := s.repository.GetEpoch(r.Context(), params.Application, index)
 	if err != nil {
 		s.Logger.Error("Unable to retrieve epoch from repository", "err", err)
 		writeRPCError(w, req.ID, JSONRPC_INTERNAL_ERROR, "Internal server error", nil)
+		return
+	}
+	if epoch == nil {
+		writeRPCError(w, req.ID, JSONRPC_RESOURCE_NOT_FOUND, "Epoch not found", nil)
 		return
 	}
 
@@ -303,9 +343,9 @@ func (s *Service) handleListInputs(w http.ResponseWriter, r *http.Request, req R
 	// Create input filter based on params
 	inputFilter := repository.InputFilter{}
 	if params.EpochIndex != nil {
-		epochIndex, err := strconv.ParseUint(*params.EpochIndex, 10, 64)
+		epochIndex, err := parseIndex(params.EpochIndex, "epoch_index")
 		if err != nil {
-			writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, fmt.Sprintf("Invalid epoch index: %v", err), nil)
+			writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, err.Error(), nil)
 			return
 		}
 		inputFilter.EpochIndex = &epochIndex
@@ -331,24 +371,21 @@ func (s *Service) handleListInputs(w http.ResponseWriter, r *http.Request, req R
 		return
 	}
 
-	var resultInputs []any
+	var resultInputs []*DecodedInput
 	for _, in := range inputs {
-		if params.Decode {
-			decoded, err := decodeInput(in, s.inputABI)
-			if err != nil {
-				s.Logger.Error("Unable to decode Input", "app", params.Application, "index", in.Index, "err", err)
-				resultInputs = append(resultInputs, in)
-			} else {
-				resultInputs = append(resultInputs, decoded)
-			}
-		} else {
-			resultInputs = append(resultInputs, in)
+		decoded, err := decodeInput(in, s.inputABI)
+		if err != nil {
+			s.Logger.Error("Unable to decode Input", "app", params.Application, "index", in.Index, "err", err)
 		}
+		resultInputs = append(resultInputs, decoded)
+	}
+	if resultInputs == nil {
+		resultInputs = []*DecodedInput{}
 	}
 
 	// Format response according to spec
 	result := struct {
-		Data       []any `json:"data"`
+		Data       []*DecodedInput `json:"data"`
 		Pagination struct {
 			TotalCount uint64 `json:"total_count"`
 			Limit      uint64 `json:"limit"`
@@ -383,31 +420,33 @@ func (s *Service) handleGetInput(w http.ResponseWriter, r *http.Request, req RPC
 		return
 	}
 
-	input, err := s.repository.GetInput(r.Context(), params.Application, params.InputIndex)
+	index, err := parseIndex(params.InputIndex, "input_index")
+	if err != nil {
+		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, err.Error(), nil)
+		return
+	}
+
+	input, err := s.repository.GetInput(r.Context(), params.Application, index)
 	if err != nil {
 		s.Logger.Error("Unable to retrieve input from repository", "err", err)
 		writeRPCError(w, req.ID, JSONRPC_INTERNAL_ERROR, "Internal server error", nil)
 		return
 	}
+	if input == nil {
+		writeRPCError(w, req.ID, JSONRPC_RESOURCE_NOT_FOUND, "Input not found", nil)
+		return
+	}
 
-	var result any
-	if params.Decode {
-		decoded, err := decodeInput(input, s.inputABI)
-		if err != nil {
-			s.Logger.Error("Unable to decode Input", "app", params.Application, "index", input.Index, "err", err)
-			result = input
-		} else {
-			result = decoded
-		}
-	} else {
-		result = input
+	decoded, err := decodeInput(input, s.inputABI)
+	if err != nil {
+		s.Logger.Error("Unable to decode Input", "app", params.Application, "index", input.Index, "err", err)
 	}
 
 	// Format response according to spec
 	response := struct {
-		Data any `json:"data"`
+		Data *DecodedInput `json:"data"`
 	}{
-		Data: result,
+		Data: decoded,
 	}
 
 	writeRPCResult(w, req.ID, response)
@@ -430,6 +469,11 @@ func (s *Service) handleGetProcessedInputCount(w http.ResponseWriter, r *http.Re
 	if err != nil {
 		s.Logger.Error("Unable to retrieve application from repository", "err", err)
 		writeRPCError(w, req.ID, JSONRPC_INTERNAL_ERROR, "Internal server error", nil)
+		return
+	}
+
+	if app == nil {
+		writeRPCError(w, req.ID, JSONRPC_RESOURCE_NOT_FOUND, "Application not found", nil)
 		return
 	}
 
@@ -483,18 +527,18 @@ func (s *Service) handleListOutputs(w http.ResponseWriter, r *http.Request, req 
 	// Create output filter based on params
 	outputFilter := repository.OutputFilter{}
 	if params.EpochIndex != nil {
-		epochIndex, err := strconv.ParseUint(*params.EpochIndex, 10, 64)
+		epochIndex, err := parseIndex(params.EpochIndex, "epoch_index")
 		if err != nil {
-			writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, fmt.Sprintf("Invalid epoch index: %v", err), nil)
+			writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, err.Error(), nil)
 			return
 		}
 		outputFilter.EpochIndex = &epochIndex
 	}
 
 	if params.InputIndex != nil {
-		inputIndex, err := strconv.ParseUint(*params.InputIndex, 10, 64)
+		inputIndex, err := parseIndex(params.InputIndex, "input_index")
 		if err != nil {
-			writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, fmt.Sprintf("Invalid input index: %v", err), nil)
+			writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, err.Error(), nil)
 			return
 		}
 		outputFilter.InputIndex = &inputIndex
@@ -530,24 +574,21 @@ func (s *Service) handleListOutputs(w http.ResponseWriter, r *http.Request, req 
 		return
 	}
 
-	var resultOutputs []any
+	var resultOutputs []*DecodedOutput
 	for _, out := range outputs {
-		if params.Decode {
-			decoded, err := decodeOutput(out, s.outputABI)
-			if err != nil {
-				s.Logger.Error("Unable to decode Output", "app", params.Application, "index", out.Index, "err", err)
-				resultOutputs = append(resultOutputs, out)
-			} else {
-				resultOutputs = append(resultOutputs, decoded)
-			}
-		} else {
-			resultOutputs = append(resultOutputs, out)
+		decoded, err := decodeOutput(out, s.outputABI)
+		if err != nil {
+			s.Logger.Error("Unable to decode Output", "app", params.Application, "index", out.Index, "err", err)
 		}
+		resultOutputs = append(resultOutputs, decoded)
+	}
+	if resultOutputs == nil {
+		resultOutputs = []*DecodedOutput{}
 	}
 
 	// Format response according to spec
 	result := struct {
-		Data       []any `json:"data"`
+		Data       []*DecodedOutput `json:"data"`
 		Pagination struct {
 			TotalCount uint64 `json:"total_count"`
 			Limit      uint64 `json:"limit"`
@@ -582,31 +623,33 @@ func (s *Service) handleGetOutput(w http.ResponseWriter, r *http.Request, req RP
 		return
 	}
 
-	output, err := s.repository.GetOutput(r.Context(), params.Application, params.OutputIndex)
+	index, err := parseIndex(params.OutputIndex, "output_index")
+	if err != nil {
+		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, err.Error(), nil)
+		return
+	}
+
+	output, err := s.repository.GetOutput(r.Context(), params.Application, index)
 	if err != nil {
 		s.Logger.Error("Unable to retrieve output from repository", "err", err)
 		writeRPCError(w, req.ID, JSONRPC_INTERNAL_ERROR, "Internal server error", nil)
 		return
 	}
+	if output == nil {
+		writeRPCError(w, req.ID, JSONRPC_RESOURCE_NOT_FOUND, "Output not found", nil)
+		return
+	}
 
-	var result any
-	if params.Decode {
-		decoded, err := decodeOutput(output, s.outputABI)
-		if err != nil {
-			s.Logger.Error("Unable to decode Output", "app", params.Application, "index", output.Index, "err", err)
-			result = output
-		} else {
-			result = decoded
-		}
-	} else {
-		result = output
+	decoded, err := decodeOutput(output, s.outputABI)
+	if err != nil {
+		s.Logger.Error("Unable to decode Output", "app", params.Application, "index", output.Index, "err", err)
 	}
 
 	// Format response according to spec
 	response := struct {
-		Data any `json:"data"`
+		Data *DecodedOutput `json:"data"`
 	}{
-		Data: result,
+		Data: decoded,
 	}
 
 	writeRPCResult(w, req.ID, response)
@@ -637,18 +680,18 @@ func (s *Service) handleListReports(w http.ResponseWriter, r *http.Request, req 
 	// Create report filter based on params
 	reportFilter := repository.ReportFilter{}
 	if params.EpochIndex != nil {
-		epochIndex, err := strconv.ParseUint(*params.EpochIndex, 10, 64)
+		epochIndex, err := parseIndex(params.EpochIndex, "epoch_index")
 		if err != nil {
-			writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, fmt.Sprintf("Invalid epoch index: %v", err), nil)
+			writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, err.Error(), nil)
 			return
 		}
 		reportFilter.EpochIndex = &epochIndex
 	}
 
 	if params.InputIndex != nil {
-		inputIndex, err := strconv.ParseUint(*params.InputIndex, 10, 64)
+		inputIndex, err := parseIndex(params.InputIndex, "input_index")
 		if err != nil {
-			writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, fmt.Sprintf("Invalid input index: %v", err), nil)
+			writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, err.Error(), nil)
 			return
 		}
 		reportFilter.InputIndex = &inputIndex
@@ -662,6 +705,9 @@ func (s *Service) handleListReports(w http.ResponseWriter, r *http.Request, req 
 		s.Logger.Error("Unable to retrieve reports from repository", "err", err)
 		writeRPCError(w, req.ID, JSONRPC_INTERNAL_ERROR, "Internal server error", nil)
 		return
+	}
+	if reports == nil {
+		reports = []*model.Report{}
 	}
 
 	// Format response according to spec
@@ -701,10 +747,20 @@ func (s *Service) handleGetReport(w http.ResponseWriter, r *http.Request, req RP
 		return
 	}
 
-	report, err := s.repository.GetReport(r.Context(), params.Application, params.ReportIndex)
+	index, err := parseIndex(params.ReportIndex, "report_index")
+	if err != nil {
+		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, err.Error(), nil)
+		return
+	}
+
+	report, err := s.repository.GetReport(r.Context(), params.Application, index)
 	if err != nil {
 		s.Logger.Error("Unable to retrieve report from repository", "err", err)
 		writeRPCError(w, req.ID, JSONRPC_INTERNAL_ERROR, "Internal server error", nil)
+		return
+	}
+	if report == nil {
+		writeRPCError(w, req.ID, JSONRPC_RESOURCE_NOT_FOUND, "Report not found", nil)
 		return
 	}
 

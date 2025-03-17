@@ -91,9 +91,10 @@ func ToMachineLogLevelFromString(s string) (MachineLogLevel, error) {
 }
 
 func ToAddressFromString(s string) (Address, error) {
-	if strings.HasPrefix(s, "0x") || strings.HasPrefix(s, "0X") {
-		s = s[2:]
+	if len(s) < 3 || (!strings.HasPrefix(s, "0x") && !strings.HasPrefix(s, "0X")) {
+		return Address{}, fmt.Errorf("invalid address '%s'", s)
 	}
+	s = s[2:]
 	b, err := hex.DecodeString(s)
 	if err != nil {
 		return Address{}, err

@@ -11,6 +11,7 @@ import (
 
 	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/internal/repository"
+	"github.com/cartesi/rollups-node/internal/services"
 	"github.com/cartesi/rollups-node/pkg/contracts/inputs"
 	"github.com/cartesi/rollups-node/pkg/contracts/outputs"
 	"github.com/cartesi/rollups-node/pkg/service"
@@ -72,7 +73,7 @@ func Create(ctx context.Context, c *CreateInfo) (*Service, error) {
 	mux.HandleFunc("/rpc", s.handleRPC)
 	s.server = &http.Server{
 		Addr:    c.Config.JsonrpcApiAddress,
-		Handler: mux,
+		Handler: services.CorsMiddleware(mux), // FIXME: add proper cors config
 	}
 
 	return s, nil

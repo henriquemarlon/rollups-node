@@ -18,7 +18,8 @@
 						"type": "integer",
 						"minimum": 1,
 						"default": 50
-					}
+					},
+					"required": false
 				},
 				{
 					"name": "offset",
@@ -27,7 +28,8 @@
 						"type": "integer",
 						"minimum": 0,
 						"default": 0
-					}
+					},
+					"required": false
 				}
 			],
 			"result": {
@@ -86,7 +88,8 @@
 						"type": "integer",
 						"minimum": 1,
 						"default": 50
-					}
+					},
+					"required": false
 				},
 				{
 					"name": "offset",
@@ -95,7 +98,8 @@
 						"type": "integer",
 						"minimum": 0,
 						"default": 0
-					}
+					},
+					"required": false
 				}
 			],
 			"result": {
@@ -119,8 +123,8 @@
 					"required": true
 				},
 				{
-					"name": "index",
-					"description": "The index of the epoch to be retrieved.",
+					"name": "epoch_index",
+					"description": "The index of the epoch to be retrieved (hex encoded).",
 					"schema": {
 						"type": "string"
 					},
@@ -149,7 +153,7 @@
 				},
 				{
 					"name": "epoch_index",
-					"description": "Filter inputs by a specific epoch index.",
+					"description": "Filter inputs by a specific epoch index (hex encoded).",
 					"schema": {
 						"type": "string"
 					},
@@ -157,7 +161,7 @@
 				},
 				{
 					"name": "sender",
-					"description": "Filter inputs by the sender's address, extracted from raw data.",
+					"description": "Filter inputs by the sender's address (hex encoded), extracted from raw data.",
 					"schema": {
 						"type": "string",
 						"format": "byte"
@@ -171,7 +175,8 @@
 						"type": "integer",
 						"minimum": 1,
 						"default": 50
-					}
+					},
+					"required": false
 				},
 				{
 					"name": "offset",
@@ -180,14 +185,6 @@
 						"type": "integer",
 						"minimum": 0,
 						"default": 0
-					}
-				},
-				{
-					"name": "decode",
-					"description": "Determines if the input should be ABI decoded. If set to true, the input data will be returned in a decoded format.",
-					"schema": {
-						"type": "boolean",
-						"default": false
 					},
 					"required": false
 				}
@@ -214,20 +211,11 @@
 				},
 				{
 					"name": "input_index",
-					"description": "The index of the input to be retrieved.",
+					"description": "The index of the input to be retrieved (hex encoded).",
 					"schema": {
 						"type": "string"
 					},
 					"required": true
-				},
-				{
-					"name": "decode",
-					"description": "Determines if the input should be ABI decoded. If set to true, the input data will be returned in a decoded format.",
-					"schema": {
-						"type": "boolean",
-						"default": false
-					},
-					"required": false
 				}
 			],
 			"result": {
@@ -273,7 +261,7 @@
 				},
 				{
 					"name": "epoch_index",
-					"description": "Filter outputs by a specific epoch index.",
+					"description": "Filter outputs by a specific epoch index (hex encoded).",
 					"schema": {
 						"type": "string"
 					},
@@ -281,7 +269,7 @@
 				},
 				{
 					"name": "input_index",
-					"description": "Filter outputs by a specific input index.",
+					"description": "Filter outputs by a specific input index (hex encoded).",
 					"schema": {
 						"type": "string"
 					},
@@ -289,7 +277,7 @@
 				},
 				{
 					"name": "output_type",
-					"description": "Filter outputs by output type (first 4 bytes of raw data).",
+					"description": "Filter outputs by output type (first 4 bytes of raw data hex encoded).",
 					"schema": {
 						"type": "string",
 						"format": "byte"
@@ -298,7 +286,7 @@
 				},
 				{
 					"name": "voucher_address",
-					"description": "Filter outputs by the voucher address, extracted from raw data.",
+					"description": "Filter outputs by the voucher address (hex encoded), extracted from raw data.",
 					"schema": {
 						"type": "string",
 						"format": "byte"
@@ -324,15 +312,6 @@
 						"default": 0
 					},
 					"required": false
-				},
-				{
-					"name": "decode",
-					"description": "Determines if the output should be ABI decoded. If set to true, the output data will be returned in a decoded format.",
-					"schema": {
-						"type": "boolean",
-						"default": false
-					},
-					"required": false
 				}
 			],
 			"result": {
@@ -345,7 +324,7 @@
 		{
 			"name": "cartesi_getOutput",
 			"summary": "Retrieve a Specific Output",
-			"description": "Retrieves a single output from the application using the specified output_index. Can include ABI decoded data if requested.",
+			"description": "Retrieves a single output from the application using the specified output_index.",
 			"params": [
 				{
 					"name": "application",
@@ -357,20 +336,11 @@
 				},
 				{
 					"name": "output_index",
-					"description": "The index of the output to be retrieved.",
+					"description": "The index of the output to be retrieved (hex encoded).",
 					"schema": {
 						"type": "string"
 					},
 					"required": true
-				},
-				{
-					"name": "decode",
-					"description": "Determines if the output should be ABI decoded. If set to true, the output data will be returned in a decoded format.",
-					"schema": {
-						"type": "boolean",
-						"default": false
-					},
-					"required": false
 				}
 			],
 			"result": {
@@ -395,7 +365,7 @@
 				},
 				{
 					"name": "epoch_index",
-					"description": "Optional filter by epoch index.",
+					"description": "Optional filter by epoch index (hex encoded).",
 					"schema": {
 						"type": "string"
 					},
@@ -403,7 +373,7 @@
 				},
 				{
 					"name": "input_index",
-					"description": "Optional filter by input index.",
+					"description": "Optional filter by input index (hex encoded).",
 					"schema": {
 						"type": "string"
 					},
@@ -450,6 +420,7 @@
 				},
 				{
 					"name": "report_index",
+					"description": "The index of the report to be retrieved (hex encoded).",
 					"schema": {
 						"type": "string"
 					},
@@ -501,9 +472,6 @@
 						"type": "string",
 						"format": "byte"
 					},
-					"template_uri": {
-						"type": "string"
-					},
 					"epoch_length": {
 						"type": "integer"
 					},
@@ -532,6 +500,9 @@
 					"updated_at": {
 						"type": "string",
 						"format": "date-time"
+					},
+					"execution_parameters": {
+						"$ref": "#/components/schemas/ExecutionParameters"
 					}
 				}
 			},
@@ -572,9 +543,6 @@
 			"Epoch": {
 				"type": "object",
 				"properties": {
-					"application_id": {
-						"type": "integer"
-					},
 					"index": {
 						"type": "string"
 					},
@@ -649,9 +617,6 @@
 			"Input": {
 				"type": "object",
 				"properties": {
-					"epoch_application_id": {
-						"type": "integer"
-					},
 					"epoch_index": {
 						"type": "string"
 					},
@@ -699,29 +664,30 @@
 			"EvmAdvance": {
 				"type": "object",
 				"properties": {
-					"chainId": {
+					"chain_id": {
 						"type": "string"
 					},
-					"appContract": {
+					"application_contract": {
 						"type": "string"
 					},
-					"msgSender": {
+					"sender": {
 						"type": "string"
 					},
-					"blockNumber": {
+					"block_number": {
 						"type": "string"
 					},
-					"blockTimestamp": {
+					"block_timestamp": {
 						"type": "string"
 					},
-					"prevRandao": {
+					"prev_randao": {
 						"type": "string"
 					},
 					"index": {
 						"type": "string"
 					},
 					"payload": {
-						"type": "string"
+						"type": "string",
+						"format": "byte"
 					}
 				}
 			},
@@ -758,9 +724,6 @@
 			"Output": {
 				"type": "object",
 				"properties": {
-					"input_epoch_application_id": {
-						"type": "integer"
-					},
 					"input_index": {
 						"type": "string"
 					},
@@ -812,7 +775,8 @@
 						"type": "string"
 					},
 					"payload": {
-						"type": "string"
+						"type": "string",
+						"format": "byte"
 					}
 				}
 			},
@@ -832,7 +796,8 @@
 						"type": "string"
 					},
 					"payload": {
-						"type": "string"
+						"type": "string",
+						"format": "byte"
 					}
 				}
 			},
@@ -849,7 +814,8 @@
 						"type": "string"
 					},
 					"payload": {
-						"type": "string"
+						"type": "string",
+						"format": "byte"
 					}
 				}
 			},
@@ -891,9 +857,6 @@
 			"Report": {
 				"type": "object",
 				"properties": {
-					"input_epoch_application_id": {
-						"type": "integer"
-					},
 					"input_index": {
 						"type": "string"
 					},
@@ -933,6 +896,76 @@
 				"properties": {
 					"data": {
 						"$ref": "#/components/schemas/Report"
+					}
+				}
+			},
+			"SnapshotPolicy": {
+				"type": "string",
+				"enum": [
+					"NONE",
+					"EACH_INPUT",
+					"EACH_EPOCH"
+				]
+			},
+			"ExecutionParameters": {
+				"type": "object",
+				"properties": {
+					"snapshot_policy": {
+						"$ref": "#/components/schemas/SnapshotPolicy"
+					},
+					"snapshot_retention": {
+						"type": "integer"
+					},
+					"advance_inc_cycles": {
+						"type": "integer"
+					},
+					"advance_max_cycles": {
+						"type": "integer"
+					},
+					"inspect_inc_cycles": {
+						"type": "integer"
+					},
+					"inspect_max_cycles": {
+						"type": "integer"
+					},
+					"advance_inc_deadline": {
+						"type": "string",
+						"format": "duration"
+					},
+					"advance_max_deadline": {
+						"type": "string",
+						"format": "duration"
+					},
+					"inspect_inc_deadline": {
+						"type": "string",
+						"format": "duration"
+					},
+					"inspect_max_deadline": {
+						"type": "string",
+						"format": "duration"
+					},
+					"load_deadline": {
+						"type": "string",
+						"format": "duration"
+					},
+					"store_deadline": {
+						"type": "string",
+						"format": "duration"
+					},
+					"fast_deadline": {
+						"type": "string",
+						"format": "duration"
+					},
+					"max_concurrent_inspects": {
+						"type": "integer"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time"
 					}
 				}
 			}

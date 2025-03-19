@@ -101,6 +101,7 @@ func (me *arrayChunk) get(index uint64) *common.Hash {
 // - `outputsBegin` is the index of the first element of `outputHashes` since genesis.
 //
 // The result array contains the siblings of all outputs. Use a a stride of TREE_DEPTH to retrieve the values of each output.
+//
 //	siblings := merkle.ComputeSiblingsMatrix(pre, outputHashes, post, index)
 //	for i := range outputHashes {
 //		begin := merkle.TREE_DEPTH * i

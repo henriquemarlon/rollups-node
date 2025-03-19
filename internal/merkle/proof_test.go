@@ -102,13 +102,13 @@ func TestComputSiblingsMatrixAssertions(t *testing.T) {
 	index := uint64(0)
 
 	_, err = ComputeSiblingsMatrix(pre, []common.Hash{}, post, index)
-	assert.NotNil(t,  err)
+	assert.NotNil(t, err)
 
 	_, err = ComputeSiblingsMatrix(nil, outputs, post, index)
-	assert.NotNil(t,  err)
+	assert.NotNil(t, err)
 
 	_, err = ComputeSiblingsMatrix(pre, outputs, nil, index)
-	assert.NotNil(t,  err)
+	assert.NotNil(t, err)
 }
 
 // check if creating a pre context from proof and then computing the siblings

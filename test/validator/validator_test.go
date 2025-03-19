@@ -59,7 +59,7 @@ func (s *ValidatorRepositoryIntegrationSuite) SetupSubTest() {
 
 	serviceArgs := validator.CreateInfo{
 		CreateInfo: service.CreateInfo{
-			Name: "validator",
+			Name:     "validator",
 			LogLevel: slog.LevelDebug,
 		},
 		Repository: s.repository,
@@ -104,7 +104,6 @@ func (s *ValidatorRepositoryIntegrationSuite) TestItReturnsPristineClaim() {
 			FirstBlock:    0,
 			LastBlock:     9,
 		}
-
 
 		input := model.Input{
 			Index:                0,

@@ -5,7 +5,7 @@
 package endtoendtests
 
 const (
-	LocalBlockchainID                  = 31337
+	LocalBlockchainID                  = 13370
 	LocalInputBoxDeploymentBlockNumber = 16
 	LocalHttpAddress                   = "0.0.0.0"
 	LocalHttpPort                      = 10000

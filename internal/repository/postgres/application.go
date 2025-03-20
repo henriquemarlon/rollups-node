@@ -28,12 +28,14 @@ func (r *PostgresRepository) CreateApplication(
 			table.Application.Name,
 			table.Application.IapplicationAddress,
 			table.Application.IconsensusAddress,
+			table.Application.IinputboxAddress,
 			table.Application.TemplateHash,
 			table.Application.TemplateURI,
 			table.Application.EpochLength,
+			table.Application.DataAvailability,
 			table.Application.State,
-			table.Application.LastProcessedBlock,
-			table.Application.LastClaimCheckBlock,
+			table.Application.IinputboxBlock,
+			table.Application.LastInputCheckBlock,
 			table.Application.LastOutputCheckBlock,
 			table.Application.ProcessedInputs,
 		).
@@ -41,12 +43,14 @@ func (r *PostgresRepository) CreateApplication(
 			app.Name,
 			app.IApplicationAddress,
 			app.IConsensusAddress,
+			app.IInputBoxAddress,
 			app.TemplateHash,
 			app.TemplateURI,
 			app.EpochLength,
+			app.DataAvailability[:],
 			app.State,
-			app.LastProcessedBlock,
-			app.LastClaimCheckBlock,
+			app.IInputBoxBlock,
+			app.LastInputCheckBlock,
 			app.LastOutputCheckBlock,
 			app.ProcessedInputs,
 		).
@@ -101,13 +105,15 @@ func (r *PostgresRepository) GetApplication(
 			table.Application.Name,
 			table.Application.IapplicationAddress,
 			table.Application.IconsensusAddress,
+			table.Application.IinputboxAddress,
 			table.Application.TemplateHash,
 			table.Application.TemplateURI,
 			table.Application.EpochLength,
+			table.Application.DataAvailability,
 			table.Application.State,
 			table.Application.Reason,
-			table.Application.LastProcessedBlock,
-			table.Application.LastClaimCheckBlock,
+			table.Application.IinputboxBlock,
+			table.Application.LastInputCheckBlock,
 			table.Application.LastOutputCheckBlock,
 			table.Application.ProcessedInputs,
 			table.Application.CreatedAt,
@@ -147,13 +153,15 @@ func (r *PostgresRepository) GetApplication(
 		&app.Name,
 		&app.IApplicationAddress,
 		&app.IConsensusAddress,
+		&app.IInputBoxAddress,
 		&app.TemplateHash,
 		&app.TemplateURI,
 		&app.EpochLength,
+		&app.DataAvailability,
 		&app.State,
 		&app.Reason,
-		&app.LastProcessedBlock,
-		&app.LastClaimCheckBlock,
+		&app.IInputBoxBlock,
+		&app.LastInputCheckBlock,
 		&app.LastOutputCheckBlock,
 		&app.ProcessedInputs,
 		&app.CreatedAt,
@@ -197,13 +205,15 @@ func (r *PostgresRepository) UpdateApplication(
 			table.Application.Name,
 			table.Application.IapplicationAddress,
 			table.Application.IconsensusAddress,
+			table.Application.IinputboxAddress,
 			table.Application.TemplateHash,
 			table.Application.TemplateURI,
 			table.Application.EpochLength,
+			table.Application.DataAvailability,
 			table.Application.State,
 			table.Application.Reason,
-			table.Application.LastProcessedBlock,
-			table.Application.LastClaimCheckBlock,
+			table.Application.IinputboxBlock,
+			table.Application.LastInputCheckBlock,
 			table.Application.LastOutputCheckBlock,
 			table.Application.ProcessedInputs,
 		).
@@ -211,13 +221,15 @@ func (r *PostgresRepository) UpdateApplication(
 			app.Name,
 			app.IApplicationAddress,
 			app.IConsensusAddress,
+			app.IInputBoxAddress,
 			app.TemplateHash,
 			app.TemplateURI,
 			app.EpochLength,
+			app.DataAvailability[:],
 			app.State,
 			app.Reason,
-			app.LastProcessedBlock,
-			app.LastClaimCheckBlock,
+			app.IInputBoxBlock,
+			app.LastInputCheckBlock,
 			app.LastOutputCheckBlock,
 			app.ProcessedInputs,
 		).
@@ -245,6 +257,48 @@ func (r *PostgresRepository) UpdateApplicationState(
 			reason,
 		).
 		WHERE(table.Application.ID.EQ(postgres.Int(appID)))
+
+	sqlStr, args := updateStmt.Sql()
+	_, err := r.db.Exec(ctx, sqlStr, args...)
+	return err
+}
+
+func (r *PostgresRepository) UpdateEventLastCheckBlock(
+	ctx context.Context,
+	appIDs []int64,
+	event model.MonitoredEvent,
+	blockNumber uint64,
+) error {
+	var column postgres.ColumnFloat
+	switch event {
+	case model.MonitoredEvent_InputAdded:
+		column = table.Application.LastInputCheckBlock
+	case model.MonitoredEvent_OutputExecuted:
+		column = table.Application.LastOutputCheckBlock
+	case model.MonitoredEvent_ClaimSubmission:
+		fallthrough
+	case model.MonitoredEvent_ClaimAcceptance:
+		fallthrough
+	default:
+		return fmt.Errorf("invalid monitored event type: %v", event)
+	}
+	if len(appIDs) == 0 {
+		return nil
+	}
+
+	ids := make([]postgres.Expression, len(appIDs))
+	for i, id := range appIDs {
+		ids[i] = postgres.Int(id)
+	}
+
+	updateStmt := table.Application.
+		UPDATE(
+			column,
+		).
+		SET(
+			postgres.RawFloat(fmt.Sprintf("%d", blockNumber)),
+		).
+		WHERE(table.Application.ID.IN(ids...))
 
 	sqlStr, args := updateStmt.Sql()
 	_, err := r.db.Exec(ctx, sqlStr, args...)
@@ -284,13 +338,15 @@ func (r *PostgresRepository) ListApplications(
 			table.Application.Name,
 			table.Application.IapplicationAddress,
 			table.Application.IconsensusAddress,
+			table.Application.IinputboxAddress,
 			table.Application.TemplateHash,
 			table.Application.TemplateURI,
 			table.Application.EpochLength,
+			table.Application.DataAvailability,
 			table.Application.State,
 			table.Application.Reason,
-			table.Application.LastProcessedBlock,
-			table.Application.LastClaimCheckBlock,
+			table.Application.IinputboxBlock,
+			table.Application.LastInputCheckBlock,
 			table.Application.LastOutputCheckBlock,
 			table.Application.ProcessedInputs,
 			table.Application.CreatedAt,
@@ -325,6 +381,9 @@ func (r *PostgresRepository) ListApplications(
 	if f.State != nil {
 		conditions = append(conditions, table.Application.State.EQ(postgres.NewEnumValue(f.State.String())))
 	}
+	if f.DataAvailability != nil {
+		conditions = append(conditions, table.Application.DataAvailability.EQ(postgres.Bytea(f.DataAvailability[:])))
+	}
 
 	if len(conditions) > 0 {
 		sel = sel.WHERE(postgres.AND(conditions...))
@@ -356,13 +415,15 @@ func (r *PostgresRepository) ListApplications(
 			&app.Name,
 			&app.IApplicationAddress,
 			&app.IConsensusAddress,
+			&app.IInputBoxAddress,
 			&app.TemplateHash,
 			&app.TemplateURI,
 			&app.EpochLength,
+			&app.DataAvailability,
 			&app.State,
 			&app.Reason,
-			&app.LastProcessedBlock,
-			&app.LastClaimCheckBlock,
+			&app.IInputBoxBlock,
+			&app.LastInputCheckBlock,
 			&app.LastOutputCheckBlock,
 			&app.ProcessedInputs,
 			&app.CreatedAt,

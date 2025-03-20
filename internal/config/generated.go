@@ -37,7 +37,6 @@ const (
 	CONTRACTS_APPLICATION_FACTORY_ADDRESS             = "CARTESI_CONTRACTS_APPLICATION_FACTORY_ADDRESS"
 	CONTRACTS_AUTHORITY_FACTORY_ADDRESS               = "CARTESI_CONTRACTS_AUTHORITY_FACTORY_ADDRESS"
 	CONTRACTS_INPUT_BOX_ADDRESS                       = "CARTESI_CONTRACTS_INPUT_BOX_ADDRESS"
-	CONTRACTS_INPUT_BOX_DEPLOYMENT_BLOCK_NUMBER       = "CARTESI_CONTRACTS_INPUT_BOX_DEPLOYMENT_BLOCK_NUMBER"
 	CONTRACTS_SELF_HOSTED_APPLICATION_FACTORY_ADDRESS = "CARTESI_CONTRACTS_SELF_HOSTED_APPLICATION_FACTORY_ADDRESS"
 	DATABASE_CONNECTION                               = "CARTESI_DATABASE_CONNECTION"
 	FEATURE_CLAIM_SUBMISSION_ENABLED                  = "CARTESI_FEATURE_CLAIM_SUBMISSION_ENABLED"
@@ -82,13 +81,6 @@ type Config struct {
 
 	// WebSocket endpoint for the blockchain RPC provider. [Required: evm-reader]
 	BlockchainWsEndpoint URL `mapstructure:"CARTESI_BLOCKCHAIN_WS_ENDPOINT"`
-
-	// Address of the InputBox contract. [Required: evm-reader]
-	ContractsInputBoxAddress Address `mapstructure:"CARTESI_CONTRACTS_INPUT_BOX_ADDRESS"`
-
-	// The InputBox contract deployment block number.
-	// The node will begin to read blockchain events from this block. [Required: evm-reader]
-	ContractsInputBoxDeploymentBlockNumber uint64 `mapstructure:"CARTESI_CONTRACTS_INPUT_BOX_DEPLOYMENT_BLOCK_NUMBER"`
 
 	// Postgres endpoint in the 'postgres://user:password@hostname:port/database' format (URL).
 	//
@@ -194,8 +186,6 @@ func SetDefaults() {
 
 	// no default for CARTESI_CONTRACTS_INPUT_BOX_ADDRESS
 
-	// no default for CARTESI_CONTRACTS_INPUT_BOX_DEPLOYMENT_BLOCK_NUMBER
-
 	// no default for CARTESI_CONTRACTS_SELF_HOSTED_APPLICATION_FACTORY_ADDRESS
 
 	viper.SetDefault(DATABASE_CONNECTION, "")
@@ -281,16 +271,6 @@ func Load() (*Config, error) {
 	}
 
 	cfg.BlockchainWsEndpoint, err = GetBlockchainWsEndpoint()
-	if err != nil && err != ErrNotDefined {
-		return nil, err
-	}
-
-	cfg.ContractsInputBoxAddress, err = GetContractsInputBoxAddress()
-	if err != nil && err != ErrNotDefined {
-		return nil, err
-	}
-
-	cfg.ContractsInputBoxDeploymentBlockNumber, err = GetContractsInputBoxDeploymentBlockNumber()
 	if err != nil && err != ErrNotDefined {
 		return nil, err
 	}
@@ -402,7 +382,7 @@ func GetAuthAwsKmsKeyId() (RedactedString, error) {
 		}
 		return v, nil
 	}
-	return notDefinedRedactedString(), ErrNotDefined
+	return notDefinedRedactedString(), fmt.Errorf("%s: %w", AUTH_AWS_KMS_KEY_ID, ErrNotDefined)
 }
 
 // GetAuthAwsKmsRegion returns the value for the environment variable CARTESI_AUTH_AWS_KMS_REGION.
@@ -415,7 +395,7 @@ func GetAuthAwsKmsRegion() (RedactedString, error) {
 		}
 		return v, nil
 	}
-	return notDefinedRedactedString(), ErrNotDefined
+	return notDefinedRedactedString(), fmt.Errorf("%s: %w", AUTH_AWS_KMS_REGION, ErrNotDefined)
 }
 
 // GetAuthKind returns the value for the environment variable CARTESI_AUTH_KIND.
@@ -428,7 +408,7 @@ func GetAuthKind() (AuthKind, error) {
 		}
 		return v, nil
 	}
-	return notDefinedAuthKind(), ErrNotDefined
+	return notDefinedAuthKind(), fmt.Errorf("%s: %w", AUTH_KIND, ErrNotDefined)
 }
 
 // GetAuthMnemonic returns the value for the environment variable CARTESI_AUTH_MNEMONIC.
@@ -441,7 +421,7 @@ func GetAuthMnemonic() (RedactedString, error) {
 		}
 		return v, nil
 	}
-	return notDefinedRedactedString(), ErrNotDefined
+	return notDefinedRedactedString(), fmt.Errorf("%s: %w", AUTH_MNEMONIC, ErrNotDefined)
 }
 
 // GetAuthMnemonicAccountIndex returns the value for the environment variable CARTESI_AUTH_MNEMONIC_ACCOUNT_INDEX.
@@ -454,7 +434,7 @@ func GetAuthMnemonicAccountIndex() (RedactedUint, error) {
 		}
 		return v, nil
 	}
-	return notDefinedRedactedUint(), ErrNotDefined
+	return notDefinedRedactedUint(), fmt.Errorf("%s: %w", AUTH_MNEMONIC_ACCOUNT_INDEX, ErrNotDefined)
 }
 
 // GetAuthMnemonicFile returns the value for the environment variable CARTESI_AUTH_MNEMONIC_FILE.
@@ -467,7 +447,7 @@ func GetAuthMnemonicFile() (string, error) {
 		}
 		return v, nil
 	}
-	return notDefinedstring(), ErrNotDefined
+	return notDefinedstring(), fmt.Errorf("%s: %w", AUTH_MNEMONIC_FILE, ErrNotDefined)
 }
 
 // GetAuthPrivateKey returns the value for the environment variable CARTESI_AUTH_PRIVATE_KEY.
@@ -480,7 +460,7 @@ func GetAuthPrivateKey() (RedactedString, error) {
 		}
 		return v, nil
 	}
-	return notDefinedRedactedString(), ErrNotDefined
+	return notDefinedRedactedString(), fmt.Errorf("%s: %w", AUTH_PRIVATE_KEY, ErrNotDefined)
 }
 
 // GetAuthPrivateKeyFile returns the value for the environment variable CARTESI_AUTH_PRIVATE_KEY_FILE.
@@ -493,7 +473,7 @@ func GetAuthPrivateKeyFile() (string, error) {
 		}
 		return v, nil
 	}
-	return notDefinedstring(), ErrNotDefined
+	return notDefinedstring(), fmt.Errorf("%s: %w", AUTH_PRIVATE_KEY_FILE, ErrNotDefined)
 }
 
 // GetBlockchainDefaultBlock returns the value for the environment variable CARTESI_BLOCKCHAIN_DEFAULT_BLOCK.
@@ -506,7 +486,7 @@ func GetBlockchainDefaultBlock() (DefaultBlock, error) {
 		}
 		return v, nil
 	}
-	return notDefinedDefaultBlock(), ErrNotDefined
+	return notDefinedDefaultBlock(), fmt.Errorf("%s: %w", BLOCKCHAIN_DEFAULT_BLOCK, ErrNotDefined)
 }
 
 // GetBlockchainHttpEndpoint returns the value for the environment variable CARTESI_BLOCKCHAIN_HTTP_ENDPOINT.
@@ -519,7 +499,7 @@ func GetBlockchainHttpEndpoint() (URL, error) {
 		}
 		return v, nil
 	}
-	return notDefinedURL(), ErrNotDefined
+	return notDefinedURL(), fmt.Errorf("%s: %w", BLOCKCHAIN_HTTP_ENDPOINT, ErrNotDefined)
 }
 
 // GetBlockchainId returns the value for the environment variable CARTESI_BLOCKCHAIN_ID.
@@ -532,7 +512,7 @@ func GetBlockchainId() (uint64, error) {
 		}
 		return v, nil
 	}
-	return notDefineduint64(), ErrNotDefined
+	return notDefineduint64(), fmt.Errorf("%s: %w", BLOCKCHAIN_ID, ErrNotDefined)
 }
 
 // GetBlockchainLegacyEnabled returns the value for the environment variable CARTESI_BLOCKCHAIN_LEGACY_ENABLED.
@@ -545,7 +525,7 @@ func GetBlockchainLegacyEnabled() (bool, error) {
 		}
 		return v, nil
 	}
-	return notDefinedbool(), ErrNotDefined
+	return notDefinedbool(), fmt.Errorf("%s: %w", BLOCKCHAIN_LEGACY_ENABLED, ErrNotDefined)
 }
 
 // GetBlockchainSubscriptionTimeout returns the value for the environment variable CARTESI_BLOCKCHAIN_SUBSCRIPTION_TIMEOUT.
@@ -558,7 +538,7 @@ func GetBlockchainSubscriptionTimeout() (uint64, error) {
 		}
 		return v, nil
 	}
-	return notDefineduint64(), ErrNotDefined
+	return notDefineduint64(), fmt.Errorf("%s: %w", BLOCKCHAIN_SUBSCRIPTION_TIMEOUT, ErrNotDefined)
 }
 
 // GetBlockchainWsEndpoint returns the value for the environment variable CARTESI_BLOCKCHAIN_WS_ENDPOINT.
@@ -571,7 +551,7 @@ func GetBlockchainWsEndpoint() (URL, error) {
 		}
 		return v, nil
 	}
-	return notDefinedURL(), ErrNotDefined
+	return notDefinedURL(), fmt.Errorf("%s: %w", BLOCKCHAIN_WS_ENDPOINT, ErrNotDefined)
 }
 
 // GetContractsApplicationFactoryAddress returns the value for the environment variable CARTESI_CONTRACTS_APPLICATION_FACTORY_ADDRESS.
@@ -584,7 +564,7 @@ func GetContractsApplicationFactoryAddress() (Address, error) {
 		}
 		return v, nil
 	}
-	return notDefinedAddress(), ErrNotDefined
+	return notDefinedAddress(), fmt.Errorf("%s: %w", CONTRACTS_APPLICATION_FACTORY_ADDRESS, ErrNotDefined)
 }
 
 // GetContractsAuthorityFactoryAddress returns the value for the environment variable CARTESI_CONTRACTS_AUTHORITY_FACTORY_ADDRESS.
@@ -597,7 +577,7 @@ func GetContractsAuthorityFactoryAddress() (Address, error) {
 		}
 		return v, nil
 	}
-	return notDefinedAddress(), ErrNotDefined
+	return notDefinedAddress(), fmt.Errorf("%s: %w", CONTRACTS_AUTHORITY_FACTORY_ADDRESS, ErrNotDefined)
 }
 
 // GetContractsInputBoxAddress returns the value for the environment variable CARTESI_CONTRACTS_INPUT_BOX_ADDRESS.
@@ -610,20 +590,7 @@ func GetContractsInputBoxAddress() (Address, error) {
 		}
 		return v, nil
 	}
-	return notDefinedAddress(), ErrNotDefined
-}
-
-// GetContractsInputBoxDeploymentBlockNumber returns the value for the environment variable CARTESI_CONTRACTS_INPUT_BOX_DEPLOYMENT_BLOCK_NUMBER.
-func GetContractsInputBoxDeploymentBlockNumber() (uint64, error) {
-	s := viper.GetString(CONTRACTS_INPUT_BOX_DEPLOYMENT_BLOCK_NUMBER)
-	if s != "" {
-		v, err := toUint64(s)
-		if err != nil {
-			return v, fmt.Errorf("failed to parse %s: %w", CONTRACTS_INPUT_BOX_DEPLOYMENT_BLOCK_NUMBER, err)
-		}
-		return v, nil
-	}
-	return notDefineduint64(), ErrNotDefined
+	return notDefinedAddress(), fmt.Errorf("%s: %w", CONTRACTS_INPUT_BOX_ADDRESS, ErrNotDefined)
 }
 
 // GetContractsSelfHostedApplicationFactoryAddress returns the value for the environment variable CARTESI_CONTRACTS_SELF_HOSTED_APPLICATION_FACTORY_ADDRESS.
@@ -636,7 +603,7 @@ func GetContractsSelfHostedApplicationFactoryAddress() (Address, error) {
 		}
 		return v, nil
 	}
-	return notDefinedAddress(), ErrNotDefined
+	return notDefinedAddress(), fmt.Errorf("%s: %w", CONTRACTS_SELF_HOSTED_APPLICATION_FACTORY_ADDRESS, ErrNotDefined)
 }
 
 // GetDatabaseConnection returns the value for the environment variable CARTESI_DATABASE_CONNECTION.
@@ -649,7 +616,7 @@ func GetDatabaseConnection() (URL, error) {
 		}
 		return v, nil
 	}
-	return notDefinedURL(), ErrNotDefined
+	return notDefinedURL(), fmt.Errorf("%s: %w", DATABASE_CONNECTION, ErrNotDefined)
 }
 
 // GetFeatureClaimSubmissionEnabled returns the value for the environment variable CARTESI_FEATURE_CLAIM_SUBMISSION_ENABLED.
@@ -662,7 +629,7 @@ func GetFeatureClaimSubmissionEnabled() (bool, error) {
 		}
 		return v, nil
 	}
-	return notDefinedbool(), ErrNotDefined
+	return notDefinedbool(), fmt.Errorf("%s: %w", FEATURE_CLAIM_SUBMISSION_ENABLED, ErrNotDefined)
 }
 
 // GetFeatureInputReaderEnabled returns the value for the environment variable CARTESI_FEATURE_INPUT_READER_ENABLED.
@@ -675,7 +642,7 @@ func GetFeatureInputReaderEnabled() (bool, error) {
 		}
 		return v, nil
 	}
-	return notDefinedbool(), ErrNotDefined
+	return notDefinedbool(), fmt.Errorf("%s: %w", FEATURE_INPUT_READER_ENABLED, ErrNotDefined)
 }
 
 // GetFeatureInspectEnabled returns the value for the environment variable CARTESI_FEATURE_INSPECT_ENABLED.
@@ -688,7 +655,7 @@ func GetFeatureInspectEnabled() (bool, error) {
 		}
 		return v, nil
 	}
-	return notDefinedbool(), ErrNotDefined
+	return notDefinedbool(), fmt.Errorf("%s: %w", FEATURE_INSPECT_ENABLED, ErrNotDefined)
 }
 
 // GetFeatureJsonrpcApiEnabled returns the value for the environment variable CARTESI_FEATURE_JSONRPC_API_ENABLED.
@@ -701,7 +668,7 @@ func GetFeatureJsonrpcApiEnabled() (bool, error) {
 		}
 		return v, nil
 	}
-	return notDefinedbool(), ErrNotDefined
+	return notDefinedbool(), fmt.Errorf("%s: %w", FEATURE_JSONRPC_API_ENABLED, ErrNotDefined)
 }
 
 // GetFeatureMachineHashCheckEnabled returns the value for the environment variable CARTESI_FEATURE_MACHINE_HASH_CHECK_ENABLED.
@@ -714,7 +681,7 @@ func GetFeatureMachineHashCheckEnabled() (bool, error) {
 		}
 		return v, nil
 	}
-	return notDefinedbool(), ErrNotDefined
+	return notDefinedbool(), fmt.Errorf("%s: %w", FEATURE_MACHINE_HASH_CHECK_ENABLED, ErrNotDefined)
 }
 
 // GetInspectAddress returns the value for the environment variable CARTESI_INSPECT_ADDRESS.
@@ -727,7 +694,7 @@ func GetInspectAddress() (string, error) {
 		}
 		return v, nil
 	}
-	return notDefinedstring(), ErrNotDefined
+	return notDefinedstring(), fmt.Errorf("%s: %w", INSPECT_ADDRESS, ErrNotDefined)
 }
 
 // GetJsonrpcApiAddress returns the value for the environment variable CARTESI_JSONRPC_API_ADDRESS.
@@ -740,7 +707,7 @@ func GetJsonrpcApiAddress() (string, error) {
 		}
 		return v, nil
 	}
-	return notDefinedstring(), ErrNotDefined
+	return notDefinedstring(), fmt.Errorf("%s: %w", JSONRPC_API_ADDRESS, ErrNotDefined)
 }
 
 // GetTelemetryAddress returns the value for the environment variable CARTESI_TELEMETRY_ADDRESS.
@@ -753,7 +720,7 @@ func GetTelemetryAddress() (string, error) {
 		}
 		return v, nil
 	}
-	return notDefinedstring(), ErrNotDefined
+	return notDefinedstring(), fmt.Errorf("%s: %w", TELEMETRY_ADDRESS, ErrNotDefined)
 }
 
 // GetLogColor returns the value for the environment variable CARTESI_LOG_COLOR.
@@ -766,7 +733,7 @@ func GetLogColor() (bool, error) {
 		}
 		return v, nil
 	}
-	return notDefinedbool(), ErrNotDefined
+	return notDefinedbool(), fmt.Errorf("%s: %w", LOG_COLOR, ErrNotDefined)
 }
 
 // GetLogLevel returns the value for the environment variable CARTESI_LOG_LEVEL.
@@ -779,7 +746,7 @@ func GetLogLevel() (LogLevel, error) {
 		}
 		return v, nil
 	}
-	return notDefinedLogLevel(), ErrNotDefined
+	return notDefinedLogLevel(), fmt.Errorf("%s: %w", LOG_LEVEL, ErrNotDefined)
 }
 
 // GetRemoteMachineLogLevel returns the value for the environment variable CARTESI_REMOTE_MACHINE_LOG_LEVEL.
@@ -792,7 +759,7 @@ func GetRemoteMachineLogLevel() (MachineLogLevel, error) {
 		}
 		return v, nil
 	}
-	return notDefinedMachineLogLevel(), ErrNotDefined
+	return notDefinedMachineLogLevel(), fmt.Errorf("%s: %w", REMOTE_MACHINE_LOG_LEVEL, ErrNotDefined)
 }
 
 // GetAdvancerPollingInterval returns the value for the environment variable CARTESI_ADVANCER_POLLING_INTERVAL.
@@ -805,7 +772,7 @@ func GetAdvancerPollingInterval() (Duration, error) {
 		}
 		return v, nil
 	}
-	return notDefinedDuration(), ErrNotDefined
+	return notDefinedDuration(), fmt.Errorf("%s: %w", ADVANCER_POLLING_INTERVAL, ErrNotDefined)
 }
 
 // GetClaimerPollingInterval returns the value for the environment variable CARTESI_CLAIMER_POLLING_INTERVAL.
@@ -818,7 +785,7 @@ func GetClaimerPollingInterval() (Duration, error) {
 		}
 		return v, nil
 	}
-	return notDefinedDuration(), ErrNotDefined
+	return notDefinedDuration(), fmt.Errorf("%s: %w", CLAIMER_POLLING_INTERVAL, ErrNotDefined)
 }
 
 // GetEvmReaderRetryPolicyMaxDelay returns the value for the environment variable CARTESI_EVM_READER_RETRY_POLICY_MAX_DELAY.
@@ -831,7 +798,7 @@ func GetEvmReaderRetryPolicyMaxDelay() (Duration, error) {
 		}
 		return v, nil
 	}
-	return notDefinedDuration(), ErrNotDefined
+	return notDefinedDuration(), fmt.Errorf("%s: %w", EVM_READER_RETRY_POLICY_MAX_DELAY, ErrNotDefined)
 }
 
 // GetEvmReaderRetryPolicyMaxRetries returns the value for the environment variable CARTESI_EVM_READER_RETRY_POLICY_MAX_RETRIES.
@@ -844,7 +811,7 @@ func GetEvmReaderRetryPolicyMaxRetries() (uint64, error) {
 		}
 		return v, nil
 	}
-	return notDefineduint64(), ErrNotDefined
+	return notDefineduint64(), fmt.Errorf("%s: %w", EVM_READER_RETRY_POLICY_MAX_RETRIES, ErrNotDefined)
 }
 
 // GetMaxStartupTime returns the value for the environment variable CARTESI_MAX_STARTUP_TIME.
@@ -857,7 +824,7 @@ func GetMaxStartupTime() (Duration, error) {
 		}
 		return v, nil
 	}
-	return notDefinedDuration(), ErrNotDefined
+	return notDefinedDuration(), fmt.Errorf("%s: %w", MAX_STARTUP_TIME, ErrNotDefined)
 }
 
 // GetValidatorPollingInterval returns the value for the environment variable CARTESI_VALIDATOR_POLLING_INTERVAL.
@@ -870,7 +837,7 @@ func GetValidatorPollingInterval() (Duration, error) {
 		}
 		return v, nil
 	}
-	return notDefinedDuration(), ErrNotDefined
+	return notDefinedDuration(), fmt.Errorf("%s: %w", VALIDATOR_POLLING_INTERVAL, ErrNotDefined)
 }
 
 // GetSnapshotDir returns the value for the environment variable CARTESI_SNAPSHOT_DIR.
@@ -883,5 +850,5 @@ func GetSnapshotDir() (string, error) {
 		}
 		return v, nil
 	}
-	return notDefinedstring(), ErrNotDefined
+	return notDefinedstring(), fmt.Errorf("%s: %w", SNAPSHOT_DIR, ErrNotDefined)
 }

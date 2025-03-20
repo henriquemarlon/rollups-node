@@ -6,8 +6,10 @@ package evmreader
 import (
 	"math/big"
 
+	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/pkg/contracts/iinputbox"
 	"github.com/cartesi/rollups-node/pkg/ethutil"
+
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -48,17 +50,17 @@ func buildInputAddedFilterQuery(
 		return q, err
 	}
 
-	var appContractRule []interface{}
+	var appContractRule []any
 	for _, appContractItem := range appContract {
 		appContractRule = append(appContractRule, appContractItem)
 	}
-	var indexRule []interface{}
+	var indexRule []any
 	for _, indexItem := range index {
 		indexRule = append(indexRule, indexItem)
 	}
 
 	topics, err := abi.MakeTopics(
-		[]interface{}{c.Events["InputAdded"].ID},
+		[]any{c.Events[MonitoredEvent_InputAdded.String()].ID},
 		appContractRule,
 		indexRule,
 	)

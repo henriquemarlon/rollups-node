@@ -1,10 +1,10 @@
 ARG EMULATOR_VERSION=0.18.1
-ARG FOUNDRY_NIGHTLY_VERSION=2044faec64f99a21f0e5f0094458a973612d0712
-ARG CONTRACTS_VERSION=2.0.0-rc.12
+ARG FOUNDRY_VERSION=1.0.0
+ARG CONTRACTS_VERSION=2.0.0-rc.16
 ARG DEVNET_BUILD_PATH=/opt/cartesi/rollups-contracts
 
 FROM cartesi/machine-emulator:${EMULATOR_VERSION} AS rollups-node-devnet
-ARG FOUNDRY_NIGHTLY_VERSION
+ARG FOUNDRY_VERSION
 ARG CONTRACTS_VERSION
 ARG DEVNET_BUILD_PATH
 
@@ -19,41 +19,31 @@ RUN <<EOF
 EOF
 
 # Install Foundry from downloaded pre-compiled binaries.
-ARG FOUNDRY_NIGHTLY_VERSION
 RUN <<EOF
     set -e
     URL=https://github.com/foundry-rs/foundry/releases/download
-    VERSION=nightly-${FOUNDRY_NIGHTLY_VERSION}
     ARCH=$(dpkg --print-architecture)
-    ARTIFACT=foundry_nightly_linux_${ARCH}.tar.gz
-    curl -sSL ${URL}/${VERSION}/${ARTIFACT} -o /tmp/foundry.tar.gz
+    ARTIFACT=foundry_v${FOUNDRY_VERSION}_linux_${ARCH}.tar.gz
+    curl -sSL ${URL}/v${FOUNDRY_VERSION}/${ARTIFACT} -o /tmp/foundry.tar.gz
     case $ARCH in
-    amd64) echo "c53d77f7f0266ef8bc9daf8d4a8ce39ca5fdce859b5d028b1e55bded7da687e2  /tmp/foundry.tar.gz" | shasum -a 256 --check ;;
-    arm64) echo "5fe5913841c56b79ee5c15aefc2e9730bd6beb07cba0e2112447b822d78b079d  /tmp/foundry.tar.gz" | shasum -a 256 --check ;;
+    amd64) echo "8c078eaced6bfce76af902def65e36db677842ffbf53f76730647082a5b1e45a  /tmp/foundry.tar.gz" | shasum -a 256 --check ;;
+    arm64) echo "79967815024de284265b9e82b75498b46357e597b93b481b9f4abe88a53eade6  /tmp/foundry.tar.gz" | shasum -a 256 --check ;;
     esac
     tar -zxf /tmp/foundry.tar.gz -C /usr/local/bin
 EOF
 
 # Install anvil state file and devnet deployment info.
-RUN mkdir -p ${DEVNET_BUILD_PATH}
-RUN cat <<'EOF' > ${DEVNET_BUILD_PATH}/deployment.jq
-    . as $root | .contracts |
-    reduce to_entries[] as $c (
-        {"name": $root.name, "ChainId": $root.chainId | tonumber};
-        . + {($c.key): ($c.value.address)}
-    )
-EOF
-
 RUN <<EOF
     set -e
+    mkdir -p ${DEVNET_BUILD_PATH}
     URL=https://github.com/cartesi/rollups-contracts/releases/download
     VERSION=v${CONTRACTS_VERSION}
-    ARTIFACT=rollups-contracts-${CONTRACTS_VERSION}-anvil-nightly-${FOUNDRY_NIGHTLY_VERSION}.tar.gz
+    ARTIFACT=rollups-contracts-${CONTRACTS_VERSION}-anvil-v${FOUNDRY_VERSION}.tar.gz
     curl -sSL ${URL}/${VERSION}/${ARTIFACT} -o /tmp/contracts.tar.gz
-    echo "691d229e16b866f97ee5cf27b88573d8434f064a959061c8755e91a048c2a811  /tmp/contracts.tar.gz" | sha256sum --check
+    echo "b543d0864da6ddad76803b36d68d7d75344b749ddd6801406e44de7aa6e10c4b  /tmp/contracts.tar.gz" | sha256sum --check
     tar -zxf /tmp/contracts.tar.gz -C ${DEVNET_BUILD_PATH}/
     mkdir -p /usr/share/devnet
-    jq -cf ${DEVNET_BUILD_PATH}/deployment.jq < ${DEVNET_BUILD_PATH}/localhost.json > /usr/share/devnet/deployment.json
+    cat ${DEVNET_BUILD_PATH}/deployments/*.json | jq -s 'map({ (.contractName): .address }) | add' > /usr/share/devnet/deployment.json
     mv ${DEVNET_BUILD_PATH}/state.json /usr/share/devnet/anvil_state.json
 EOF
 
@@ -66,4 +56,4 @@ HEALTHCHECK --interval=1s --timeout=1s --retries=5 \
 	-d '{"jsonrpc":"2.0","id":"1","method":"net_listening","params":[]}' \
 	http://127.0.0.1:8545
 
-CMD ["anvil", "--block-time", "1", "--silent", "--host", "0.0.0.0", "--load-state", "/usr/share/devnet/anvil_state.json"]
+CMD ["anvil", "--block-time", "1", "--silent", "--steps-tracing", "--host", "0.0.0.0", "--chain-id", "13370", "--load-state", "/usr/share/devnet/anvil_state.json"]

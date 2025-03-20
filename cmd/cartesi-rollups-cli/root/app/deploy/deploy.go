@@ -17,11 +17,12 @@ import (
 	"github.com/cartesi/rollups-node/internal/config/auth"
 	"github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/repository/factory"
+	"github.com/cartesi/rollups-node/pkg/contracts/dataavailability"
 	"github.com/cartesi/rollups-node/pkg/contracts/iapplicationfactory"
 	"github.com/cartesi/rollups-node/pkg/contracts/iauthorityfactory"
 	"github.com/cartesi/rollups-node/pkg/contracts/iconsensus"
+	"github.com/cartesi/rollups-node/pkg/contracts/iinputbox"
 
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -46,11 +47,12 @@ var (
 	templatePath           string
 	templateHash           string
 	consensusAddr          string
+	inputBoxAddr           string
+	dataAvailability       string
 	appFactoryAddr         string
 	authorityFactoryAddr   string
 	blockchainHttpEndpoint string
 	salt                   string
-	inputBoxBlockNumber    uint64
 	epochLength            uint64
 	disabled               bool
 	printAsJSON            bool
@@ -76,6 +78,10 @@ func init() {
 		"Application template hash. If not provided, it will be read from the template path",
 	)
 
+	Cmd.Flags().StringVarP(&dataAvailability, "data-availability", "D", "",
+		"Application ABI encoded Data Availability. If not provided, it will be read from the InputBox Address",
+	)
+
 	Cmd.Flags().StringVarP(&appFactoryAddr, "application-factory", "a", "", "Application Factory Address")
 	viper.BindPFlag(config.CONTRACTS_APPLICATION_FACTORY_ADDRESS, Cmd.Flags().Lookup("application-factory"))
 
@@ -90,8 +96,8 @@ func init() {
 		"Consensus Epoch length. If consensus address is provided, the value will be read from the contract",
 	)
 
-	Cmd.Flags().Uint64VarP(&inputBoxBlockNumber, "inputbox-block-number", "i", 0, "InputBox deployment block number")
-	viper.BindPFlag(config.CONTRACTS_INPUT_BOX_DEPLOYMENT_BLOCK_NUMBER, Cmd.Flags().Lookup("inputbox-block-number"))
+	Cmd.Flags().StringVar(&inputBoxAddr, "inputbox", "", "Input Box contract address")
+	viper.BindPFlag(config.CONTRACTS_INPUT_BOX_ADDRESS, Cmd.Flags().Lookup("inputbox"))
 
 	Cmd.Flags().StringVar(&salt, "salt", "0000000000000000000000000000000000000000000000000000000000000000", "salt")
 
@@ -133,8 +139,22 @@ func run(cmd *cobra.Command, args []string) {
 	txOpts, err := auth.GetTransactOpts(chainId)
 	cobra.CheckErr(err)
 
+	inputBoxAddress, inputBoxBlock, encodedDA, err := processDataAvailability(client, cmd.Flags().Changed("data-availability"))
+	cobra.CheckErr(err)
+
 	var consensus common.Address
-	if consensusAddr == "" {
+	if cmd.Flags().Changed("consensus") {
+		consensus, err := config.ToAddressFromString(consensusAddr)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed reading consensus address: %v\n", err)
+			os.Exit(1)
+		}
+		epochLength, err = getEpochLength(consensus)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to get epoch length from consensus: %v\n", err)
+			os.Exit(1)
+		}
+	} else {
 		var owner common.Address
 		authorityFactoryAddress, err := config.GetContractsAuthorityFactoryAddress()
 		cobra.CheckErr(err)
@@ -148,14 +168,10 @@ func run(cmd *cobra.Command, args []string) {
 			fmt.Fprintf(os.Stderr, "Authoriy contract creation failed: %v\n", err)
 			os.Exit(1)
 		}
-	} else {
-		consensus = common.HexToAddress(consensusAddr)
-		epochLength, err = getEpochLength(consensus)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to get epoch length from consensus: %v\n", err)
-			os.Exit(1)
-		}
 	}
+
+	var daSelector model.DataAvailabilitySelector
+	copy(daSelector[:], encodedDA[:model.DATA_AVAILABILITY_SELECTOR_SIZE])
 
 	var owner common.Address
 	if cmd.Flags().Changed("application-owner") {
@@ -163,9 +179,9 @@ func run(cmd *cobra.Command, args []string) {
 	} else {
 		owner = txOpts.From
 	}
-	applicationFactoryAddress, err := config.GetContractsApplicationFactoryAddress()
+	appFactoryAddress, err := config.GetContractsApplicationFactoryAddress()
 	cobra.CheckErr(err)
-	appAddr, err := deployApplication(ctx, client, txOpts, applicationFactoryAddress, consensus, owner, templateHash, salt)
+	appAddr, err := deployApplication(ctx, client, txOpts, appFactoryAddress, consensus, owner, templateHash, encodedDA, salt)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Application contract creation failed: %v\n", err)
 		os.Exit(1)
@@ -175,13 +191,15 @@ func run(cmd *cobra.Command, args []string) {
 		Name:                 name,
 		IApplicationAddress:  appAddr,
 		IConsensusAddress:    consensus,
+		IInputBoxAddress:     *inputBoxAddress,
 		TemplateURI:          templatePath,
 		TemplateHash:         common.HexToHash(templateHash),
 		EpochLength:          epochLength,
+		DataAvailability:     daSelector,
 		State:                applicationState,
-		LastProcessedBlock:   inputBoxBlockNumber,
-		LastOutputCheckBlock: inputBoxBlockNumber,
-		LastClaimCheckBlock:  inputBoxBlockNumber,
+		IInputBoxBlock:       inputBoxBlock.Uint64(),
+		LastInputCheckBlock:  0,
+		LastOutputCheckBlock: 0,
 	}
 
 	if !noRegister {
@@ -208,7 +226,7 @@ func run(cmd *cobra.Command, args []string) {
 	}
 }
 
-// FIXME remove this
+// FIXME move this to ethutil
 func deployApplication(
 	ctx context.Context,
 	client *ethclient.Client,
@@ -217,6 +235,7 @@ func deployApplication(
 	authorityAddr common.Address,
 	owner common.Address,
 	templateHash string,
+	dataAvailability []byte,
 	salt string,
 ) (common.Address, error) {
 
@@ -234,7 +253,7 @@ func deployApplication(
 		return common.Address{}, fmt.Errorf("Failed to instantiate contract: %v", err)
 	}
 
-	tx, err := factory.NewApplication(txOpts, authorityAddr, owner, toBytes32(templateHashBytes), toBytes32(saltBytes))
+	tx, err := factory.NewApplication(txOpts, authorityAddr, owner, toBytes32(templateHashBytes), dataAvailability, toBytes32(saltBytes))
 	if err != nil {
 		return common.Address{}, fmt.Errorf("Transaction failed: %v", err)
 	}
@@ -257,23 +276,10 @@ func deployApplication(
 		return common.Address{}, fmt.Errorf("Transaction failed!")
 	}
 
-	// Parse logs to get the address of the new application contract
-	contractABI, err := abi.JSON(strings.NewReader(iapplicationfactory.IApplicationFactoryABI))
-	if err != nil {
-		return common.Address{}, fmt.Errorf("Failed to parse ABI: %v", err)
-	}
-
 	// Look for the specific event in the receipt logs
 	for _, vLog := range receipt.Logs {
-		event := struct {
-			Consensus    common.Address
-			AppOwner     common.Address
-			TemplateHash [32]byte
-			AppContract  common.Address
-		}{}
-
 		// Parse log for ApplicationCreated event
-		err := contractABI.UnpackIntoInterface(&event, "ApplicationCreated", vLog.Data)
+		event, err := factory.ParseApplicationCreated(*vLog)
 		if err != nil {
 			continue // Skip logs that don't match
 		}
@@ -330,20 +336,10 @@ func deployAuthority(
 		return common.Address{}, fmt.Errorf("Transaction failed!")
 	}
 
-	// Parse logs to get the address of the new application contract
-	contractABI, err := abi.JSON(strings.NewReader(iauthorityfactory.IAuthorityFactoryABI))
-	if err != nil {
-		return common.Address{}, fmt.Errorf("Failed to parse ABI: %v", err)
-	}
-
 	// Look for the specific event in the receipt logs
 	for _, vLog := range receipt.Logs {
-		event := struct {
-			Authority common.Address
-		}{}
-
 		// Parse log for ApplicationCreated event
-		err := contractABI.UnpackIntoInterface(&event, "AuthorityCreated", vLog.Data)
+		event, err := contract.ParseAuthorityCreated(*vLog)
 		if err != nil {
 			continue // Skip logs that don't match
 		}
@@ -378,6 +374,79 @@ func getEpochLength(
 		return 0, fmt.Errorf("error retrieving application epoch length: %v", err)
 	}
 	return epochLengthRaw.Uint64(), nil
+}
+
+func processDataAvailability(
+	client *ethclient.Client,
+	hasDataAvailabilityFlag bool,
+) (*common.Address, *big.Int, []byte, error) {
+	var inputBoxAddress common.Address
+	var encodedDA []byte
+	var err error
+
+	parsedAbi, err := dataavailability.DataAvailabilityMetaData.GetAbi()
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to get ABI: %w", err)
+	}
+
+	if hasDataAvailabilityFlag {
+		if len(dataAvailability) < 3 || (!strings.HasPrefix(dataAvailability, "0x") && !strings.HasPrefix(dataAvailability, "0X")) {
+			return nil, nil, nil, fmt.Errorf("data Availability should be an ABI encoded value")
+		}
+
+		s := dataAvailability[2:]
+		encodedDA, err = hex.DecodeString(s)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("error parsing Data Availability value: %w", err)
+		}
+
+		if len(encodedDA) < model.DATA_AVAILABILITY_SELECTOR_SIZE {
+			return nil, nil, nil, fmt.Errorf("invalid Data Availability")
+		}
+
+		method, err := parsedAbi.MethodById(encodedDA[:model.DATA_AVAILABILITY_SELECTOR_SIZE])
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to get method by ID: %w", err)
+		}
+
+		args, err := method.Inputs.Unpack(encodedDA[model.DATA_AVAILABILITY_SELECTOR_SIZE:])
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to unpack inputs: %w", err)
+		}
+
+		if len(args) == 0 {
+			return nil, nil, nil, fmt.Errorf("invalid Data Availability. Should at least contain InputBox Address")
+		}
+
+		switch addr := args[0].(type) {
+		case common.Address:
+			inputBoxAddress = addr
+		default:
+			return nil, nil, nil, fmt.Errorf("first argument in Data Availability is not an address (got %T)", args[0])
+		}
+	} else {
+		inputBoxAddress, err = config.GetContractsInputBoxAddress()
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to get input box address: %w", err)
+		}
+
+		encodedDA, err = parsedAbi.Pack("InputBox", inputBoxAddress)
+		if err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to pack InputBox: %w", err)
+		}
+	}
+
+	inputbox, err := iinputbox.NewIInputBox(inputBoxAddress, client)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to create input box instance: %w", err)
+	}
+
+	inputBoxBlock, err := inputbox.GetDeploymentBlockNumber(nil)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to get deployment block number: %w", err)
+	}
+
+	return &inputBoxAddress, inputBoxBlock, encodedDA, nil
 }
 
 func toBytes32(data []byte) [32]byte {

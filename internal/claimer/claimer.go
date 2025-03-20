@@ -307,7 +307,7 @@ func (s *Service) submitClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 		if currEvent != nil {
 			s.Logger.Debug("Found ClaimSubmitted Event",
 				"app", currEvent.AppContract,
-				"claim_hash", fmt.Sprintf("%x", currEvent.Claim),
+				"claim_hash", fmt.Sprintf("%x", currEvent.OutputsMerkleRoot),
 				"last_block", currEvent.LastProcessedBlockNumber.Uint64(),
 			)
 			if !claimSubmissionMatch(computedClaim, currEvent) {
@@ -480,7 +480,7 @@ func (s *Service) acceptClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 		if currEvent != nil {
 			s.Logger.Debug("Found ClaimAccepted Event",
 				"app", currEvent.AppContract,
-				"claim_hash", fmt.Sprintf("%x", currEvent.Claim),
+				"claim_hash", fmt.Sprintf("%x", currEvent.OutputsMerkleRoot),
 				"last_block", currEvent.LastProcessedBlockNumber.Uint64(),
 			)
 			if !claimAcceptanceMatch(submittedClaim, currEvent) {
@@ -508,7 +508,7 @@ func (s *Service) acceptClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 			s.Logger.Info("Claim accepted",
 				"app", currEvent.AppContract,
 				"event_block_number", currEvent.Raw.BlockNumber,
-				"claim_hash", fmt.Sprintf("%x", currEvent.Claim),
+				"claim_hash", fmt.Sprintf("%x", currEvent.OutputsMerkleRoot),
 				"last_block", currEvent.LastProcessedBlockNumber.Uint64(),
 				"tx", txHash,
 			)
@@ -589,13 +589,13 @@ func checkClaimsConstraint(p *ClaimRow, c *ClaimRow) error {
 
 func claimSubmissionMatch(c *ClaimRow, e *iconsensus.IConsensusClaimSubmission) bool {
 	return c.IApplicationAddress == e.AppContract &&
-		*c.ClaimHash == e.Claim &&
+		*c.ClaimHash == e.OutputsMerkleRoot &&
 		c.LastBlock == e.LastProcessedBlockNumber.Uint64()
 }
 
 func claimAcceptanceMatch(c *ClaimRow, e *iconsensus.IConsensusClaimAcceptance) bool {
 	return c.IApplicationAddress == e.AppContract &&
-		*c.ClaimHash == e.Claim &&
+		*c.ClaimHash == e.OutputsMerkleRoot &&
 		c.LastBlock == e.LastProcessedBlockNumber.Uint64()
 }
 

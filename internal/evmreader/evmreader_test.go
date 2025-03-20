@@ -15,7 +15,6 @@ import (
 	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/repository"
 	appcontract "github.com/cartesi/rollups-node/pkg/contracts/iapplication"
-	"github.com/cartesi/rollups-node/pkg/contracts/iconsensus"
 	"github.com/cartesi/rollups-node/pkg/contracts/iinputbox"
 	"github.com/cartesi/rollups-node/pkg/service"
 	"github.com/ethereum/go-ethereum"
@@ -72,7 +71,6 @@ type EvmReaderSuite struct {
 	cancel          context.CancelFunc
 	client          *MockEthClient
 	wsClient        *MockEthClient
-	inputBox        *MockInputBox
 	repository      *MockRepository
 	evmReader       *Service
 	contractFactory *MockEvmReaderContractFactory
@@ -111,20 +109,17 @@ func (s *EvmReaderSuite) TearDownSuite() {
 func (me *EvmReaderSuite) SetupTest() {
 	me.client = newMockEthClient()
 	me.wsClient = me.client
-	me.inputBox = newMockInputBox()
 	me.repository = newMockRepository()
 	me.contractFactory = newEmvReaderContractFactory()
 
 	me.evmReader = &Service{
-		client:                  me.client,
-		wsClient:                me.wsClient,
-		inputSource:             me.inputBox,
-		repository:              me.repository,
-		inputBoxDeploymentBlock: 0,
-		defaultBlock:            DefaultBlock_Latest,
-		contractFactory:         me.contractFactory,
-		hasEnabledApps:          true,
-		inputReaderEnabled:      true,
+		client:             me.client,
+		wsClient:           me.wsClient,
+		repository:         me.repository,
+		defaultBlock:       DefaultBlock_Latest,
+		contractFactory:    me.contractFactory,
+		hasEnabledApps:     true,
+		inputReaderEnabled: true,
 	}
 	serviceArgs := &service.CreateInfo{Name: "evm-reader", Impl: me.evmReader}
 	err := service.Create(context.Background(), serviceArgs, &me.evmReader.Service)
@@ -174,103 +169,18 @@ func (s *EvmReaderSuite) TestItFailsToSubscribeForNewInputsOnStart() {
 	s.client.AssertNumberOfCalls(s.T(), "SubscribeNewHead", 1)
 }
 
-func (s *EvmReaderSuite) TestItWrongIConsensus() {
-	s.SetupTest()
-
-	consensusContract := &MockIConsensusContract{}
-	contractFactory := newEmvReaderContractFactory()
-	contractFactory.Unset("NewIConsensus")
-	contractFactory.On("NewIConsensus",
-		mock.Anything,
-	).Return(consensusContract, nil)
-
-	wsClient := FakeWSEhtClient{}
-	s.evmReader.wsClient = &wsClient
-	s.evmReader.inputBoxDeploymentBlock = 0x10
-	s.evmReader.contractFactory = contractFactory
-
-	// Prepare consensus
-	claimEvent0 := &iconsensus.IConsensusClaimAcceptance{
-		AppContract:              common.HexToAddress("0x2E663fe9aE92275242406A185AA4fC8174339D3E"),
-		LastProcessedBlockNumber: big.NewInt(3),
-		Claim:                    common.HexToHash("0xdeadbeef"),
-	}
-
-	claimEvents := []*iconsensus.IConsensusClaimAcceptance{claimEvent0}
-	consensusContract.On("RetrieveClaimAcceptanceEvents",
-		mock.Anything,
-		mock.Anything,
-	).Return(claimEvents, nil).Once()
-
-	// Prepare repository
-	s.repository.Unset("ListApplications")
-	s.repository.On(
-		"ListApplications",
-		mock.Anything,
-		mock.Anything,
-		mock.Anything,
-	).Return([]*Application{{
-		IApplicationAddress: common.HexToAddress("0x2E663fe9aE92275242406A185AA4fC8174339D3E"),
-		IConsensusAddress:   common.HexToAddress("0xFFFFFFFF"),
-		EpochLength:         10,
-		LastProcessedBlock:  0x00,
-	}}, uint64(1), nil).Once()
-
-	// Prepare Client
-	s.client.Unset("HeaderByNumber")
-	s.client.On(
-		"HeaderByNumber",
-		mock.Anything,
-		mock.Anything,
-	).Return(&header0, nil).Once()
-
-	// Start service
-	ready := make(chan struct{}, 1)
-	errChannel := make(chan error, 1)
-
-	go func() {
-		errChannel <- s.evmReader.Run(s.ctx, ready)
-	}()
-
-	select {
-	case <-ready:
-		break
-	case err := <-errChannel:
-		s.FailNow("unexpected error signal", err)
-	}
-
-	wsClient.fireNewHead(&header0)
-	time.Sleep(time.Second)
-
-	// Should not advance input processing
-	s.inputBox.AssertNumberOfCalls(s.T(), "RetrieveInputs", 0)
-	s.repository.AssertNumberOfCalls(
-		s.T(),
-		"StoreEpochAndInputsTransaction",
-		0,
-	)
-
-	// Should not advance claim acceptance processing
-	s.inputBox.AssertNumberOfCalls(s.T(), "RetrieveClaimAcceptanceEvents", 0)
-	s.repository.AssertNumberOfCalls(
-		s.T(),
-		"UpdateEpochsClaimAccepted",
-		0,
-	)
-}
-
 func (s *EvmReaderSuite) TestIndexApps() {
 
 	s.Run("Ok", func() {
 		apps := []appContracts{
-			{application: &Application{LastProcessedBlock: 23}},
-			{application: &Application{LastProcessedBlock: 22}},
-			{application: &Application{LastProcessedBlock: 21}},
-			{application: &Application{LastProcessedBlock: 23}},
+			{application: &Application{LastInputCheckBlock: 23}},
+			{application: &Application{LastInputCheckBlock: 22}},
+			{application: &Application{LastInputCheckBlock: 21}},
+			{application: &Application{LastInputCheckBlock: 23}},
 		}
 
 		keyByProcessedBlock := func(a appContracts) uint64 {
-			return a.application.LastProcessedBlock
+			return a.application.LastInputCheckBlock
 		}
 
 		indexApps := indexApps(keyByProcessedBlock, apps)
@@ -285,7 +195,7 @@ func (s *EvmReaderSuite) TestIndexApps() {
 		apps := []appContracts{}
 
 		keyByProcessedBlock := func(a appContracts) uint64 {
-			return a.application.LastProcessedBlock
+			return a.application.LastInputCheckBlock
 		}
 
 		indexApps := indexApps(keyByProcessedBlock, apps)
@@ -297,7 +207,7 @@ func (s *EvmReaderSuite) TestIndexApps() {
 		apps := []appContracts{}
 
 		keyByProcessedBlock := func(a appContracts) uint64 {
-			return a.application.LastProcessedBlock
+			return a.application.LastInputCheckBlock
 		}
 
 		indexApps := indexApps(keyByProcessedBlock, apps)
@@ -305,36 +215,16 @@ func (s *EvmReaderSuite) TestIndexApps() {
 		s.Require().Equal(0, len(indexApps))
 	})
 
-	s.Run("whenIndexByEmptyKey", func() {
-		apps := []appContracts{
-			{application: &Application{LastProcessedBlock: 23}},
-			{application: &Application{LastProcessedBlock: 22}},
-			{application: &Application{LastProcessedBlock: 21}},
-			{application: &Application{LastProcessedBlock: 23}},
-		}
-
-		keyByIConsensus := func(a appContracts) ConsensusContract {
-			return a.consensusContract
-		}
-
-		indexApps := indexApps(keyByIConsensus, apps)
-
-		s.Require().Equal(1, len(indexApps))
-		apps, ok := indexApps[nil]
-		s.Require().True(ok)
-		s.Require().Equal(4, len(apps))
-	})
-
 	s.Run("whenUsesWrongKey", func() {
 		apps := []appContracts{
-			{application: &Application{LastProcessedBlock: 23}},
-			{application: &Application{LastProcessedBlock: 22}},
-			{application: &Application{LastProcessedBlock: 21}},
-			{application: &Application{LastProcessedBlock: 23}},
+			{application: &Application{LastInputCheckBlock: 23}},
+			{application: &Application{LastInputCheckBlock: 22}},
+			{application: &Application{LastInputCheckBlock: 21}},
+			{application: &Application{LastInputCheckBlock: 23}},
 		}
 
 		keyByProcessedBlock := func(a appContracts) uint64 {
-			return a.application.LastProcessedBlock
+			return a.application.LastInputCheckBlock
 		}
 
 		indexApps := indexApps(keyByProcessedBlock, apps)
@@ -525,13 +415,6 @@ func newMockRepository() *MockRepository {
 		mock.Anything,
 	).Return([]*Epoch{}, uint64(0), nil)
 
-	repo.On("UpdateEpochsClaimAccepted",
-		mock.Anything,
-		mock.Anything,
-		mock.Anything,
-		mock.Anything,
-	).Return(nil)
-
 	repo.On("UpdateOutputsExecution",
 		mock.Anything,
 		mock.Anything,
@@ -617,12 +500,6 @@ func (m *MockRepository) ListEpochs(ctx context.Context, nameOrAddress string,
 	return args.Get(0).([]*Epoch), args.Get(1).(uint64), args.Error(2)
 }
 
-func (m *MockRepository) UpdateEpochsClaimAccepted(ctx context.Context, nameOrAddress string,
-	epochs []*Epoch, lastClaimCheckBlock uint64) error {
-	args := m.Called(ctx, nameOrAddress, epochs, lastClaimCheckBlock)
-	return args.Error(0)
-}
-
 func (m *MockRepository) GetOutput(ctx context.Context, nameOrAddress string, indexKey uint64) (*Output, error) {
 	args := m.Called(ctx, nameOrAddress, indexKey)
 	obj := args.Get(0)
@@ -643,6 +520,12 @@ func (m *MockRepository) UpdateApplicationState(ctx context.Context, appID int64
 	return args.Error(0)
 }
 
+func (m *MockRepository) UpdateEventLastCheckBlock(ctx context.Context, appIDs []int64,
+	event MonitoredEvent, blockNumber uint64) error {
+	args := m.Called(ctx, appIDs, event, blockNumber)
+	return args.Error(0)
+}
+
 type MockApplicationContract struct {
 	mock.Mock
 }
@@ -655,36 +538,11 @@ func (m *MockApplicationContract) Unset(methodName string) {
 	}
 }
 
-func (m *MockApplicationContract) GetConsensus(
-	opts *bind.CallOpts,
-) (common.Address, error) {
-	args := m.Called(opts)
-	return args.Get(0).(common.Address), args.Error(1)
-}
-
 func (m *MockApplicationContract) RetrieveOutputExecutionEvents(
 	opts *bind.FilterOpts,
 ) ([]*appcontract.IApplicationOutputExecuted, error) {
 	args := m.Called(opts)
 	return args.Get(0).([]*appcontract.IApplicationOutputExecuted), args.Error(1)
-}
-
-type MockIConsensusContract struct {
-	mock.Mock
-}
-
-func (m *MockIConsensusContract) GetEpochLength(
-	opts *bind.CallOpts,
-) (*big.Int, error) {
-	args := m.Called(opts)
-	return args.Get(0).(*big.Int), args.Error(1)
-}
-
-func (m *MockIConsensusContract) RetrieveClaimAcceptanceEvents(
-	opts *bind.FilterOpts, appAddresses []common.Address,
-) ([]*iconsensus.IConsensusClaimAcceptance, error) {
-	args := m.Called(opts, appAddresses)
-	return args.Get(0).([]*iconsensus.IConsensusClaimAcceptance), args.Error(1)
 }
 
 type MockEvmReaderContractFactory struct {
@@ -706,42 +564,34 @@ func (m *MockEvmReaderContractFactory) NewApplication(
 	return args.Get(0).(ApplicationContract), args.Error(1)
 }
 
-func (m *MockEvmReaderContractFactory) NewIConsensus(
+func (m *MockEvmReaderContractFactory) NewInputSource(
 	common.Address,
-) (ConsensusContract, error) {
+) (InputSource, error) {
 	args := m.Called(context.Background())
-	return args.Get(0).(ConsensusContract), args.Error(1)
+	return args.Get(0).(InputSource), args.Error(1)
 }
 
 func newEmvReaderContractFactory() *MockEvmReaderContractFactory {
 
 	applicationContract := &MockApplicationContract{}
-
-	applicationContract.On("GetConsensus",
-		mock.Anything,
-	).Return(common.HexToAddress("0xdeadbeef"), nil)
-
 	applicationContract.On("RetrieveOutputExecutionEvents",
-		mock.Anything).Return([]*appcontract.IApplicationOutputExecuted{}, nil)
+		mock.Anything,
+	).Return([]*appcontract.IApplicationOutputExecuted{}, nil)
 
-	consensusContract := &MockIConsensusContract{}
-
-	consensusContract.On("GetEpochLength",
-		mock.Anything).Return(big.NewInt(10), nil)
-
-	consensusContract.On("RetrieveClaimAcceptanceEvents",
+	inputBox := newMockInputBox()
+	inputBox.On("RetrieveInputs",
 		mock.Anything,
 		mock.Anything,
-	).Return([]*iconsensus.IConsensusClaimAcceptance{}, nil)
+		mock.Anything,
+	).Return([]iinputbox.IInputBoxInputAdded{}, nil)
 
 	factory := &MockEvmReaderContractFactory{}
-
 	factory.On("NewApplication",
 		mock.Anything,
 	).Return(applicationContract, nil)
-
-	factory.On("NewIConsensus",
-		mock.Anything).Return(consensusContract, nil)
+	factory.On("NewInputSource",
+		mock.Anything,
+	).Return(inputBox, nil)
 
 	return factory
 }

@@ -111,5 +111,6 @@ func _traceTransaction(
 	if err != nil {
 		return "", err
 	}
+	println("result", string(result))
 	return string(result), nil
 }

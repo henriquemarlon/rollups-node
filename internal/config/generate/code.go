@@ -165,7 +165,7 @@ func Get{{ toFieldName .Name }}() ({{ .GoType }}, error) {
 		}
 		return v, nil
 	}
-	return notDefined{{ .GoType }}(), ErrNotDefined
+	return notDefined{{ .GoType }}(), fmt.Errorf("%s: %w", {{ toConstName .Name }}, ErrNotDefined)
 }
 {{ end }}
 

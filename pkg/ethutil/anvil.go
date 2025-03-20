@@ -14,7 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
-func CreateAnvilSnapshotAndDeployApp(ctx context.Context, client *ethclient.Client, factoryAddr common.Address, templateHash common.Hash) (common.Address, func(), error) {
+func CreateAnvilSnapshotAndDeployApp(ctx context.Context, client *ethclient.Client, factoryAddr common.Address, templateHash common.Hash, dataAvailability []byte, salt string) (common.Address, func(), error) {
 	var contractAddr common.Address
 	if client == nil {
 		return contractAddr, nil, fmt.Errorf("ethclient Client is nil")
@@ -44,10 +44,9 @@ func CreateAnvilSnapshotAndDeployApp(ctx context.Context, client *ethclient.Clie
 		return contractAddr, nil, fmt.Errorf("failed to create TransactOpts: %w", err)
 	}
 
-	salt := "0000000000000000000000000000000000000000000000000000000000000000"
 	// Deploy the application contract
 	contractAddr, err = DeploySelfHostedApplication(ctx, client, txOpts, factoryAddr, txOpts.From,
-		templateHash, salt)
+		templateHash, dataAvailability, salt)
 	if err != nil {
 		_ = RevertToAnvilSnapshot(client.Client(), snapshotID)
 		return contractAddr, nil, fmt.Errorf("failed to deploy application contract: %w", err)

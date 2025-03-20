@@ -136,13 +136,8 @@ Block subscription timeout in seconds."""
 [contracts.CARTESI_CONTRACTS_INPUT_BOX_ADDRESS]
 go-type = "Address"
 description = """
-Address of the InputBox contract. [Required: evm-reader]"""
-
-[contracts.CARTESI_CONTRACTS_INPUT_BOX_DEPLOYMENT_BLOCK_NUMBER]
-go-type = "uint64"
-description = """
-The InputBox contract deployment block number.
-The node will begin to read blockchain events from this block. [Required: evm-reader]"""
+Address of the InputBox contract. Not required, used only by the CLI and tests"""
+omit = true
 
 [contracts.CARTESI_CONTRACTS_AUTHORITY_FACTORY_ADDRESS]
 go-type = "Address"

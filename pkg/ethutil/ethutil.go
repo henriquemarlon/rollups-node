@@ -34,6 +34,7 @@ func DeploySelfHostedApplication(
 	shAppFactoryAddr common.Address,
 	ownerAddr common.Address,
 	templateHash common.Hash,
+	dataAvailability []byte,
 	salt string,
 ) (common.Address, error) {
 	var appAddr common.Address
@@ -51,29 +52,27 @@ func DeploySelfHostedApplication(
 	receipt, err := sendTransaction(
 		ctx, client, transactionOpts, big.NewInt(0), GasLimit,
 		func(txOpts *bind.TransactOpts) (*types.Transaction, error) {
-			return factory.DeployContracts(txOpts, ownerAddr, big.NewInt(10), ownerAddr, templateHash, toBytes32(saltBytes))
+			return factory.DeployContracts(txOpts, ownerAddr, big.NewInt(10), ownerAddr, templateHash,
+				dataAvailability, toBytes32(saltBytes))
 		},
 	)
 	if err != nil {
 		return appAddr, err
 	}
-	// Parse logs to get the address of the new application contract
-	contractABI, err := iapplicationfactory.IApplicationFactoryMetaData.GetAbi()
+
+	appFactoryAddress, err := factory.GetApplicationFactory(nil)
 	if err != nil {
-		return appAddr, fmt.Errorf("Failed to parse IApplicationFactory ABI: %v", err)
+		return appAddr, err
+	}
+
+	appFactory, err := iapplicationfactory.NewIApplicationFactory(appFactoryAddress, client)
+	if err != nil {
+		return appAddr, err
 	}
 
 	// Look for the specific event in the receipt logs
 	for _, vLog := range receipt.Logs {
-		event := struct {
-			Consensus    common.Address
-			AppOwner     common.Address
-			TemplateHash [32]byte
-			AppContract  common.Address
-		}{}
-
-		// Parse log for ApplicationCreated event
-		err := contractABI.UnpackIntoInterface(&event, "ApplicationCreated", vLog.Data)
+		event, err := appFactory.ParseApplicationCreated(*vLog)
 		if err != nil {
 			continue // Skip logs that don't match
 		}
@@ -269,11 +268,30 @@ func GetConsensus(
 	if err != nil {
 		return common.Address{}, fmt.Errorf("Failed to instantiate contract: %v", err)
 	}
-	consensus, err := app.GetConsensus(&bind.CallOpts{Context: ctx})
+	consensus, err := app.GetOutputsMerkleRootValidator(&bind.CallOpts{Context: ctx})
 	if err != nil {
 		return common.Address{}, fmt.Errorf("error retrieving application epoch length: %v", err)
 	}
 	return consensus, nil
+}
+
+func GetDataAvailability(
+	ctx context.Context,
+	client *ethclient.Client,
+	appAddress common.Address,
+) ([]byte, error) {
+	if client == nil {
+		return nil, fmt.Errorf("get dataAvailability: client is nil")
+	}
+	app, err := iapplication.NewIApplication(appAddress, client)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to instantiate contract: %v", err)
+	}
+	dataAvailability, err := app.GetDataAvailability(&bind.CallOpts{Context: ctx})
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving application epoch length: %v", err)
+	}
+	return dataAvailability, nil
 }
 
 func GetEpochLength(
@@ -293,6 +311,25 @@ func GetEpochLength(
 		return 0, fmt.Errorf("error retrieving application epoch length: %v", err)
 	}
 	return epochLengthRaw.Uint64(), nil
+}
+
+func GetInputBoxDeploymentBlock(
+	ctx context.Context,
+	client *ethclient.Client,
+	inputBoxAddress common.Address,
+) (*big.Int, error) {
+	if client == nil {
+		return nil, fmt.Errorf("get epoch length: client is nil")
+	}
+	inputbox, err := iinputbox.NewIInputBox(inputBoxAddress, client)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create input box instance: %w", err)
+	}
+	block, err := inputbox.GetDeploymentBlockNumber(&bind.CallOpts{Context: ctx})
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving inputbox deployment block: %v", err)
+	}
+	return block, nil
 }
 
 func toBytes32(data []byte) [32]byte {

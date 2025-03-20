@@ -5,14 +5,18 @@ package register
 
 import (
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"os"
+	"strings"
 
 	"github.com/cartesi/rollups-node/internal/advancer/snapshot"
 	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/repository/factory"
+	"github.com/cartesi/rollups-node/pkg/contracts/dataavailability"
 	"github.com/cartesi/rollups-node/pkg/ethutil"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -39,6 +43,9 @@ var (
 	templateHash           string
 	epochLength            uint64
 	inputBoxBlockNumber    uint64
+	inputBoxAddress        string
+	inputBoxAddressFromEnv bool
+	dataAvailability       string
 	blockchainHttpEndpoint string
 	enableMachineHashCheck bool
 	disabled               bool
@@ -63,11 +70,19 @@ func init() {
 		"Application template hash. (DO NOT USE IN PRODUCTION)\nThis value is retrieved from the application contract",
 	)
 
-	Cmd.Flags().Uint64VarP(&inputBoxBlockNumber, "inputbox-block-number", "i", 0, "InputBox deployment block number")
-
 	Cmd.Flags().Uint64VarP(&epochLength, "epoch-length", "e", 10,
 		"Consensus Epoch length. (DO NOT USE IN PRODUCTION)\nThis value is retrieved from the consensus contract",
 	)
+
+	Cmd.Flags().StringVarP(&dataAvailability, "data-availability", "D", "",
+		"Application ABI encoded Data Availability. If not provided, it will be read from the InputBox Address",
+	)
+
+	Cmd.Flags().StringVar(&inputBoxAddress, "inputbox", "", "Input Box contract address")
+	viper.BindPFlag(config.CONTRACTS_INPUT_BOX_ADDRESS, Cmd.Flags().Lookup("inputbox"))
+
+	Cmd.Flags().BoolVar(&inputBoxAddressFromEnv, "inputbox-from-env", false, "Read Input Box contract address from environment")
+	Cmd.Flags().Uint64Var(&inputBoxBlockNumber, "inputbox-block-number", 0, "InputBox deployment block number")
 
 	Cmd.Flags().BoolVarP(&disabled, "disabled", "d", false, "Sets the application state to disabled")
 
@@ -135,7 +150,7 @@ func run(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	if !cmd.Flags().Changed("epochLength") {
+	if !cmd.Flags().Changed("epoch-length") {
 		epochLength, err = getEpochLength(ctx, consensus)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to get epoch length from consensus: %v\n", err)
@@ -143,18 +158,39 @@ func run(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	// TODO: inputBoxBlockNumber should come from config
+	inputBoxAddress, encodedDA, err := processDataAvailability(
+		ctx,
+		address,
+		cmd.Flags().Changed("data-availability"),
+		cmd.Flags().Changed("inputbox") || cmd.Flags().Changed("inputbox-from-env"),
+	)
+	cobra.CheckErr(err)
+
+	var daSelector model.DataAvailabilitySelector
+	copy(daSelector[:], encodedDA[:model.DATA_AVAILABILITY_SELECTOR_SIZE])
+
+	if !cmd.Flags().Changed("inputbox-block-number") {
+		block, err := getInputBoxDeploymentBlock(ctx, *inputBoxAddress)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to get deployment block number: %v\n", err)
+			os.Exit(1)
+		}
+		inputBoxBlockNumber = block.Uint64()
+	}
+
 	application := model.Application{
 		Name:                 name,
 		IApplicationAddress:  address,
 		IConsensusAddress:    consensus,
+		IInputBoxAddress:     *inputBoxAddress,
 		TemplateURI:          templatePath,
 		TemplateHash:         parsedTemplateHash,
 		EpochLength:          epochLength,
+		DataAvailability:     daSelector,
 		State:                applicationState,
-		LastProcessedBlock:   inputBoxBlockNumber,
-		LastOutputCheckBlock: inputBoxBlockNumber,
-		LastClaimCheckBlock:  inputBoxBlockNumber,
+		IInputBoxBlock:       inputBoxBlockNumber,
+		LastInputCheckBlock:  0,
+		LastOutputCheckBlock: 0,
 	}
 
 	_, err = repo.CreateApplication(ctx, &application)
@@ -190,7 +226,9 @@ func getConsensus(
 	appAddress common.Address,
 ) (common.Address, error) {
 	ethEndpoint, err := config.GetBlockchainHttpEndpoint()
-	cobra.CheckErr(err)
+	if err != nil {
+		return common.Address{}, fmt.Errorf("failed to get blockchain http endpoint address: %w", err)
+	}
 	client, err := ethclient.Dial(ethEndpoint.String())
 	if err != nil {
 		return common.Address{}, fmt.Errorf("Failed to connect to the blockchain http endpoint: %s", ethEndpoint.Redacted())
@@ -203,10 +241,114 @@ func getEpochLength(
 	consensusAddr common.Address,
 ) (uint64, error) {
 	ethEndpoint, err := config.GetBlockchainHttpEndpoint()
-	cobra.CheckErr(err)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get blockchain http endpoint address: %w", err)
+	}
 	client, err := ethclient.Dial(ethEndpoint.String())
 	if err != nil {
-		return 0, fmt.Errorf("Failed to connect to the blockchain http endpoint: %s", ethEndpoint.Redacted())
+		return 0, fmt.Errorf("failed to connect to the blockchain http endpoint: %s", ethEndpoint.Redacted())
 	}
 	return ethutil.GetEpochLength(ctx, client, consensusAddr)
+}
+
+func getInputBoxDeploymentBlock(
+	ctx context.Context,
+	inputBoxAddress common.Address,
+) (*big.Int, error) {
+	ethEndpoint, err := config.GetBlockchainHttpEndpoint()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get blockchain http endpoint address: %w", err)
+	}
+	client, err := ethclient.Dial(ethEndpoint.String())
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to the blockchain http endpoint: %s", ethEndpoint.Redacted())
+	}
+	return ethutil.GetInputBoxDeploymentBlock(ctx, client, inputBoxAddress)
+}
+
+func getDataAvailability(
+	ctx context.Context,
+	appAddress common.Address,
+) ([]byte, error) {
+	ethEndpoint, err := config.GetBlockchainHttpEndpoint()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get blockchain http endpoint address: %w", err)
+	}
+	client, err := ethclient.Dial(ethEndpoint.String())
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to the blockchain http endpoint: %s", ethEndpoint.Redacted())
+	}
+	return ethutil.GetDataAvailability(ctx, client, appAddress)
+}
+
+func processDataAvailability(
+	ctx context.Context,
+	appAddress common.Address,
+	hasDataAvailabilityFlag bool,
+	hasInputBoxAddressFlag bool,
+) (*common.Address, []byte, error) {
+	var inputBoxAddress common.Address
+	var encodedDA []byte
+	var err error
+
+	parsedAbi, err := dataavailability.DataAvailabilityMetaData.GetAbi()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get ABI: %w", err)
+	}
+
+	if hasInputBoxAddressFlag {
+		inputBoxAddress, err = config.GetContractsInputBoxAddress()
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to get input box address: %w", err)
+		}
+
+		encodedDA, err = parsedAbi.Pack("InputBox", inputBoxAddress)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to pack InputBox: %w", err)
+		}
+	} else {
+		if hasDataAvailabilityFlag {
+			if len(dataAvailability) < 3 || (!strings.HasPrefix(dataAvailability, "0x") && !strings.HasPrefix(dataAvailability, "0X")) {
+				return nil, nil, fmt.Errorf("data Availability should be an ABI encoded value")
+			}
+
+			s := dataAvailability[2:]
+			encodedDA, err = hex.DecodeString(s)
+			if err != nil {
+				return nil, nil, fmt.Errorf("error parsing Data Availability value: %w", err)
+			}
+		} else {
+			encodedDA, err = getDataAvailability(ctx, appAddress)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to get Data Availability from Application: %w", err)
+			}
+		}
+
+		if len(encodedDA) < model.DATA_AVAILABILITY_SELECTOR_SIZE {
+			return nil, nil, fmt.Errorf("invalid Data Availability")
+		}
+
+		method, err := parsedAbi.MethodById(encodedDA[:model.DATA_AVAILABILITY_SELECTOR_SIZE])
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to get method by ID: %w", err)
+		}
+
+		args, err := method.Inputs.Unpack(encodedDA[model.DATA_AVAILABILITY_SELECTOR_SIZE:])
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to unpack inputs: %w", err)
+		}
+
+		if len(args) == 0 {
+			return nil, nil, fmt.Errorf("invalid Data Availability. Should at least contain InputBox Address")
+		}
+
+		switch addr := args[0].(type) {
+		case common.Address:
+			inputBoxAddress = addr
+		default:
+			return nil, nil, fmt.Errorf("first argument in Data Availability is not an address (got %T)", args[0])
+		}
+	}
+
+	return &inputBoxAddress, encodedDA, nil
 }

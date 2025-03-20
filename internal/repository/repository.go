@@ -19,7 +19,8 @@ type Pagination struct {
 }
 
 type ApplicationFilter struct {
-	State *ApplicationState
+	State            *ApplicationState
+	DataAvailability *DataAvailabilitySelector
 }
 
 type EpochFilter struct {
@@ -62,6 +63,8 @@ type ApplicationRepository interface {
 
 	GetExecutionParameters(ctx context.Context, applicationID int64) (*ExecutionParameters, error)
 	UpdateExecutionParameters(ctx context.Context, ep *ExecutionParameters) error
+
+	UpdateEventLastCheckBlock(ctx context.Context, appIDs []int64, event MonitoredEvent, blockNumber uint64) error
 }
 
 type EpochRepository interface {
@@ -73,7 +76,6 @@ type EpochRepository interface {
 	GetEpochByVirtualIndex(ctx context.Context, nameOrAddress string, index uint64) (*Epoch, error)
 
 	UpdateEpoch(ctx context.Context, nameOrAddress string, e *Epoch) error
-	UpdateEpochsClaimAccepted(ctx context.Context, nameOrAddress string, epochs []*Epoch, mostRecentBlockNumber uint64) error
 	UpdateEpochsInputsProcessed(ctx context.Context, nameOrAddress string) (int64, error)
 
 	ListEpochs(ctx context.Context, nameOrAddress string, f EpochFilter, p Pagination) ([]*Epoch, uint64, error)

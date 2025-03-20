@@ -16,7 +16,7 @@ import (
 // checkForNewInputs checks if is there new Inputs for all running Applications
 func (r *Service) checkForNewInputs(
 	ctx context.Context,
-	apps []appContracts,
+	applications []appContracts,
 	mostRecentBlockNumber uint64,
 ) {
 	if !r.inputReaderEnabled {
@@ -25,53 +25,61 @@ func (r *Service) checkForNewInputs(
 
 	r.Logger.Debug("Checking for new inputs")
 
-	groupedApps := indexApps(byLastProcessedBlock, apps)
+	appsByInputBox := indexApps(byInputBoxAddress, applications)
 
-	for lastProcessedBlock, apps := range groupedApps {
+	for inputBoxAddress, inputBoxApps := range appsByInputBox {
+		r.Logger.Debug("Checking inputs for applications with the same InputBox",
+			"inputbox_address", inputBoxAddress,
+			"most recent block", mostRecentBlockNumber,
+		)
+		appsByLastInputCheckBlock := indexApps(byLastInputCheckBlock, inputBoxApps)
 
-		appAddresses := appsToAddresses(apps)
+		for lastProcessedBlock, apps := range appsByLastInputCheckBlock {
+			appAddresses := appsToAddresses(apps)
 
-		// Only check blocks starting from the block where the InputBox
-		// contract was deployed as Inputs can be added to that same block
-		if lastProcessedBlock < r.inputBoxDeploymentBlock {
-			lastProcessedBlock = r.inputBoxDeploymentBlock - 1
-		}
-
-		if mostRecentBlockNumber > lastProcessedBlock {
-
-			r.Logger.Debug("Checking inputs for applications",
-				"apps", appAddresses,
-				"last processed block", lastProcessedBlock,
-				"most recent block", mostRecentBlockNumber,
-			)
-
-			err := r.readAndStoreInputs(ctx,
-				lastProcessedBlock,
-				mostRecentBlockNumber,
-				apps,
-			)
-			if err != nil {
-				r.Logger.Error("Error reading inputs",
-					"apps", appAddresses,
-					"last processed block", lastProcessedBlock,
-					"most recent block", mostRecentBlockNumber,
-					"error", err,
-				)
-				continue
+			// Only check blocks starting from the block where the InputBox
+			// contract was deployed as Inputs can be added to that same block
+			inputBoxDeploymentBlock := apps[0].application.IInputBoxBlock
+			if lastProcessedBlock < inputBoxDeploymentBlock {
+				lastProcessedBlock = inputBoxDeploymentBlock - 1
 			}
-		} else if mostRecentBlockNumber < lastProcessedBlock {
-			r.Logger.Warn(
-				"Not reading inputs: most recent block is lower than the last processed one",
-				"apps", appAddresses,
-				"last processed block", lastProcessedBlock,
-				"most recent block", mostRecentBlockNumber,
-			)
-		} else {
-			r.Logger.Info("Not reading inputs: already checked the most recent blocks",
-				"apps", appAddresses,
-				"last processed block", lastProcessedBlock,
-				"most recent block", mostRecentBlockNumber,
-			)
+
+			if mostRecentBlockNumber > lastProcessedBlock {
+
+				r.Logger.Debug("Checking inputs for applications",
+					"apps", appAddresses,
+					"last_processed_block", lastProcessedBlock,
+					"most_recent_block", mostRecentBlockNumber,
+				)
+
+				err := r.readAndStoreInputs(ctx,
+					lastProcessedBlock,
+					mostRecentBlockNumber,
+					apps,
+				)
+				if err != nil {
+					r.Logger.Error("Error reading inputs",
+						"apps", appAddresses,
+						"last_processed_block", lastProcessedBlock,
+						"most_recent_block", mostRecentBlockNumber,
+						"error", err,
+					)
+					continue
+				}
+			} else if mostRecentBlockNumber < lastProcessedBlock {
+				r.Logger.Warn(
+					"Not reading inputs: most recent block is lower than the last processed one",
+					"apps", appAddresses,
+					"last_processed_block", lastProcessedBlock,
+					"most_recent_block", mostRecentBlockNumber,
+				)
+			} else {
+				r.Logger.Info("Not reading inputs: already checked the most recent blocks",
+					"apps", appAddresses,
+					"last_processed_block", lastProcessedBlock,
+					"most_recent_block", mostRecentBlockNumber,
+				)
+			}
 		}
 	}
 }
@@ -246,6 +254,36 @@ func (r *Service) readAndStoreInputs(
 
 	}
 
+	// Update LastInputCheckBlock for applications that didn't have any inputs
+	// (for apps with inputs, LastInputCheckBlock is already updated in CreateEpochsAndInputs)
+	appsToUpdate := []int64{}
+	// Find applications that didn't have any inputs in appInputsMap
+	for _, app := range apps {
+		appAddress := app.application.IApplicationAddress
+		// If the app doesn't have any inputs in the map or has an empty slice
+		if inputs, exists := appInputsMap[appAddress]; !exists || len(inputs) == 0 {
+			appsToUpdate = append(appsToUpdate, app.application.ID)
+		}
+	}
+	// Update LastInputCheckBlock for applications without inputs
+	if len(appsToUpdate) > 0 {
+		err := r.repository.UpdateEventLastCheckBlock(ctx, appsToUpdate, MonitoredEvent_InputAdded, mostRecentBlockNumber)
+		if err != nil {
+			r.Logger.Error("Failed to update LastInputCheckBlock for applications without inputs",
+				"app_ids", appsToUpdate,
+				"block_number", mostRecentBlockNumber,
+				"error", err,
+			)
+			// We don't return an error here as we've already processed the inputs
+			// and this is just an update to the last check block
+		} else {
+			r.Logger.Debug("Updated LastInputCheckBlock for applications without inputs",
+				"app_ids", appsToUpdate,
+				"block_number", mostRecentBlockNumber,
+			)
+		}
+	}
+
 	return nil
 }
 
@@ -264,12 +302,13 @@ func (r *Service) readInputsFromBlockchain(
 		appsAddresses = append(appsAddresses, app.application.IApplicationAddress)
 	}
 
+	inputSource := apps[0].inputSource
 	opts := bind.FilterOpts{
 		Context: ctx,
 		Start:   startBlock,
 		End:     &endBlock,
 	}
-	inputsEvents, err := r.inputSource.RetrieveInputs(&opts, appsAddresses, nil)
+	inputsEvents, err := inputSource.RetrieveInputs(&opts, appsAddresses, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -295,7 +334,11 @@ func (r *Service) readInputsFromBlockchain(
 	return appInputsMap, nil
 }
 
-// byLastProcessedBlock key extractor function intended to be used with `indexApps` function
-func byLastProcessedBlock(app appContracts) uint64 {
-	return app.application.LastProcessedBlock
+// byLastInputCheckBlock key extractor function intended to be used with `indexApps` function
+func byLastInputCheckBlock(app appContracts) uint64 {
+	return app.application.LastInputCheckBlock
+}
+
+func byInputBoxAddress(app appContracts) string {
+	return app.application.IInputBoxAddress.String()
 }

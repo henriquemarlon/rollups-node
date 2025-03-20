@@ -18,10 +18,10 @@ TARGET_OS?=$(shell uname)
 export TARGET_OS
 
 ROLLUPS_NODE_VERSION := 2.0.0
-CONTRACTS_VERSION := 2.0.0-rc.12
+CONTRACTS_VERSION := 2.0.0-rc.16
 CONTRACTS_URL:=https://github.com/cartesi/rollups-contracts/releases/download/
 CONTRACTS_ARTIFACT:=rollups-contracts-$(CONTRACTS_VERSION)-artifacts.tar.gz
-CONTRACTS_SHA256:=6d2cd0d5f562342b5171766b0574043a39b8f74b276052b2150cdc26ec7a9fdf
+CONTRACTS_SHA256:=84241197e60e3d897bac1c473cf31d9197b01d6232e657457d1f16536bd49d81
 
 IMAGE_TAG ?= devel
 
@@ -69,7 +69,7 @@ endif
 
 GO_TEST_PACKAGES ?= ./...
 
-ROLLUPS_CONTRACTS_ABI_BASEDIR:= rollups-contracts/export/artifacts/contracts
+ROLLUPS_CONTRACTS_ABI_BASEDIR:= rollups-contracts/
 
 all: build
 
@@ -87,12 +87,11 @@ env:
 	@echo export CARTESI_BLOCKCHAIN_DEFAULT_BLOCK="latest"
 	@echo export CARTESI_BLOCKCHAIN_HTTP_ENDPOINT="http://localhost:8545"
 	@echo export CARTESI_BLOCKCHAIN_WS_ENDPOINT="ws://localhost:8545"
-	@echo export CARTESI_BLOCKCHAIN_ID="31337"
-	@echo export CARTESI_CONTRACTS_INPUT_BOX_ADDRESS="0x593E5BCf894D6829Dd26D0810DA7F064406aebB6"
-	@echo export CARTESI_CONTRACTS_INPUT_BOX_DEPLOYMENT_BLOCK_NUMBER="10"
-	@echo export CARTESI_CONTRACTS_AUTHORITY_FACTORY_ADDRESS="0xB897F7Fe78f220aE34B7FA9493092701a873Ed45"
-	@echo export CARTESI_CONTRACTS_APPLICATION_FACTORY_ADDRESS="0xd7d4d184b82b1a4e08f304DDaB0A2A7a301C2620"
-	@echo export CARTESI_CONTRACTS_SELF_HOSTED_APPLICATION_FACTORY_ADDRESS="0xF925E1467DfCb1be6904bcF70621A974b5eA8708"
+	@echo export CARTESI_BLOCKCHAIN_ID="13370"
+	@echo export CARTESI_CONTRACTS_INPUT_BOX_ADDRESS="0xBa3Cf8fB82E43D370117A0b7296f91ED674E94e3"
+	@echo export CARTESI_CONTRACTS_AUTHORITY_FACTORY_ADDRESS="0x175965d993BcaAFcdfB3699fdA04F15e6AD9B76B"
+	@echo export CARTESI_CONTRACTS_APPLICATION_FACTORY_ADDRESS="0x536Cd5028b046a7809A946c76C84Fe08377afA16"
+	@echo export CARTESI_CONTRACTS_SELF_HOSTED_APPLICATION_FACTORY_ADDRESS="0xf02Fc4C62FEc0b9442C1312a53327FA852975f0e"
 	@echo export CARTESI_AUTH_MNEMONIC=\"test test test test test test test test test test test junk\"
 	@echo export CARTESI_DATABASE_CONNECTION="postgres://postgres:password@localhost:5432/rollupsdb?sslmode=disable"
 	@echo export CARTESI_TEST_DATABASE_CONNECTION="postgres://test_user:password@localhost:5432/test_rollupsdb?sslmode=disable"
@@ -140,7 +139,7 @@ migrate: ## Run migration on development database
 generate-db: ## Generate repository/db with Jet
 	@echo "Generating internal/repository/postgres/db with jet"
 	@rm -rf internal/repository/postgres/db
-	@go run github.com/go-jet/jet/v2/cmd/jet -dsn=$$CARTESI_POSTGRES_ENDPOINT -schema=public -path=./internal/repository/postgres/db
+	@go run github.com/go-jet/jet/v2/cmd/jet -dsn=$$CARTESI_DATABASE_CONNECTION -schema=public -path=./internal/repository/postgres/db
 	@rm -rf internal/repository/postgres/db/rollupsdb/public/model
 
 # =============================================================================
@@ -277,9 +276,9 @@ copy-devnet-files deployment.json: ## Copy the devnet files to the host (it must
 start-postgres: ## Run the PostgreSQL 16 docker container
 	@echo "Starting portgres"
 	@docker run --rm --name postgres -p 5432:5432 -d -e POSTGRES_PASSWORD=password -e POSTGRES_DB=rollupsdb -v $(CURDIR)/test/postgres/init-test-db.sh:/docker-entrypoint-initdb.d/init-test-db.sh postgres:16-alpine
+	@$(MAKE) migrate
 
 start: start-postgres start-devnet ## Start the anvil devnet and PostgreSQL 16 docker containers
-	@$(MAKE) migrate
 
 stop-devnet: ## Stop the anvil devnet docker container
 	@docker stop devnet
@@ -291,7 +290,13 @@ stop: stop-devnet stop-postgres ## Stop all running docker containers
 
 restart-devnet: ## Restart the anvil devnet docker container
 	@$(MAKE) stop-devnet
-	@$(MAKE) run-devnet
+	@$(MAKE) start-devnet
+
+restart-postgres: ## Restart the PostgreSQL 16 docker container and migrate it
+	@$(MAKE) stop-postgres
+	@$(MAKE) start-postgres
+
+restart: restart-devnet restart-postgres ## Restart all running docker containers
 
 shutdown-compose: ## Remove the containers and volumes from previous compose run
 	@docker compose down -v

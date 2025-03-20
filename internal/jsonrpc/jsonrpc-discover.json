@@ -468,6 +468,10 @@
 						"type": "string",
 						"format": "byte"
 					},
+					"iinputbox_address": {
+						"type": "string",
+						"format": "byte"
+					},
 					"template_hash": {
 						"type": "string",
 						"format": "byte"
@@ -475,20 +479,27 @@
 					"epoch_length": {
 						"type": "integer"
 					},
+					"data_availability": {
+						"type": "string",
+						"format": "byte"
+					},
 					"state": {
 						"type": "string"
 					},
 					"reason": {
 						"type": "string"
 					},
-					"last_processed_block": {
-						"type": "string"
+					"iinputbox_block": {
+						"type": "string",
+						"format": "byte"
 					},
-					"last_claim_check_block": {
-						"type": "string"
+					"last_input_check_block": {
+						"type": "string",
+						"format": "byte"
 					},
 					"last_output_check_block": {
-						"type": "string"
+						"type": "string",
+						"format": "byte"
 					},
 					"processed_inputs": {
 						"type": "integer"

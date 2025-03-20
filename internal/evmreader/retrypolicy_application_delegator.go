@@ -10,7 +10,6 @@ import (
 	"github.com/cartesi/rollups-node/internal/services/retry"
 	"github.com/cartesi/rollups-node/pkg/contracts/iapplication"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/common"
 )
 
 type ApplicationRetryPolicyDelegator struct {
@@ -32,17 +31,6 @@ func NewApplicationWithRetryPolicy(
 		delayBetweenCalls: delayBetweenCalls,
 		logger:            logger,
 	}
-}
-
-func (d *ApplicationRetryPolicyDelegator) GetConsensus(opts *bind.CallOpts,
-) (common.Address, error) {
-	return retry.CallFunctionWithRetryPolicy(d.delegate.GetConsensus,
-		opts,
-		d.logger,
-		d.maxRetries,
-		d.delayBetweenCalls,
-		"Application::GetConsensus",
-	)
 }
 
 func (d *ApplicationRetryPolicyDelegator) RetrieveOutputExecutionEvents(

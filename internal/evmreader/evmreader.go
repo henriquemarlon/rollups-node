@@ -22,7 +22,6 @@ import (
 	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/repository"
 	appcontract "github.com/cartesi/rollups-node/pkg/contracts/iapplication"
-	"github.com/cartesi/rollups-node/pkg/contracts/iconsensus"
 	"github.com/cartesi/rollups-node/pkg/contracts/iinputbox"
 	"github.com/cartesi/rollups-node/pkg/service"
 )
@@ -41,26 +40,22 @@ type CreateInfo struct {
 type Service struct {
 	service.Service
 
-	client                  EthClient
-	wsClient                EthWsClient
-	inputSource             InputSource
-	repository              EvmReaderRepository
-	contractFactory         ContractFactory
-	chainId                 uint64
-	inputBoxDeploymentBlock uint64
-	defaultBlock            DefaultBlock
-	hasEnabledApps          bool
-	inputReaderEnabled      bool
+	client             EthClient
+	wsClient           EthWsClient
+	repository         EvmReaderRepository
+	contractFactory    ContractFactory
+	chainId            uint64
+	defaultBlock       DefaultBlock
+	hasEnabledApps     bool
+	inputReaderEnabled bool
 }
 
 const EvmReaderConfigKey = "evm-reader"
 
 type PersistentConfig struct {
-	DefaultBlock            DefaultBlock
-	InputReaderEnabled      bool
-	InputBoxDeploymentBlock uint64
-	InputBoxAddress         string
-	ChainID                 uint64
+	DefaultBlock       DefaultBlock
+	InputReaderEnabled bool
+	ChainID            uint64
 }
 
 func Create(ctx context.Context, c *CreateInfo) (*Service, error) {
@@ -119,16 +114,9 @@ func Create(ctx context.Context, c *CreateInfo) (*Service, error) {
 	maxDelay := c.Config.EvmReaderRetryPolicyMaxDelay
 	s.client = NewEhtClientWithRetryPolicy(c.EthClient, maxRetries, maxDelay, s.Logger)
 	s.wsClient = NewEthWsClientWithRetryPolicy(c.EthWsClient, maxRetries, maxDelay, s.Logger)
-
-	inputSource, err := NewInputSourceAdapter(c.Config.ContractsInputBoxAddress, c.EthClient)
-	if err != nil {
-		return nil, err
-	}
-	s.inputSource = NewInputSourceWithRetryPolicy(inputSource, maxRetries, maxDelay, s.Logger)
 	s.contractFactory = NewEvmReaderContractFactory(c.EthClient, maxRetries, maxDelay)
 
 	s.chainId = nodeConfig.ChainID
-	s.inputBoxDeploymentBlock = nodeConfig.InputBoxDeploymentBlock
 	s.defaultBlock = nodeConfig.DefaultBlock
 	s.inputReaderEnabled = nodeConfig.InputReaderEnabled
 	s.hasEnabledApps = true
@@ -175,11 +163,9 @@ func (s *Service) setupPersistentConfig(
 		nc := model.NodeConfig[PersistentConfig]{
 			Key: EvmReaderConfigKey,
 			Value: PersistentConfig{
-				DefaultBlock:            c.BlockchainDefaultBlock,
-				InputReaderEnabled:      c.FeatureInputReaderEnabled,
-				InputBoxDeploymentBlock: c.ContractsInputBoxDeploymentBlockNumber,
-				InputBoxAddress:         c.ContractsInputBoxAddress.String(),
-				ChainID:                 c.BlockchainId,
+				DefaultBlock:       c.BlockchainDefaultBlock,
+				InputReaderEnabled: c.FeatureInputReaderEnabled,
+				ChainID:            c.BlockchainId,
 			},
 		}
 		s.Logger.Info("Initializing evm-reader persistent config", "config", nc.Value)
@@ -209,6 +195,7 @@ type InputSource interface {
 type EvmReaderRepository interface {
 	ListApplications(ctx context.Context, f repository.ApplicationFilter, p repository.Pagination) ([]*Application, uint64, error)
 	UpdateApplicationState(ctx context.Context, appID int64, state ApplicationState, reason *string) error
+	UpdateEventLastCheckBlock(ctx context.Context, appIDs []int64, event MonitoredEvent, blockNumber uint64) error
 
 	SaveNodeConfigRaw(ctx context.Context, key string, rawJSON []byte) error
 	LoadNodeConfigRaw(ctx context.Context, key string) (rawJSON []byte, createdAt, updatedAt time.Time, err error)
@@ -220,9 +207,6 @@ type EvmReaderRepository interface {
 	) error
 	GetEpoch(ctx context.Context, nameOrAddress string, index uint64) (*Epoch, error)
 	ListEpochs(ctx context.Context, nameOrAddress string, f repository.EpochFilter, p repository.Pagination) ([]*Epoch, uint64, error)
-
-	// Claim acceptance monitor
-	UpdateEpochsClaimAccepted(ctx context.Context, nameOrAddress string, epochs []*Epoch, lastClaimCheckBlock uint64) error
 
 	// Output execution monitor
 	GetOutput(ctx context.Context, nameOrAddress string, indexKey uint64) (*Output, error)
@@ -241,16 +225,7 @@ type EthWsClient interface {
 	SubscribeNewHead(ctx context.Context, ch chan<- *types.Header) (ethereum.Subscription, error)
 }
 
-type ConsensusContract interface {
-	GetEpochLength(opts *bind.CallOpts) (*big.Int, error)
-	RetrieveClaimAcceptanceEvents(
-		opts *bind.FilterOpts,
-		appAddresses []common.Address,
-	) ([]*iconsensus.IConsensusClaimAcceptance, error)
-}
-
 type ApplicationContract interface {
-	GetConsensus(opts *bind.CallOpts) (common.Address, error)
 	RetrieveOutputExecutionEvents(
 		opts *bind.FilterOpts,
 	) ([]*appcontract.IApplicationOutputExecuted, error)
@@ -258,7 +233,7 @@ type ApplicationContract interface {
 
 type ContractFactory interface {
 	NewApplication(address common.Address) (ApplicationContract, error)
-	NewIConsensus(address common.Address) (ConsensusContract, error)
+	NewInputSource(address common.Address) (InputSource, error)
 }
 
 type SubscriptionError struct {
@@ -273,7 +248,7 @@ func (e *SubscriptionError) Error() string {
 type appContracts struct {
 	application         *Application
 	applicationContract ApplicationContract
-	consensusContract   ConsensusContract
+	inputSource         InputSource
 }
 
 func (r *Service) Run(ctx context.Context, ready chan struct{}) error {
@@ -291,7 +266,10 @@ func (r *Service) Run(ctx context.Context, ready chan struct{}) error {
 }
 
 func getAllRunningApplications(ctx context.Context, er EvmReaderRepository) ([]*Application, uint64, error) {
-	f := repository.ApplicationFilter{State: Pointer(ApplicationState_Enabled)}
+	f := repository.ApplicationFilter{
+		State:            Pointer(ApplicationState_Enabled),
+		DataAvailability: &model.DataAvailability_InputBox,
+	}
 	return er.ListApplications(ctx, f, repository.Pagination{})
 }
 
@@ -343,7 +321,7 @@ func (r *Service) watchForNewBlocks(ctx context.Context, ready chan<- struct{}) 
 			// Build Contracts
 			var apps []appContracts
 			for _, app := range runningApps {
-				applicationContract, consensusContract, err := r.getAppContracts(app)
+				applicationContract, inputSource, err := r.getAppContracts(app)
 				if err != nil {
 					r.Logger.Error("Error retrieving application contracts", "app", app, "error", err)
 					continue
@@ -351,7 +329,7 @@ func (r *Service) watchForNewBlocks(ctx context.Context, ready chan<- struct{}) 
 				aContracts := appContracts{
 					application:         app,
 					applicationContract: applicationContract,
-					consensusContract:   consensusContract,
+					inputSource:         inputSource,
 				}
 
 				apps = append(apps, aContracts)
@@ -426,7 +404,7 @@ func (r *Service) fetchMostRecentHeader(
 // getAppContracts retrieves the ApplicationContract and ConsensusContract for a given Application.
 // Also validates if IConsensus configuration matches the blockchain registered one
 func (r *Service) getAppContracts(app *Application,
-) (ApplicationContract, ConsensusContract, error) {
+) (ApplicationContract, InputSource, error) {
 	if app == nil {
 		return nil, nil, fmt.Errorf("Application reference is nil. Should never happen")
 	}
@@ -439,28 +417,15 @@ func (r *Service) getAppContracts(app *Application,
 		)
 
 	}
-	consensusAddress, err := applicationContract.GetConsensus(nil)
+
+	inputSource, err := r.contractFactory.NewInputSource(app.IInputBoxAddress)
 	if err != nil {
 		return nil, nil, errors.Join(
-			fmt.Errorf("error retrieving application consensus"),
-			err,
-		)
-	}
-
-	if app.IConsensusAddress != consensusAddress {
-		return nil, nil,
-			fmt.Errorf("IConsensus addresses do not match. Deployed: %s. Configured: %s",
-				consensusAddress,
-				app.IConsensusAddress)
-	}
-
-	consensus, err := r.contractFactory.NewIConsensus(consensusAddress)
-	if err != nil {
-		return nil, nil, errors.Join(
-			fmt.Errorf("error building consensus contract"),
+			fmt.Errorf("error building inputbox contract"),
 			err,
 		)
 
 	}
-	return applicationContract, consensus, nil
+
+	return applicationContract, inputSource, nil
 }

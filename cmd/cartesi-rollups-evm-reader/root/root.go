@@ -27,8 +27,6 @@ var (
 	blockchainWsEndpoint   string
 	databaseConnection     string
 	maxStartupTime         string
-	inputBoxAddress        string
-	inputBoxBlockNumber    uint64
 	enableInputReader      bool
 	telemetryAddress       string
 	cfg                    *config.Config
@@ -45,12 +43,6 @@ var Cmd = &cobra.Command{
 func init() {
 	Cmd.Flags().StringVarP(&defaultBlockString, "default-block", "d", "finalized", "Default block to be used when fetching new blocks.\nOne of 'latest', 'safe', 'pending', 'finalized'")
 	viper.BindPFlag(config.BLOCKCHAIN_DEFAULT_BLOCK, Cmd.Flags().Lookup("default-block"))
-
-	Cmd.Flags().StringVar(&inputBoxAddress, "inputbox-address", "", "Input Box contract address")
-	viper.BindPFlag(config.CONTRACTS_INPUT_BOX_ADDRESS, Cmd.Flags().Lookup("inputbox-address"))
-
-	Cmd.Flags().Uint64Var(&inputBoxBlockNumber, "inputbox-block-number", 0, "Input Box deployment block number")
-	viper.BindPFlag(config.CONTRACTS_INPUT_BOX_DEPLOYMENT_BLOCK_NUMBER, Cmd.Flags().Lookup("inputBoxBlockNumber"))
 
 	Cmd.Flags().StringVar(&telemetryAddress, "telemetry-address", ":10001", "Health check and metrics address and port")
 	viper.BindPFlag(config.TELEMETRY_ADDRESS, Cmd.Flags().Lookup("telemetry-address"))

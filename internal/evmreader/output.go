@@ -23,34 +23,30 @@ func (r *Service) checkForOutputExecution(
 
 	for _, app := range apps {
 
-		LastOutputCheck := app.application.LastOutputCheckBlock
-
 		// Safeguard: Only check blocks starting from the block where the InputBox
 		// contract was deployed as Inputs can be added to that same block
-		if LastOutputCheck < r.inputBoxDeploymentBlock {
-			LastOutputCheck = r.inputBoxDeploymentBlock
-		}
+		lastOutputCheck := max(app.application.LastOutputCheckBlock, app.application.IInputBoxBlock)
 
-		if mostRecentBlockNumber > LastOutputCheck {
+		if mostRecentBlockNumber > lastOutputCheck {
 
 			r.Logger.Debug("Checking output execution for application",
 				"application", app.application.Name, "address", app.application.IApplicationAddress,
-				"last output check block", LastOutputCheck,
-				"most recent block", mostRecentBlockNumber)
+				"last_output_check block", lastOutputCheck,
+				"most_recent_block", mostRecentBlockNumber)
 
-			r.readAndUpdateOutputs(ctx, app, LastOutputCheck, mostRecentBlockNumber)
+			r.readAndUpdateOutputs(ctx, app, lastOutputCheck, mostRecentBlockNumber)
 
-		} else if mostRecentBlockNumber < LastOutputCheck {
+		} else if mostRecentBlockNumber < lastOutputCheck {
 			r.Logger.Warn(
 				"Not reading output execution: most recent block is lower than the last processed one",
 				"application", app.application.Name, "address", app.application.IApplicationAddress,
-				"last output check block", LastOutputCheck,
-				"most recent block", mostRecentBlockNumber,
+				"last_output_check_block", lastOutputCheck,
+				"most_recent_block", mostRecentBlockNumber,
 			)
 		} else {
 			r.Logger.Warn("Not reading output execution: already checked the most recent blocks",
 				"application", app.application.Name, "address", app.application.IApplicationAddress,
-				"last output check block", LastOutputCheck,
+				"last output check block", lastOutputCheck,
 				"most recent block", mostRecentBlockNumber,
 			)
 		}
@@ -74,6 +70,28 @@ func (r *Service) readAndUpdateOutputs(
 		r.Logger.Error("Error reading output events",
 			"application", app.application.Name, "address", app.application.IApplicationAddress,
 			"error", err)
+		return
+	}
+
+	if len(outputExecutedEvents) == 0 {
+		r.Logger.Debug("No output executed events found",
+			"application", app.application.Name, "address", app.application.IApplicationAddress)
+		err := r.repository.UpdateEventLastCheckBlock(
+			ctx, []int64{app.application.ID}, MonitoredEvent_OutputExecuted, mostRecentBlockNumber)
+		if err != nil {
+			r.Logger.Error("Failed to update LastOutputCheckBlock for applications without inputs",
+				"application", app.application.Name, "address", app.application.IApplicationAddress,
+				"block_number", mostRecentBlockNumber,
+				"error", err,
+			)
+			// We don't return an error here as there is no output execution to process
+			// and this is just an update to the last check block
+		} else {
+			r.Logger.Debug("Updated LastOutputCheckBlock for applications without inputs",
+				"application", app.application.Name, "address", app.application.IApplicationAddress,
+				"block_number", mostRecentBlockNumber,
+			)
+		}
 		return
 	}
 

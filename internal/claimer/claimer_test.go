@@ -235,7 +235,7 @@ func makeSubmissionEvent(c *ClaimRow) *iconsensus.IConsensusClaimSubmission {
 	return &iconsensus.IConsensusClaimSubmission{
 		LastProcessedBlockNumber: new(big.Int).SetUint64(c.LastBlock),
 		AppContract:              c.IApplicationAddress,
-		Claim:                    *c.ClaimHash,
+		OutputsMerkleRoot:        *c.ClaimHash,
 		Raw: types.Log{
 			TxHash: common.HexToHash("0x01"),
 		},
@@ -246,7 +246,7 @@ func makeAcceptanceEvent(c *ClaimRow) *iconsensus.IConsensusClaimAcceptance {
 	return &iconsensus.IConsensusClaimAcceptance{
 		LastProcessedBlockNumber: new(big.Int).SetUint64(c.LastBlock),
 		AppContract:              c.IApplicationAddress,
-		Claim:                    *c.ClaimHash,
+		OutputsMerkleRoot:        *c.ClaimHash,
 		Raw: types.Log{
 			TxHash: common.HexToHash("0x01"),
 		},
@@ -602,7 +602,7 @@ func TestSubmitClaimWithAntecessorMismatch(t *testing.T) {
 	prevEvent := &iconsensus.IConsensusClaimSubmission{
 		LastProcessedBlockNumber: new(big.Int).SetUint64(prevClaim.LastBlock + 1),
 		AppContract:              prevClaim.IApplicationAddress,
-		Claim:                    *prevClaim.ClaimHash,
+		OutputsMerkleRoot:        *prevClaim.ClaimHash,
 	}
 	var currEvent *iconsensus.IConsensusClaimSubmission = nil
 	prevClaims := map[common.Address]*ClaimRow{
@@ -791,7 +791,7 @@ func TestAcceptClaimWithAntecessorMismatch(t *testing.T) {
 	prevEvent := &iconsensus.IConsensusClaimAcceptance{
 		LastProcessedBlockNumber: new(big.Int).SetUint64(prevClaim.LastBlock + 1),
 		AppContract:              prevClaim.IApplicationAddress,
-		Claim:                    *prevClaim.ClaimHash,
+		OutputsMerkleRoot:        *prevClaim.ClaimHash,
 	}
 	var currEvent *iconsensus.IConsensusClaimAcceptance = nil
 	prevClaims := map[common.Address]*ClaimRow{

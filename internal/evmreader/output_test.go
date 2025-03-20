@@ -20,7 +20,6 @@ import (
 func (s *EvmReaderSuite) TestOutputExecution() {
 	wsClient := FakeWSEhtClient{}
 	s.evmReader.wsClient = &wsClient
-	s.evmReader.inputBoxDeploymentBlock = 0x10
 
 	// Prepare repository
 	s.repository.Unset("ListApplications")
@@ -32,6 +31,8 @@ func (s *EvmReaderSuite) TestOutputExecution() {
 	).Return([]*Application{{
 		IApplicationAddress:  common.HexToAddress("0x2E663fe9aE92275242406A185AA4fC8174339D3E"),
 		IConsensusAddress:    common.HexToAddress("0xdeadbeef"),
+		IInputBoxAddress:     common.HexToAddress("0xBa3Cf8fB82E43D370117A0b7296f91ED674E94e3"),
+		IInputBoxBlock:       0x10,
 		EpochLength:          10,
 		LastOutputCheckBlock: 0x10,
 	}}, uint64(1), nil).Once()
@@ -43,49 +44,47 @@ func (s *EvmReaderSuite) TestOutputExecution() {
 	).Return([]*Application{{
 		IApplicationAddress:  common.HexToAddress("0x2E663fe9aE92275242406A185AA4fC8174339D3E"),
 		IConsensusAddress:    common.HexToAddress("0xdeadbeef"),
+		IInputBoxAddress:     common.HexToAddress("0xBa3Cf8fB82E43D370117A0b7296f91ED674E94e3"),
+		IInputBoxBlock:       0x10,
 		EpochLength:          10,
 		LastOutputCheckBlock: 0x11,
 	}}, uint64(1), nil).Once()
 
-	s.repository.Unset("UpdateOutputsExecution")
-	s.repository.On("UpdateOutputsExecution",
+	s.repository.Unset("UpdateEventLastCheckBlock")
+	s.repository.On("UpdateEventLastCheckBlock",
 		mock.Anything,
 		mock.Anything,
+		MonitoredEvent_InputAdded,
+		mock.Anything,
+	).Once().Return(nil)
+	s.repository.On("UpdateEventLastCheckBlock",
 		mock.Anything,
 		mock.Anything,
-	).Once().Run(func(arguments mock.Arguments) {
-		obj := arguments.Get(2)
-		claims, ok := obj.([]*Output)
-		s.Require().True(ok)
-		s.Require().Equal(0, len(claims))
+		MonitoredEvent_OutputExecuted,
+		mock.Anything,
+	).Once().Return(nil)
+	s.repository.On("UpdateEventLastCheckBlock",
+		mock.Anything,
+		mock.Anything,
+		MonitoredEvent_InputAdded,
+		mock.Anything,
+	).Once().Return(nil)
+	s.repository.On("UpdateEventLastCheckBlock",
+		mock.Anything,
+		mock.Anything,
+		MonitoredEvent_OutputExecuted,
+		mock.Anything,
+	).Once().Return(nil)
 
-		obj = arguments.Get(3)
-		lastOutputCheck, ok := obj.(uint64)
-		s.Require().True(ok)
-		s.Require().Equal(uint64(17), lastOutputCheck)
-
-	}).Return(nil)
-	s.repository.On("UpdateOutputsExecution",
+	inputBox := newMockInputBox()
+	s.contractFactory.Unset("NewInputSource")
+	s.contractFactory.On("NewInputSource",
 		mock.Anything,
-		mock.Anything,
-		mock.Anything,
-		mock.Anything,
-	).Once().Run(func(arguments mock.Arguments) {
-		obj := arguments.Get(2)
-		claims, ok := obj.([]*Output)
-		s.Require().True(ok)
-		s.Require().Equal(0, len(claims))
-
-		obj = arguments.Get(3)
-		lastOutputCheck, ok := obj.(uint64)
-		s.Require().True(ok)
-		s.Require().Equal(uint64(18), lastOutputCheck)
-
-	}).Return(nil)
+	).Return(inputBox, nil)
 
 	//No Inputs
-	s.inputBox.Unset("RetrieveInputs")
-	s.inputBox.On("RetrieveInputs",
+	inputBox.Unset("RetrieveInputs")
+	inputBox.On("RetrieveInputs",
 		mock.Anything,
 		mock.Anything,
 		mock.Anything,
@@ -126,7 +125,7 @@ func (s *EvmReaderSuite) TestOutputExecution() {
 	s.repository.AssertNumberOfCalls(
 		s.T(),
 		"UpdateOutputsExecution",
-		2,
+		0,
 	)
 
 }
@@ -138,6 +137,7 @@ func (s *EvmReaderSuite) TestReadOutputExecution() {
 	// Contract Factory
 
 	applicationContract := &MockApplicationContract{}
+	inputBox := newMockInputBox()
 
 	contractFactory := newEmvReaderContractFactory()
 
@@ -145,6 +145,11 @@ func (s *EvmReaderSuite) TestReadOutputExecution() {
 	contractFactory.On("NewApplication",
 		mock.Anything,
 	).Return(applicationContract, nil)
+
+	contractFactory.Unset("NewInputSource")
+	contractFactory.On("NewInputSource",
+		mock.Anything,
+	).Return(inputBox, nil)
 
 	//New EVM Reader
 	wsClient := FakeWSEhtClient{}
@@ -179,9 +184,25 @@ func (s *EvmReaderSuite) TestReadOutputExecution() {
 	).Return([]*Application{{
 		IApplicationAddress:  appAddress,
 		IConsensusAddress:    common.HexToAddress("0xdeadbeef"),
+		IInputBoxAddress:     common.HexToAddress("0xBa3Cf8fB82E43D370117A0b7296f91ED674E94e3"),
+		IInputBoxBlock:       0x10,
 		EpochLength:          10,
 		LastOutputCheckBlock: 0x10,
 	}}, uint64(1), nil).Once()
+
+	s.repository.Unset("UpdateEventLastCheckBlock")
+	s.repository.On("UpdateEventLastCheckBlock",
+		mock.Anything,
+		mock.Anything,
+		MonitoredEvent_InputAdded,
+		mock.Anything,
+	).Once().Return(nil)
+	s.repository.On("UpdateEventLastCheckBlock",
+		mock.Anything,
+		mock.Anything,
+		MonitoredEvent_OutputExecuted,
+		mock.Anything,
+	).Once().Return(nil)
 
 	output := &Output{
 		Index:   1,
@@ -213,8 +234,8 @@ func (s *EvmReaderSuite) TestReadOutputExecution() {
 	}).Return(nil)
 
 	//No Inputs
-	s.inputBox.Unset("RetrieveInputs")
-	s.inputBox.On("RetrieveInputs",
+	inputBox.Unset("RetrieveInputs")
+	inputBox.On("RetrieveInputs",
 		mock.Anything,
 		mock.Anything,
 		mock.Anything,
@@ -273,21 +294,25 @@ func (s *EvmReaderSuite) TestCheckOutputFails() {
 			mock.Anything,
 		).Return(applicationContract, nil)
 
+		inputBox := newMockInputBox()
+
+		contractFactory.Unset("NewInputSource")
+		contractFactory.On("NewInputSource",
+			mock.Anything,
+		).Return(inputBox, nil)
+
 		//New EVM Reader
 		client := newMockEthClient()
 		wsClient := FakeWSEhtClient{}
-		inputBox := newMockInputBox()
 		repository := newMockRepository()
 		evmReader := Service{
-			client:                  client,
-			wsClient:                &wsClient,
-			inputSource:             inputBox,
-			repository:              repository,
-			inputBoxDeploymentBlock: 0x00,
-			defaultBlock:            DefaultBlock_Latest,
-			contractFactory:         contractFactory,
-			hasEnabledApps:          true,
-			inputReaderEnabled:      true,
+			client:             client,
+			wsClient:           &wsClient,
+			repository:         repository,
+			defaultBlock:       DefaultBlock_Latest,
+			contractFactory:    contractFactory,
+			hasEnabledApps:     true,
+			inputReaderEnabled: true,
 		}
 		serviceArgs := &service.CreateInfo{Name: "evm-reader", Impl: &evmReader}
 		err := service.Create(ctx, serviceArgs, &evmReader.Service)
@@ -311,6 +336,8 @@ func (s *EvmReaderSuite) TestCheckOutputFails() {
 		).Return([]*Application{{
 			IApplicationAddress:  appAddress,
 			IConsensusAddress:    common.HexToAddress("0xdeadbeef"),
+			IInputBoxAddress:     common.HexToAddress("0xBa3Cf8fB82E43D370117A0b7296f91ED674E94e3"),
+			IInputBoxBlock:       0x10,
 			EpochLength:          10,
 			LastOutputCheckBlock: 0x10,
 		}}, uint64(1), nil).Once()
@@ -393,14 +420,19 @@ func (s *EvmReaderSuite) TestCheckOutputFails() {
 			mock.Anything,
 		).Return(applicationContract, nil)
 
+		inputBox := newMockInputBox()
+
+		contractFactory.Unset("NewInputSource")
+		contractFactory.On("NewInputSource",
+			mock.Anything,
+		).Return(inputBox, nil)
+
 		//New EVM Reader
 		client := newMockEthClient()
 		wsClient := FakeWSEhtClient{}
-		inputBox := newMockInputBox()
 		repository := newMockRepository()
 		s.evmReader.client = client
 		s.evmReader.wsClient = &wsClient
-		s.evmReader.inputSource = inputBox
 		s.evmReader.repository = repository
 		s.evmReader.contractFactory = contractFactory
 
@@ -432,9 +464,25 @@ func (s *EvmReaderSuite) TestCheckOutputFails() {
 		).Return([]*Application{{
 			IApplicationAddress:  appAddress,
 			IConsensusAddress:    common.HexToAddress("0xdeadbeef"),
+			IInputBoxAddress:     common.HexToAddress("0xBa3Cf8fB82E43D370117A0b7296f91ED674E94e3"),
+			IInputBoxBlock:       0x10,
 			EpochLength:          10,
 			LastOutputCheckBlock: 0x10,
 		}}, uint64(1), nil).Once()
+
+		repository.Unset("UpdateEventLastCheckBlock")
+		repository.On("UpdateEventLastCheckBlock",
+			mock.Anything,
+			mock.Anything,
+			MonitoredEvent_InputAdded,
+			mock.Anything,
+		).Once().Return(nil)
+		repository.On("UpdateEventLastCheckBlock",
+			mock.Anything,
+			mock.Anything,
+			MonitoredEvent_OutputExecuted,
+			mock.Anything,
+		).Once().Return(nil)
 
 		repository.Unset("GetOutput")
 		repository.On("GetOutput",
@@ -509,14 +557,19 @@ func (s *EvmReaderSuite) TestCheckOutputFails() {
 			mock.Anything,
 		).Return(applicationContract, nil)
 
+		inputBox := newMockInputBox()
+
+		contractFactory.Unset("NewInputSource")
+		contractFactory.On("NewInputSource",
+			mock.Anything,
+		).Return(inputBox, nil)
+
 		//New EVM Reader
 		client := newMockEthClient()
 		wsClient := FakeWSEhtClient{}
-		inputBox := newMockInputBox()
 		repository := newMockRepository()
 		s.evmReader.client = client
 		s.evmReader.wsClient = &wsClient
-		s.evmReader.inputSource = inputBox
 		s.evmReader.repository = repository
 		s.evmReader.contractFactory = contractFactory
 
@@ -548,6 +601,8 @@ func (s *EvmReaderSuite) TestCheckOutputFails() {
 		).Return([]*Application{{
 			IApplicationAddress:  appAddress,
 			IConsensusAddress:    common.HexToAddress("0xdeadbeef"),
+			IInputBoxAddress:     common.HexToAddress("0xBa3Cf8fB82E43D370117A0b7296f91ED674E94e3"),
+			IInputBoxBlock:       0x10,
 			EpochLength:          10,
 			LastOutputCheckBlock: 0x10,
 		}}, uint64(1), nil).Once()
@@ -556,6 +611,20 @@ func (s *EvmReaderSuite) TestCheckOutputFails() {
 			Index:   1,
 			RawData: common.Hex2Bytes("FFBBCCDDEE"),
 		}
+
+		repository.Unset("UpdateEventLastCheckBlock")
+		repository.On("UpdateEventLastCheckBlock",
+			mock.Anything,
+			mock.Anything,
+			MonitoredEvent_InputAdded,
+			mock.Anything,
+		).Once().Return(nil)
+		repository.On("UpdateEventLastCheckBlock",
+			mock.Anything,
+			mock.Anything,
+			MonitoredEvent_OutputExecuted,
+			mock.Anything,
+		).Once().Return(nil)
 
 		repository.Unset("GetOutput")
 		repository.On("GetOutput",

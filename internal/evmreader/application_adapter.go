@@ -6,8 +6,10 @@ package evmreader
 import (
 	"math/big"
 
-	appcontract "github.com/cartesi/rollups-node/pkg/contracts/iapplication"
+	. "github.com/cartesi/rollups-node/internal/model"
+	"github.com/cartesi/rollups-node/pkg/contracts/iapplication"
 	"github.com/cartesi/rollups-node/pkg/ethutil"
+
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -15,9 +17,9 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-// IConsensus Wrapper
+// IApplication Wrapper
 type ApplicationContractAdapter struct {
-	application        *appcontract.IApplication
+	application        *iapplication.IApplication
 	client             *ethclient.Client
 	applicationAddress common.Address
 }
@@ -26,7 +28,7 @@ func NewApplicationContractAdapter(
 	appAddress common.Address,
 	client *ethclient.Client,
 ) (*ApplicationContractAdapter, error) {
-	applicationContract, err := appcontract.NewIApplication(appAddress, client)
+	applicationContract, err := iapplication.NewIApplication(appAddress, client)
 	if err != nil {
 		return nil, err
 	}
@@ -37,21 +39,17 @@ func NewApplicationContractAdapter(
 	}, nil
 }
 
-func (a *ApplicationContractAdapter) GetConsensus(opts *bind.CallOpts) (common.Address, error) {
-	return a.application.GetConsensus(opts)
-}
-
 func buildOutputExecutedFilterQuery(
 	opts *bind.FilterOpts,
 	applicationAddress common.Address,
 ) (q ethereum.FilterQuery, err error) {
-	c, err := appcontract.IApplicationMetaData.GetAbi()
+	c, err := iapplication.IApplicationMetaData.GetAbi()
 	if err != nil {
 		return q, err
 	}
 
 	topics, err := abi.MakeTopics(
-		[]interface{}{c.Events["OutputExecuted"].ID},
+		[]any{c.Events[MonitoredEvent_OutputExecuted.String()].ID},
 	)
 	if err != nil {
 		return q, err
@@ -70,7 +68,7 @@ func buildOutputExecutedFilterQuery(
 
 func (a *ApplicationContractAdapter) RetrieveOutputExecutionEvents(
 	opts *bind.FilterOpts,
-) ([]*appcontract.IApplicationOutputExecuted, error) {
+) ([]*iapplication.IApplicationOutputExecuted, error) {
 	q, err := buildOutputExecutedFilterQuery(opts, a.applicationAddress)
 	if err != nil {
 		return nil, err
@@ -81,7 +79,7 @@ func (a *ApplicationContractAdapter) RetrieveOutputExecutionEvents(
 		return nil, err
 	}
 
-	var events []*appcontract.IApplicationOutputExecuted
+	var events []*iapplication.IApplicationOutputExecuted
 	for log, err := range itr {
 		if err != nil {
 			return nil, err

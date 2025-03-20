@@ -14,22 +14,24 @@ import (
 )
 
 type Application struct {
-	ID                   int64               `sql:"primary_key" json:"-"`
-	Name                 string              `json:"name"`
-	IApplicationAddress  common.Address      `json:"iapplication_address"`
-	IConsensusAddress    common.Address      `json:"iconsensus_address"`
-	TemplateHash         common.Hash         `json:"template_hash"`
-	TemplateURI          string              `json:"-"`
-	EpochLength          uint64              `json:"epoch_length"`
-	State                ApplicationState    `json:"state"`
-	Reason               *string             `json:"reason"`
-	LastProcessedBlock   uint64              `json:"last_processed_block"`
-	LastClaimCheckBlock  uint64              `json:"last_claim_check_block"`
-	LastOutputCheckBlock uint64              `json:"last_output_check_block"`
-	ProcessedInputs      uint64              `json:"processed_inputs"`
-	CreatedAt            time.Time           `json:"created_at"`
-	UpdatedAt            time.Time           `json:"updated_at"`
-	ExecutionParameters  ExecutionParameters `json:"execution_parameters"`
+	ID                   int64                    `sql:"primary_key" json:"-"`
+	Name                 string                   `json:"name"`
+	IApplicationAddress  common.Address           `json:"iapplication_address"`
+	IConsensusAddress    common.Address           `json:"iconsensus_address"`
+	IInputBoxAddress     common.Address           `json:"iinputbox_address"`
+	TemplateHash         common.Hash              `json:"template_hash"`
+	TemplateURI          string                   `json:"-"`
+	EpochLength          uint64                   `json:"epoch_length"`
+	DataAvailability     DataAvailabilitySelector `json:"data_availability"`
+	State                ApplicationState         `json:"state"`
+	Reason               *string                  `json:"reason"`
+	IInputBoxBlock       uint64                   `json:"iinputbox_block"`
+	LastInputCheckBlock  uint64                   `json:"last_input_check_block"`
+	LastOutputCheckBlock uint64                   `json:"last_output_check_block"`
+	ProcessedInputs      uint64                   `json:"processed_inputs"`
+	CreatedAt            time.Time                `json:"created_at"`
+	UpdatedAt            time.Time                `json:"updated_at"`
+	ExecutionParameters  ExecutionParameters      `json:"execution_parameters"`
 }
 
 func (a *Application) MarshalJSON() ([]byte, error) {
@@ -38,13 +40,13 @@ func (a *Application) MarshalJSON() ([]byte, error) {
 	// Define a new structure that embeds the alias but overrides the hex fields.
 	aux := &struct {
 		*Alias
-		LastProcessedBlock   string `json:"last_processed_block"`
-		LastClaimCheckBlock  string `json:"last_claim_check_block"`
+		IInputBoxBlock       string `json:"iinputbox_block"`
+		LastInputCheckBlock  string `json:"last_input_check_block"`
 		LastOutputCheckBlock string `json:"last_output_check_block"`
 	}{
 		Alias:                (*Alias)(a),
-		LastProcessedBlock:   fmt.Sprintf("0x%x", a.LastProcessedBlock),
-		LastClaimCheckBlock:  fmt.Sprintf("0x%x", a.LastClaimCheckBlock),
+		IInputBoxBlock:       fmt.Sprintf("0x%x", a.IInputBoxBlock),
+		LastInputCheckBlock:  fmt.Sprintf("0x%x", a.LastInputCheckBlock),
 		LastOutputCheckBlock: fmt.Sprintf("0x%x", a.LastOutputCheckBlock),
 	}
 	return json.Marshal(aux)
@@ -91,6 +93,37 @@ func (e *ApplicationState) Scan(value any) error {
 
 func (e ApplicationState) String() string {
 	return string(e)
+}
+
+const DATA_AVAILABILITY_SELECTOR_SIZE = 4
+
+type DataAvailabilitySelector [DATA_AVAILABILITY_SELECTOR_SIZE]byte
+
+// Known data availability selectors
+var (
+	// ABI encoded "InputBox(address)"
+	DataAvailability_InputBox = DataAvailabilitySelector{0xb1, 0x2c, 0x9e, 0xde}
+)
+
+func (d *DataAvailabilitySelector) MarshalJSON() ([]byte, error) {
+	return json.Marshal("0x" + hex.EncodeToString(d[:]))
+}
+
+func (d *DataAvailabilitySelector) Scan(value any) error {
+	var selector []byte
+	switch v := value.(type) {
+	case []byte:
+		selector = v
+	default:
+		return errors.New("Invalid scan value for DataAvailabilitySelector. Value has to be of type []byte")
+	}
+
+	if len(selector) != DATA_AVAILABILITY_SELECTOR_SIZE {
+		return errors.New("Invalid value for DataAvailabilitySelector")
+	}
+	copy(d[:], selector[:DATA_AVAILABILITY_SELECTOR_SIZE])
+
+	return nil
 }
 
 type SnapshotPolicy string
@@ -478,6 +511,19 @@ func (e *DefaultBlock) Scan(value any) error {
 }
 
 func (e DefaultBlock) String() string {
+	return string(e)
+}
+
+type MonitoredEvent string
+
+const (
+	MonitoredEvent_InputAdded      MonitoredEvent = "InputAdded"
+	MonitoredEvent_OutputExecuted  MonitoredEvent = "OutputExecuted"
+	MonitoredEvent_ClaimSubmission MonitoredEvent = "ClaimSubmission"
+	MonitoredEvent_ClaimAcceptance MonitoredEvent = "ClaimAcceptance"
+)
+
+func (e MonitoredEvent) String() string {
 	return string(e)
 }
 

@@ -30,8 +30,6 @@ var (
 	validatorPollInterval  string
 	claimerPollInterval    string
 	maxStartupTime         string
-	inputBoxAddress        string
-	inputBoxBlockNumber    uint64
 	enableInputReader      bool
 	enableInspect          bool
 	enableJsonrpc          bool
@@ -55,12 +53,6 @@ var Cmd = &cobra.Command{
 func init() {
 	Cmd.Flags().StringVarP(&defaultBlockString, "default-block", "d", "finalized", "Default block to be used when fetching new blocks.\nOne of 'latest', 'safe', 'pending', 'finalized'")
 	viper.BindPFlag(config.BLOCKCHAIN_DEFAULT_BLOCK, Cmd.Flags().Lookup("default-block"))
-
-	Cmd.Flags().StringVar(&inputBoxAddress, "inputbox-address", "", "Input Box contract address")
-	viper.BindPFlag(config.CONTRACTS_INPUT_BOX_ADDRESS, Cmd.Flags().Lookup("inputbox-address"))
-
-	Cmd.Flags().Uint64Var(&inputBoxBlockNumber, "inputbox-block-number", 0, "Input Box deployment block number")
-	viper.BindPFlag(config.CONTRACTS_INPUT_BOX_DEPLOYMENT_BLOCK_NUMBER, Cmd.Flags().Lookup("inputbox-block-number"))
 
 	Cmd.Flags().StringVar(&jsonrpcApiAddress, "jsonrpc-address", ":10011", "Jsonrpc API service address and port")
 	viper.BindPFlag(config.JSONRPC_API_ADDRESS, Cmd.Flags().Lookup("jsonrpc-address"))

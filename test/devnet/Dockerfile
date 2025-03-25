@@ -1,6 +1,6 @@
 ARG EMULATOR_VERSION=0.18.1
 ARG FOUNDRY_VERSION=1.0.0
-ARG CONTRACTS_VERSION=2.0.0-rc.16
+ARG CONTRACTS_VERSION=2.0.0-rc.17
 ARG DEVNET_BUILD_PATH=/opt/cartesi/rollups-contracts
 
 FROM cartesi/machine-emulator:${EMULATOR_VERSION} AS rollups-node-devnet
@@ -40,7 +40,7 @@ RUN <<EOF
     VERSION=v${CONTRACTS_VERSION}
     ARTIFACT=rollups-contracts-${CONTRACTS_VERSION}-anvil-v${FOUNDRY_VERSION}.tar.gz
     curl -sSL ${URL}/${VERSION}/${ARTIFACT} -o /tmp/contracts.tar.gz
-    echo "b543d0864da6ddad76803b36d68d7d75344b749ddd6801406e44de7aa6e10c4b  /tmp/contracts.tar.gz" | sha256sum --check
+    echo "3c19e44868db7b8bf2edd55a089cda39787dcfb2715d4a2d877644d68c40141b  /tmp/contracts.tar.gz" | sha256sum --check
     tar -zxf /tmp/contracts.tar.gz -C ${DEVNET_BUILD_PATH}/
     mkdir -p /usr/share/devnet
     cat ${DEVNET_BUILD_PATH}/deployments/*.json | jq -s 'map({ (.contractName): .address }) | add' > /usr/share/devnet/deployment.json

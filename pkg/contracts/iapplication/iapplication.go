@@ -37,7 +37,7 @@ type OutputValidityProof struct {
 
 // IApplicationMetaData contains all meta data concerning the IApplication contract.
 var IApplicationMetaData = &bind.MetaData{
-	ABI: "[{\"type\":\"function\",\"name\":\"executeOutput\",\"inputs\":[{\"name\":\"output\",\"type\":\"bytes\",\"internalType\":\"bytes\"},{\"name\":\"proof\",\"type\":\"tuple\",\"internalType\":\"structOutputValidityProof\",\"components\":[{\"name\":\"outputIndex\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"outputHashesSiblings\",\"type\":\"bytes32[]\",\"internalType\":\"bytes32[]\"}]}],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"type\":\"function\",\"name\":\"getDataAvailability\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"bytes\",\"internalType\":\"bytes\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"getOutputsMerkleRootValidator\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"contractIOutputsMerkleRootValidator\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"getTemplateHash\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"migrateToOutputsMerkleRootValidator\",\"inputs\":[{\"name\":\"newOutputsMerkleRootValidator\",\"type\":\"address\",\"internalType\":\"contractIOutputsMerkleRootValidator\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"type\":\"function\",\"name\":\"owner\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"renounceOwnership\",\"inputs\":[],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"type\":\"function\",\"name\":\"transferOwnership\",\"inputs\":[{\"name\":\"newOwner\",\"type\":\"address\",\"internalType\":\"address\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"type\":\"function\",\"name\":\"validateOutput\",\"inputs\":[{\"name\":\"output\",\"type\":\"bytes\",\"internalType\":\"bytes\"},{\"name\":\"proof\",\"type\":\"tuple\",\"internalType\":\"structOutputValidityProof\",\"components\":[{\"name\":\"outputIndex\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"outputHashesSiblings\",\"type\":\"bytes32[]\",\"internalType\":\"bytes32[]\"}]}],\"outputs\":[],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"validateOutputHash\",\"inputs\":[{\"name\":\"outputHash\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"proof\",\"type\":\"tuple\",\"internalType\":\"structOutputValidityProof\",\"components\":[{\"name\":\"outputIndex\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"outputHashesSiblings\",\"type\":\"bytes32[]\",\"internalType\":\"bytes32[]\"}]}],\"outputs\":[],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"wasOutputExecuted\",\"inputs\":[{\"name\":\"outputIndex\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"outputs\":[{\"name\":\"\",\"type\":\"bool\",\"internalType\":\"bool\"}],\"stateMutability\":\"view\"},{\"type\":\"event\",\"name\":\"NewOutputsMerkleRootValidator\",\"inputs\":[{\"name\":\"newOutputsMerkleRootValidator\",\"type\":\"address\",\"indexed\":false,\"internalType\":\"contractIOutputsMerkleRootValidator\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"OutputExecuted\",\"inputs\":[{\"name\":\"outputIndex\",\"type\":\"uint64\",\"indexed\":false,\"internalType\":\"uint64\"},{\"name\":\"output\",\"type\":\"bytes\",\"indexed\":false,\"internalType\":\"bytes\"}],\"anonymous\":false},{\"type\":\"error\",\"name\":\"InsufficientFunds\",\"inputs\":[{\"name\":\"value\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"balance\",\"type\":\"uint256\",\"internalType\":\"uint256\"}]},{\"type\":\"error\",\"name\":\"InvalidOutputHashesSiblingsArrayLength\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"InvalidOutputsMerkleRoot\",\"inputs\":[{\"name\":\"outputsMerkleRoot\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}]},{\"type\":\"error\",\"name\":\"OutputNotExecutable\",\"inputs\":[{\"name\":\"output\",\"type\":\"bytes\",\"internalType\":\"bytes\"}]},{\"type\":\"error\",\"name\":\"OutputNotReexecutable\",\"inputs\":[{\"name\":\"output\",\"type\":\"bytes\",\"internalType\":\"bytes\"}]}]",
+	ABI: "[{\"type\":\"function\",\"name\":\"executeOutput\",\"inputs\":[{\"name\":\"output\",\"type\":\"bytes\",\"internalType\":\"bytes\"},{\"name\":\"proof\",\"type\":\"tuple\",\"internalType\":\"structOutputValidityProof\",\"components\":[{\"name\":\"outputIndex\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"outputHashesSiblings\",\"type\":\"bytes32[]\",\"internalType\":\"bytes32[]\"}]}],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"type\":\"function\",\"name\":\"getDataAvailability\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"bytes\",\"internalType\":\"bytes\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"getDeploymentBlockNumber\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"getOutputsMerkleRootValidator\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"contractIOutputsMerkleRootValidator\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"getTemplateHash\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"migrateToOutputsMerkleRootValidator\",\"inputs\":[{\"name\":\"newOutputsMerkleRootValidator\",\"type\":\"address\",\"internalType\":\"contractIOutputsMerkleRootValidator\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"type\":\"function\",\"name\":\"owner\",\"inputs\":[],\"outputs\":[{\"name\":\"\",\"type\":\"address\",\"internalType\":\"address\"}],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"renounceOwnership\",\"inputs\":[],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"type\":\"function\",\"name\":\"transferOwnership\",\"inputs\":[{\"name\":\"newOwner\",\"type\":\"address\",\"internalType\":\"address\"}],\"outputs\":[],\"stateMutability\":\"nonpayable\"},{\"type\":\"function\",\"name\":\"validateOutput\",\"inputs\":[{\"name\":\"output\",\"type\":\"bytes\",\"internalType\":\"bytes\"},{\"name\":\"proof\",\"type\":\"tuple\",\"internalType\":\"structOutputValidityProof\",\"components\":[{\"name\":\"outputIndex\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"outputHashesSiblings\",\"type\":\"bytes32[]\",\"internalType\":\"bytes32[]\"}]}],\"outputs\":[],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"validateOutputHash\",\"inputs\":[{\"name\":\"outputHash\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"},{\"name\":\"proof\",\"type\":\"tuple\",\"internalType\":\"structOutputValidityProof\",\"components\":[{\"name\":\"outputIndex\",\"type\":\"uint64\",\"internalType\":\"uint64\"},{\"name\":\"outputHashesSiblings\",\"type\":\"bytes32[]\",\"internalType\":\"bytes32[]\"}]}],\"outputs\":[],\"stateMutability\":\"view\"},{\"type\":\"function\",\"name\":\"wasOutputExecuted\",\"inputs\":[{\"name\":\"outputIndex\",\"type\":\"uint256\",\"internalType\":\"uint256\"}],\"outputs\":[{\"name\":\"\",\"type\":\"bool\",\"internalType\":\"bool\"}],\"stateMutability\":\"view\"},{\"type\":\"event\",\"name\":\"OutputExecuted\",\"inputs\":[{\"name\":\"outputIndex\",\"type\":\"uint64\",\"indexed\":false,\"internalType\":\"uint64\"},{\"name\":\"output\",\"type\":\"bytes\",\"indexed\":false,\"internalType\":\"bytes\"}],\"anonymous\":false},{\"type\":\"event\",\"name\":\"OutputsMerkleRootValidatorChanged\",\"inputs\":[{\"name\":\"newOutputsMerkleRootValidator\",\"type\":\"address\",\"indexed\":false,\"internalType\":\"contractIOutputsMerkleRootValidator\"}],\"anonymous\":false},{\"type\":\"error\",\"name\":\"InsufficientFunds\",\"inputs\":[{\"name\":\"value\",\"type\":\"uint256\",\"internalType\":\"uint256\"},{\"name\":\"balance\",\"type\":\"uint256\",\"internalType\":\"uint256\"}]},{\"type\":\"error\",\"name\":\"InvalidOutputHashesSiblingsArrayLength\",\"inputs\":[]},{\"type\":\"error\",\"name\":\"InvalidOutputsMerkleRoot\",\"inputs\":[{\"name\":\"outputsMerkleRoot\",\"type\":\"bytes32\",\"internalType\":\"bytes32\"}]},{\"type\":\"error\",\"name\":\"OutputNotExecutable\",\"inputs\":[{\"name\":\"output\",\"type\":\"bytes\",\"internalType\":\"bytes\"}]},{\"type\":\"error\",\"name\":\"OutputNotReexecutable\",\"inputs\":[{\"name\":\"output\",\"type\":\"bytes\",\"internalType\":\"bytes\"}]}]",
 }
 
 // IApplicationABI is the input ABI used to generate the binding from.
@@ -215,6 +215,37 @@ func (_IApplication *IApplicationSession) GetDataAvailability() ([]byte, error) 
 // Solidity: function getDataAvailability() view returns(bytes)
 func (_IApplication *IApplicationCallerSession) GetDataAvailability() ([]byte, error) {
 	return _IApplication.Contract.GetDataAvailability(&_IApplication.CallOpts)
+}
+
+// GetDeploymentBlockNumber is a free data retrieval call binding the contract method 0xb3a1acd8.
+//
+// Solidity: function getDeploymentBlockNumber() view returns(uint256)
+func (_IApplication *IApplicationCaller) GetDeploymentBlockNumber(opts *bind.CallOpts) (*big.Int, error) {
+	var out []interface{}
+	err := _IApplication.contract.Call(opts, &out, "getDeploymentBlockNumber")
+
+	if err != nil {
+		return *new(*big.Int), err
+	}
+
+	out0 := *abi.ConvertType(out[0], new(*big.Int)).(**big.Int)
+
+	return out0, err
+
+}
+
+// GetDeploymentBlockNumber is a free data retrieval call binding the contract method 0xb3a1acd8.
+//
+// Solidity: function getDeploymentBlockNumber() view returns(uint256)
+func (_IApplication *IApplicationSession) GetDeploymentBlockNumber() (*big.Int, error) {
+	return _IApplication.Contract.GetDeploymentBlockNumber(&_IApplication.CallOpts)
+}
+
+// GetDeploymentBlockNumber is a free data retrieval call binding the contract method 0xb3a1acd8.
+//
+// Solidity: function getDeploymentBlockNumber() view returns(uint256)
+func (_IApplication *IApplicationCallerSession) GetDeploymentBlockNumber() (*big.Int, error) {
+	return _IApplication.Contract.GetDeploymentBlockNumber(&_IApplication.CallOpts)
 }
 
 // GetOutputsMerkleRootValidator is a free data retrieval call binding the contract method 0xa94dfc5a.
@@ -483,140 +514,6 @@ func (_IApplication *IApplicationTransactorSession) TransferOwnership(newOwner c
 	return _IApplication.Contract.TransferOwnership(&_IApplication.TransactOpts, newOwner)
 }
 
-// IApplicationNewOutputsMerkleRootValidatorIterator is returned from FilterNewOutputsMerkleRootValidator and is used to iterate over the raw logs and unpacked data for NewOutputsMerkleRootValidator events raised by the IApplication contract.
-type IApplicationNewOutputsMerkleRootValidatorIterator struct {
-	Event *IApplicationNewOutputsMerkleRootValidator // Event containing the contract specifics and raw log
-
-	contract *bind.BoundContract // Generic contract to use for unpacking event data
-	event    string              // Event name to use for unpacking event data
-
-	logs chan types.Log        // Log channel receiving the found contract events
-	sub  ethereum.Subscription // Subscription for errors, completion and termination
-	done bool                  // Whether the subscription completed delivering logs
-	fail error                 // Occurred error to stop iteration
-}
-
-// Next advances the iterator to the subsequent event, returning whether there
-// are any more events found. In case of a retrieval or parsing error, false is
-// returned and Error() can be queried for the exact failure.
-func (it *IApplicationNewOutputsMerkleRootValidatorIterator) Next() bool {
-	// If the iterator failed, stop iterating
-	if it.fail != nil {
-		return false
-	}
-	// If the iterator completed, deliver directly whatever's available
-	if it.done {
-		select {
-		case log := <-it.logs:
-			it.Event = new(IApplicationNewOutputsMerkleRootValidator)
-			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
-				it.fail = err
-				return false
-			}
-			it.Event.Raw = log
-			return true
-
-		default:
-			return false
-		}
-	}
-	// Iterator still in progress, wait for either a data or an error event
-	select {
-	case log := <-it.logs:
-		it.Event = new(IApplicationNewOutputsMerkleRootValidator)
-		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
-			it.fail = err
-			return false
-		}
-		it.Event.Raw = log
-		return true
-
-	case err := <-it.sub.Err():
-		it.done = true
-		it.fail = err
-		return it.Next()
-	}
-}
-
-// Error returns any retrieval or parsing error occurred during filtering.
-func (it *IApplicationNewOutputsMerkleRootValidatorIterator) Error() error {
-	return it.fail
-}
-
-// Close terminates the iteration process, releasing any pending underlying
-// resources.
-func (it *IApplicationNewOutputsMerkleRootValidatorIterator) Close() error {
-	it.sub.Unsubscribe()
-	return nil
-}
-
-// IApplicationNewOutputsMerkleRootValidator represents a NewOutputsMerkleRootValidator event raised by the IApplication contract.
-type IApplicationNewOutputsMerkleRootValidator struct {
-	NewOutputsMerkleRootValidator common.Address
-	Raw                           types.Log // Blockchain specific contextual infos
-}
-
-// FilterNewOutputsMerkleRootValidator is a free log retrieval operation binding the contract event 0xcd6d2f35ac02f1f13c1ec3e795a863665046affbccd14458ca780d27603ccb63.
-//
-// Solidity: event NewOutputsMerkleRootValidator(address newOutputsMerkleRootValidator)
-func (_IApplication *IApplicationFilterer) FilterNewOutputsMerkleRootValidator(opts *bind.FilterOpts) (*IApplicationNewOutputsMerkleRootValidatorIterator, error) {
-
-	logs, sub, err := _IApplication.contract.FilterLogs(opts, "NewOutputsMerkleRootValidator")
-	if err != nil {
-		return nil, err
-	}
-	return &IApplicationNewOutputsMerkleRootValidatorIterator{contract: _IApplication.contract, event: "NewOutputsMerkleRootValidator", logs: logs, sub: sub}, nil
-}
-
-// WatchNewOutputsMerkleRootValidator is a free log subscription operation binding the contract event 0xcd6d2f35ac02f1f13c1ec3e795a863665046affbccd14458ca780d27603ccb63.
-//
-// Solidity: event NewOutputsMerkleRootValidator(address newOutputsMerkleRootValidator)
-func (_IApplication *IApplicationFilterer) WatchNewOutputsMerkleRootValidator(opts *bind.WatchOpts, sink chan<- *IApplicationNewOutputsMerkleRootValidator) (event.Subscription, error) {
-
-	logs, sub, err := _IApplication.contract.WatchLogs(opts, "NewOutputsMerkleRootValidator")
-	if err != nil {
-		return nil, err
-	}
-	return event.NewSubscription(func(quit <-chan struct{}) error {
-		defer sub.Unsubscribe()
-		for {
-			select {
-			case log := <-logs:
-				// New log arrived, parse the event and forward to the user
-				event := new(IApplicationNewOutputsMerkleRootValidator)
-				if err := _IApplication.contract.UnpackLog(event, "NewOutputsMerkleRootValidator", log); err != nil {
-					return err
-				}
-				event.Raw = log
-
-				select {
-				case sink <- event:
-				case err := <-sub.Err():
-					return err
-				case <-quit:
-					return nil
-				}
-			case err := <-sub.Err():
-				return err
-			case <-quit:
-				return nil
-			}
-		}
-	}), nil
-}
-
-// ParseNewOutputsMerkleRootValidator is a log parse operation binding the contract event 0xcd6d2f35ac02f1f13c1ec3e795a863665046affbccd14458ca780d27603ccb63.
-//
-// Solidity: event NewOutputsMerkleRootValidator(address newOutputsMerkleRootValidator)
-func (_IApplication *IApplicationFilterer) ParseNewOutputsMerkleRootValidator(log types.Log) (*IApplicationNewOutputsMerkleRootValidator, error) {
-	event := new(IApplicationNewOutputsMerkleRootValidator)
-	if err := _IApplication.contract.UnpackLog(event, "NewOutputsMerkleRootValidator", log); err != nil {
-		return nil, err
-	}
-	event.Raw = log
-	return event, nil
-}
-
 // IApplicationOutputExecutedIterator is returned from FilterOutputExecuted and is used to iterate over the raw logs and unpacked data for OutputExecuted events raised by the IApplication contract.
 type IApplicationOutputExecutedIterator struct {
 	Event *IApplicationOutputExecuted // Event containing the contract specifics and raw log
@@ -746,6 +643,140 @@ func (_IApplication *IApplicationFilterer) WatchOutputExecuted(opts *bind.WatchO
 func (_IApplication *IApplicationFilterer) ParseOutputExecuted(log types.Log) (*IApplicationOutputExecuted, error) {
 	event := new(IApplicationOutputExecuted)
 	if err := _IApplication.contract.UnpackLog(event, "OutputExecuted", log); err != nil {
+		return nil, err
+	}
+	event.Raw = log
+	return event, nil
+}
+
+// IApplicationOutputsMerkleRootValidatorChangedIterator is returned from FilterOutputsMerkleRootValidatorChanged and is used to iterate over the raw logs and unpacked data for OutputsMerkleRootValidatorChanged events raised by the IApplication contract.
+type IApplicationOutputsMerkleRootValidatorChangedIterator struct {
+	Event *IApplicationOutputsMerkleRootValidatorChanged // Event containing the contract specifics and raw log
+
+	contract *bind.BoundContract // Generic contract to use for unpacking event data
+	event    string              // Event name to use for unpacking event data
+
+	logs chan types.Log        // Log channel receiving the found contract events
+	sub  ethereum.Subscription // Subscription for errors, completion and termination
+	done bool                  // Whether the subscription completed delivering logs
+	fail error                 // Occurred error to stop iteration
+}
+
+// Next advances the iterator to the subsequent event, returning whether there
+// are any more events found. In case of a retrieval or parsing error, false is
+// returned and Error() can be queried for the exact failure.
+func (it *IApplicationOutputsMerkleRootValidatorChangedIterator) Next() bool {
+	// If the iterator failed, stop iterating
+	if it.fail != nil {
+		return false
+	}
+	// If the iterator completed, deliver directly whatever's available
+	if it.done {
+		select {
+		case log := <-it.logs:
+			it.Event = new(IApplicationOutputsMerkleRootValidatorChanged)
+			if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+				it.fail = err
+				return false
+			}
+			it.Event.Raw = log
+			return true
+
+		default:
+			return false
+		}
+	}
+	// Iterator still in progress, wait for either a data or an error event
+	select {
+	case log := <-it.logs:
+		it.Event = new(IApplicationOutputsMerkleRootValidatorChanged)
+		if err := it.contract.UnpackLog(it.Event, it.event, log); err != nil {
+			it.fail = err
+			return false
+		}
+		it.Event.Raw = log
+		return true
+
+	case err := <-it.sub.Err():
+		it.done = true
+		it.fail = err
+		return it.Next()
+	}
+}
+
+// Error returns any retrieval or parsing error occurred during filtering.
+func (it *IApplicationOutputsMerkleRootValidatorChangedIterator) Error() error {
+	return it.fail
+}
+
+// Close terminates the iteration process, releasing any pending underlying
+// resources.
+func (it *IApplicationOutputsMerkleRootValidatorChangedIterator) Close() error {
+	it.sub.Unsubscribe()
+	return nil
+}
+
+// IApplicationOutputsMerkleRootValidatorChanged represents a OutputsMerkleRootValidatorChanged event raised by the IApplication contract.
+type IApplicationOutputsMerkleRootValidatorChanged struct {
+	NewOutputsMerkleRootValidator common.Address
+	Raw                           types.Log // Blockchain specific contextual infos
+}
+
+// FilterOutputsMerkleRootValidatorChanged is a free log retrieval operation binding the contract event 0x6ad3188ba8f430fba0656cb0a7e839ab2020d5586ba11a1477d18f7092f8bece.
+//
+// Solidity: event OutputsMerkleRootValidatorChanged(address newOutputsMerkleRootValidator)
+func (_IApplication *IApplicationFilterer) FilterOutputsMerkleRootValidatorChanged(opts *bind.FilterOpts) (*IApplicationOutputsMerkleRootValidatorChangedIterator, error) {
+
+	logs, sub, err := _IApplication.contract.FilterLogs(opts, "OutputsMerkleRootValidatorChanged")
+	if err != nil {
+		return nil, err
+	}
+	return &IApplicationOutputsMerkleRootValidatorChangedIterator{contract: _IApplication.contract, event: "OutputsMerkleRootValidatorChanged", logs: logs, sub: sub}, nil
+}
+
+// WatchOutputsMerkleRootValidatorChanged is a free log subscription operation binding the contract event 0x6ad3188ba8f430fba0656cb0a7e839ab2020d5586ba11a1477d18f7092f8bece.
+//
+// Solidity: event OutputsMerkleRootValidatorChanged(address newOutputsMerkleRootValidator)
+func (_IApplication *IApplicationFilterer) WatchOutputsMerkleRootValidatorChanged(opts *bind.WatchOpts, sink chan<- *IApplicationOutputsMerkleRootValidatorChanged) (event.Subscription, error) {
+
+	logs, sub, err := _IApplication.contract.WatchLogs(opts, "OutputsMerkleRootValidatorChanged")
+	if err != nil {
+		return nil, err
+	}
+	return event.NewSubscription(func(quit <-chan struct{}) error {
+		defer sub.Unsubscribe()
+		for {
+			select {
+			case log := <-logs:
+				// New log arrived, parse the event and forward to the user
+				event := new(IApplicationOutputsMerkleRootValidatorChanged)
+				if err := _IApplication.contract.UnpackLog(event, "OutputsMerkleRootValidatorChanged", log); err != nil {
+					return err
+				}
+				event.Raw = log
+
+				select {
+				case sink <- event:
+				case err := <-sub.Err():
+					return err
+				case <-quit:
+					return nil
+				}
+			case err := <-sub.Err():
+				return err
+			case <-quit:
+				return nil
+			}
+		}
+	}), nil
+}
+
+// ParseOutputsMerkleRootValidatorChanged is a log parse operation binding the contract event 0x6ad3188ba8f430fba0656cb0a7e839ab2020d5586ba11a1477d18f7092f8bece.
+//
+// Solidity: event OutputsMerkleRootValidatorChanged(address newOutputsMerkleRootValidator)
+func (_IApplication *IApplicationFilterer) ParseOutputsMerkleRootValidatorChanged(log types.Log) (*IApplicationOutputsMerkleRootValidatorChanged, error) {
+	event := new(IApplicationOutputsMerkleRootValidatorChanged)
+	if err := _IApplication.contract.UnpackLog(event, "OutputsMerkleRootValidatorChanged", log); err != nil {
 		return nil, err
 	}
 	event.Raw = log

@@ -275,9 +275,9 @@ func (r *PostgresRepository) UpdateEventLastCheckBlock(
 		column = table.Application.LastInputCheckBlock
 	case model.MonitoredEvent_OutputExecuted:
 		column = table.Application.LastOutputCheckBlock
-	case model.MonitoredEvent_ClaimSubmission:
+	case model.MonitoredEvent_ClaimSubmitted:
 		fallthrough
-	case model.MonitoredEvent_ClaimAcceptance:
+	case model.MonitoredEvent_ClaimAccepted:
 		fallthrough
 	default:
 		return fmt.Errorf("invalid monitored event type: %v", event)

@@ -10,7 +10,7 @@
 //
 //   - This configuration must submit a new computed claim.
 //
-//     2. Some time after the submission, the computed claim shows up as a claimSubmission
+//     2. Some time after the submission, the computed claim shows up as a claimSubmitted
 //     event in the blockchain. The claim and event must match.
 //
 //   - This configuration must update the epoch in the database: computed -> submitted
@@ -52,20 +52,20 @@ import (
 )
 
 var (
-	ErrClaimMismatch = fmt.Errorf("claim and antecessor mismatch")
-	ErrEventMismatch = fmt.Errorf("Computed Claim mismatches ClaimSubmission event")
-	ErrMissingEvent  = fmt.Errorf("accepted claim has no matching blockchain event")
+	ErrClaimMismatch = fmt.Errorf("Claim and antecessor mismatch")
+	ErrEventMismatch = fmt.Errorf("Computed Claim mismatches ClaimSubmitted event")
+	ErrMissingEvent  = fmt.Errorf("Accepted claim has no matching blockchain event")
 )
 
 type iclaimerRepository interface {
 	ListApplications(ctx context.Context, f repository.ApplicationFilter, p repository.Pagination) ([]*Application, uint64, error)
 
-	SelectSubmissionClaimPairsPerApp(ctx context.Context) (
+	SelectSubmittedClaimPairsPerApp(ctx context.Context) (
 		map[common.Address]*ClaimRow,
 		map[common.Address]*ClaimRow,
 		error,
 	)
-	SelectAcceptanceClaimPairsPerApp(ctx context.Context) (
+	SelectAcceptedClaimPairsPerApp(ctx context.Context) (
 		map[common.Address]*ClaimRow,
 		map[common.Address]*ClaimRow,
 		error,
@@ -122,7 +122,7 @@ func (s *Service) checkApplicationConsensus(endBlock *big.Int) []error {
 /* transition claims from computed to submitted */
 func (s *Service) submitClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 	errs := []error{}
-	acceptedOrSubmittedClaims, computedClaims, err := s.repository.SelectSubmissionClaimPairsPerApp(s.Context)
+	acceptedOrSubmittedClaims, computedClaims, err := s.repository.SelectSubmittedClaimPairsPerApp(s.Context)
 	if err != nil {
 		errs = append(errs, err)
 		return errs
@@ -165,8 +165,8 @@ func (s *Service) submitClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 	// check computed claims
 	for key, computedClaim := range computedClaims {
 		var ic *iconsensus.IConsensus
-		var prevEvent *iconsensus.IConsensusClaimSubmission
-		var currEvent *iconsensus.IConsensusClaimSubmission
+		var prevEvent *iconsensus.IConsensusClaimSubmitted
+		var currEvent *iconsensus.IConsensusClaimSubmitted
 
 		if _, isInFlight := s.claimsInFlight[key]; isInFlight {
 			continue
@@ -194,7 +194,7 @@ func (s *Service) submitClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 
 			// if prevClaimRow exists, there must be a matching event
 			ic, prevEvent, currEvent, err =
-				s.blockchain.findClaimSubmissionEventAndSucc(s.Context, prevClaimRow, endBlock)
+				s.blockchain.findClaimSubmittedEventAndSucc(s.Context, prevClaimRow, endBlock)
 			if err != nil {
 				delete(computedClaims, key)
 				errs = append(errs, err)
@@ -214,7 +214,7 @@ func (s *Service) submitClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 				errs = append(errs, err)
 				goto nextApp
 			}
-			if !claimSubmissionMatch(prevClaimRow, prevEvent) {
+			if !claimSubmittedMatch(prevClaimRow, prevEvent) {
 				s.Logger.Error("event mismatch",
 					"claim", prevClaimRow,
 					"event", prevEvent,
@@ -237,7 +237,7 @@ func (s *Service) submitClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 		} else {
 			// first claim
 			ic, currEvent, _, err =
-				s.blockchain.findClaimSubmissionEventAndSucc(s.Context, computedClaim, endBlock)
+				s.blockchain.findClaimSubmittedEventAndSucc(s.Context, computedClaim, endBlock)
 			if err != nil {
 				delete(computedClaims, key)
 				errs = append(errs, err)
@@ -251,7 +251,7 @@ func (s *Service) submitClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 				"claim_hash", fmt.Sprintf("%x", currEvent.OutputsMerkleRoot),
 				"last_block", currEvent.LastProcessedBlockNumber.Uint64(),
 			)
-			if !claimSubmissionMatch(computedClaim, currEvent) {
+			if !claimSubmittedMatch(computedClaim, currEvent) {
 				err = s.setApplicationInoperable(
 					s.Context,
 					computedClaim.IApplicationAddress,
@@ -324,7 +324,7 @@ func (s *Service) submitClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 /* transition claims from submitted to accepted */
 func (s *Service) acceptClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 	errs := []error{}
-	acceptedClaims, submittedClaims, err := s.repository.SelectAcceptanceClaimPairsPerApp(s.Context)
+	acceptedClaims, submittedClaims, err := s.repository.SelectAcceptedClaimPairsPerApp(s.Context)
 	if err != nil {
 		errs = append(errs, err)
 		return errs
@@ -332,8 +332,8 @@ func (s *Service) acceptClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 
 	// check submitted claims
 	for key, submittedClaim := range submittedClaims {
-		var prevEvent *iconsensus.IConsensusClaimAcceptance
-		var currEvent *iconsensus.IConsensusClaimAcceptance
+		var prevEvent *iconsensus.IConsensusClaimAccepted
+		var currEvent *iconsensus.IConsensusClaimAccepted
 
 		acceptedClaim, prevExists := acceptedClaims[key]
 		if prevExists {
@@ -351,7 +351,7 @@ func (s *Service) acceptClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 
 			// if prevClaimRow exists, there must be a matching event
 			_, prevEvent, currEvent, err =
-				s.blockchain.findClaimAcceptanceEventAndSucc(s.Context, acceptedClaim, endBlock)
+				s.blockchain.findClaimAcceptedEventAndSucc(s.Context, acceptedClaim, endBlock)
 			if err != nil {
 				delete(submittedClaims, key)
 				errs = append(errs, err)
@@ -366,7 +366,7 @@ func (s *Service) acceptClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 				errs = append(errs, ErrMissingEvent)
 				goto nextApp
 			}
-			if !claimAcceptanceMatch(acceptedClaim, prevEvent) {
+			if !claimAcceptedMatch(acceptedClaim, prevEvent) {
 				s.Logger.Error("event mismatch",
 					"claim", acceptedClaim,
 					"event", prevEvent,
@@ -379,7 +379,7 @@ func (s *Service) acceptClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 		} else {
 			// first claim
 			_, currEvent, _, err =
-				s.blockchain.findClaimAcceptanceEventAndSucc(s.Context, submittedClaim, endBlock)
+				s.blockchain.findClaimAcceptedEventAndSucc(s.Context, submittedClaim, endBlock)
 			if err != nil {
 				delete(submittedClaims, key)
 				errs = append(errs, err)
@@ -393,7 +393,7 @@ func (s *Service) acceptClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 				"claim_hash", fmt.Sprintf("%x", currEvent.OutputsMerkleRoot),
 				"last_block", currEvent.LastProcessedBlockNumber.Uint64(),
 			)
-			if !claimAcceptanceMatch(submittedClaim, currEvent) {
+			if !claimAcceptedMatch(submittedClaim, currEvent) {
 				s.Logger.Error("event mismatch",
 					"claim", submittedClaim,
 					"event", currEvent,
@@ -503,13 +503,13 @@ func checkClaimsConstraint(p *ClaimRow, c *ClaimRow) error {
 	return nil
 }
 
-func claimSubmissionMatch(c *ClaimRow, e *iconsensus.IConsensusClaimSubmission) bool {
+func claimSubmittedMatch(c *ClaimRow, e *iconsensus.IConsensusClaimSubmitted) bool {
 	return c.IApplicationAddress == e.AppContract &&
 		*c.ClaimHash == e.OutputsMerkleRoot &&
 		c.LastBlock == e.LastProcessedBlockNumber.Uint64()
 }
 
-func claimAcceptanceMatch(c *ClaimRow, e *iconsensus.IConsensusClaimAcceptance) bool {
+func claimAcceptedMatch(c *ClaimRow, e *iconsensus.IConsensusClaimAccepted) bool {
 	return c.IApplicationAddress == e.AppContract &&
 		*c.ClaimHash == e.OutputsMerkleRoot &&
 		c.LastBlock == e.LastProcessedBlockNumber.Uint64()

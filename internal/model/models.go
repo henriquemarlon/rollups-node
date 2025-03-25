@@ -517,10 +517,10 @@ func (e DefaultBlock) String() string {
 type MonitoredEvent string
 
 const (
-	MonitoredEvent_InputAdded      MonitoredEvent = "InputAdded"
-	MonitoredEvent_OutputExecuted  MonitoredEvent = "OutputExecuted"
-	MonitoredEvent_ClaimSubmission MonitoredEvent = "ClaimSubmission"
-	MonitoredEvent_ClaimAcceptance MonitoredEvent = "ClaimAcceptance"
+	MonitoredEvent_InputAdded     MonitoredEvent = "InputAdded"
+	MonitoredEvent_OutputExecuted MonitoredEvent = "OutputExecuted"
+	MonitoredEvent_ClaimSubmitted MonitoredEvent = "ClaimSubmitted"
+	MonitoredEvent_ClaimAccepted  MonitoredEvent = "ClaimAccepted"
 )
 
 func (e MonitoredEvent) String() string {

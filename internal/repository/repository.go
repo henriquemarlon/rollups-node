@@ -112,12 +112,12 @@ type NodeConfigRepository interface {
 
 // TODO: migrate ClaimRow -> Application + Epoch and use the other interfaces
 type ClaimerRepository interface {
-	SelectSubmissionClaimPairsPerApp(ctx context.Context) (
+	SelectSubmittedClaimPairsPerApp(ctx context.Context) (
 		map[common.Address]*ClaimRow,
 		map[common.Address]*ClaimRow,
 		error,
 	)
-	SelectAcceptanceClaimPairsPerApp(ctx context.Context) (
+	SelectAcceptedClaimPairsPerApp(ctx context.Context) (
 		map[common.Address]*ClaimRow,
 		map[common.Address]*ClaimRow,
 		error,

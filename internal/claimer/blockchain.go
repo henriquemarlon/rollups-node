@@ -26,14 +26,14 @@ import (
 )
 
 type iclaimerBlockchain interface {
-	findClaimSubmissionEventAndSucc(
+	findClaimSubmittedEventAndSucc(
 		ctx context.Context,
 		claim *ClaimRow,
 		endBlock *big.Int,
 	) (
 		*iconsensus.IConsensus,
-		*iconsensus.IConsensusClaimSubmission,
-		*iconsensus.IConsensusClaimSubmission,
+		*iconsensus.IConsensusClaimSubmitted,
+		*iconsensus.IConsensusClaimSubmitted,
 		error,
 	)
 
@@ -48,14 +48,14 @@ type iclaimerBlockchain interface {
 		endBlock *big.Int,
 	) (bool, *types.Receipt, error)
 
-	findClaimAcceptanceEventAndSucc(
+	findClaimAcceptedEventAndSucc(
 		ctx context.Context,
 		claim *ClaimRow,
 		endBlock *big.Int,
 	) (
 		*iconsensus.IConsensus,
-		*iconsensus.IConsensusClaimAcceptance,
-		*iconsensus.IConsensusClaimAcceptance,
+		*iconsensus.IConsensusClaimAccepted,
+		*iconsensus.IConsensusClaimAccepted,
 		error,
 	)
 
@@ -105,11 +105,11 @@ func (self *claimerBlockchain) submitClaimToBlockchain(
 	return txHash, err
 }
 
-func unwrapClaimSubmission(
+func unwrapClaimSubmitted(
 	ic *iconsensus.IConsensus,
 	pull func() (log *types.Log, err error, ok bool),
 ) (
-	*iconsensus.IConsensusClaimSubmission,
+	*iconsensus.IConsensusClaimSubmitted,
 	bool,
 	error,
 ) {
@@ -117,20 +117,20 @@ func unwrapClaimSubmission(
 	if !ok || err != nil {
 		return nil, false, err
 	}
-	ev, err := ic.ParseClaimSubmission(*log)
+	ev, err := ic.ParseClaimSubmitted(*log)
 	return ev, true, err
 }
 
-// scan the event stream for a claimSubmission event that matches claim.
+// scan the event stream for a claimSubmitted event that matches claim.
 // return this event and its successor
-func (self *claimerBlockchain) findClaimSubmissionEventAndSucc(
+func (self *claimerBlockchain) findClaimSubmittedEventAndSucc(
 	ctx context.Context,
 	claim *ClaimRow,
 	endBlock *big.Int,
 ) (
 	*iconsensus.IConsensus,
-	*iconsensus.IConsensusClaimSubmission,
-	*iconsensus.IConsensusClaimSubmission,
+	*iconsensus.IConsensusClaimSubmitted,
+	*iconsensus.IConsensusClaimSubmitted,
 	error,
 ) {
 	ic, err := iconsensus.NewIConsensus(claim.IConsensusAddress, self.client)
@@ -139,12 +139,12 @@ func (self *claimerBlockchain) findClaimSubmissionEventAndSucc(
 	}
 
 	// filter must match:
-	// - `ClaimSubmission` events
+	// - `ClaimSubmitted` events
 	// - submitter == nil (any)
 	// - appContract == claim.IApplicationAddress
 	c, err := iconsensus.IConsensusMetaData.GetAbi()
 	topics, err := abi.MakeTopics(
-		[]any{c.Events["ClaimSubmission"].ID},
+		[]any{c.Events[MonitoredEvent_ClaimSubmitted.String()].ID},
 		nil,
 		[]any{claim.IApplicationAddress},
 	)
@@ -166,15 +166,15 @@ func (self *claimerBlockchain) findClaimSubmissionEventAndSucc(
 	next, stop := iter.Pull2(it)
 	defer stop()
 	for {
-		event, ok, err := unwrapClaimSubmission(ic, next)
+		event, ok, err := unwrapClaimSubmitted(ic, next)
 		if !ok || err != nil {
 			return ic, event, nil, err
 		}
 		lastBlock := event.LastProcessedBlockNumber.Uint64()
 
-		if claimSubmissionMatch(claim, event) {
+		if claimSubmittedMatch(claim, event) {
 			// found the event, does it has a successor? try to fetch it
-			succ, ok, err := unwrapClaimSubmission(ic, next)
+			succ, ok, err := unwrapClaimSubmitted(ic, next)
 			if !ok || err != nil {
 				return ic, event, nil, err
 			}
@@ -186,11 +186,11 @@ func (self *claimerBlockchain) findClaimSubmissionEventAndSucc(
 	}
 }
 
-func unwrapClaimAcceptance(
+func unwrapClaimAccepted(
 	ic *iconsensus.IConsensus,
 	pull func() (log *types.Log, err error, ok bool),
 ) (
-	*iconsensus.IConsensusClaimAcceptance,
+	*iconsensus.IConsensusClaimAccepted,
 	bool,
 	error,
 ) {
@@ -198,20 +198,20 @@ func unwrapClaimAcceptance(
 	if !ok || err != nil {
 		return nil, false, err
 	}
-	ev, err := ic.ParseClaimAcceptance(*log)
+	ev, err := ic.ParseClaimAccepted(*log)
 	return ev, true, err
 }
 
-// scan the event stream for a claimAcceptance event that matches claim.
+// scan the event stream for a claimAccepted event that matches claim.
 // return this event and its successor
-func (self *claimerBlockchain) findClaimAcceptanceEventAndSucc(
+func (self *claimerBlockchain) findClaimAcceptedEventAndSucc(
 	ctx context.Context,
 	claim *ClaimRow,
 	endBlock *big.Int,
 ) (
 	*iconsensus.IConsensus,
-	*iconsensus.IConsensusClaimAcceptance,
-	*iconsensus.IConsensusClaimAcceptance,
+	*iconsensus.IConsensusClaimAccepted,
+	*iconsensus.IConsensusClaimAccepted,
 	error,
 ) {
 	ic, err := iconsensus.NewIConsensus(claim.IConsensusAddress, self.client)
@@ -220,11 +220,11 @@ func (self *claimerBlockchain) findClaimAcceptanceEventAndSucc(
 	}
 
 	// filter must match:
-	// - `ClaimAcceptance` events
+	// - `ClaimAccepted` events
 	// - appContract == claim.IApplicationAddress
 	c, err := iconsensus.IConsensusMetaData.GetAbi()
 	topics, err := abi.MakeTopics(
-		[]any{c.Events["ClaimAcceptance"].ID},
+		[]any{c.Events[MonitoredEvent_ClaimAccepted.String()].ID},
 		[]any{claim.IApplicationAddress},
 	)
 	if err != nil {
@@ -245,15 +245,15 @@ func (self *claimerBlockchain) findClaimAcceptanceEventAndSucc(
 	next, stop := iter.Pull2(it)
 	defer stop()
 	for {
-		event, ok, err := unwrapClaimAcceptance(ic, next)
+		event, ok, err := unwrapClaimAccepted(ic, next)
 		if !ok || err != nil {
 			return ic, event, nil, err
 		}
 		lastBlock := event.LastProcessedBlockNumber.Uint64()
 
-		if claimAcceptanceMatch(claim, event) {
+		if claimAcceptedMatch(claim, event) {
 			// found the event, does it has a successor? try to fetch it
-			succ, ok, err := unwrapClaimAcceptance(ic, next)
+			succ, ok, err := unwrapClaimAccepted(ic, next)
 			if !ok || err != nil {
 				return ic, event, nil, err
 			}

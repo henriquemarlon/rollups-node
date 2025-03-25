@@ -171,7 +171,7 @@ func (r *PostgresRepository) selectNewestAcceptedClaimPerApp(
 	return results, nil
 }
 
-func (r *PostgresRepository) SelectSubmissionClaimPairsPerApp(ctx context.Context) (
+func (r *PostgresRepository) SelectSubmittedClaimPairsPerApp(ctx context.Context) (
 	map[common.Address]*model.ClaimRow,
 	map[common.Address]*model.ClaimRow,
 	error,
@@ -198,7 +198,7 @@ func (r *PostgresRepository) SelectSubmissionClaimPairsPerApp(ctx context.Contex
 	return acceptedOrSubmitted, computed, err
 }
 
-func (r *PostgresRepository) SelectAcceptanceClaimPairsPerApp(ctx context.Context) (
+func (r *PostgresRepository) SelectAcceptedClaimPairsPerApp(ctx context.Context) (
 	map[common.Address]*model.ClaimRow,
 	map[common.Address]*model.ClaimRow,
 	error,

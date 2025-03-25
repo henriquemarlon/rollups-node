@@ -9,13 +9,13 @@ import (
 	"iter"
 	"log/slog"
 	"math/big"
-	"time"
 
 	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/internal/model"
 	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/pkg/contracts/iconsensus"
 	"github.com/cartesi/rollups-node/pkg/ethutil"
+
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -24,40 +24,6 @@ import (
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rpc"
 )
-
-type iclaimerRepository interface {
-	SelectSubmissionClaimPairsPerApp(ctx context.Context) (
-		map[common.Address]*ClaimRow,
-		map[common.Address]*ClaimRow,
-		error,
-	)
-	SelectAcceptanceClaimPairsPerApp(ctx context.Context) (
-		map[common.Address]*ClaimRow,
-		map[common.Address]*ClaimRow,
-		error,
-	)
-	UpdateEpochWithSubmittedClaim(
-		ctx context.Context,
-		application_id int64,
-		index uint64,
-		transaction_hash common.Hash,
-	) error
-	UpdateEpochWithAcceptedClaim(
-		ctx context.Context,
-		application_id int64,
-		index uint64,
-	) error
-
-	UpdateApplicationState(
-		ctx context.Context,
-		appID int64,
-		state ApplicationState,
-		reason *string,
-	) error
-
-	SaveNodeConfigRaw(ctx context.Context, key string, rawJSON []byte) error
-	LoadNodeConfigRaw(ctx context.Context, key string) (rawJSON []byte, createdAt, updatedAt time.Time, err error)
-}
 
 type iclaimerBlockchain interface {
 	findClaimSubmissionEventAndSucc(
@@ -94,6 +60,12 @@ type iclaimerBlockchain interface {
 	)
 
 	getBlockNumber(ctx context.Context) (*big.Int, error)
+
+	checkApplicationsForConsensusAddressChange(
+		ctx context.Context,
+		apps []*model.Application,
+		endBlock *big.Int,
+	) ([]consensusChanged, []error)
 }
 
 type claimerBlockchain struct {
@@ -101,6 +73,11 @@ type claimerBlockchain struct {
 	txOpts       *bind.TransactOpts
 	logger       *slog.Logger
 	defaultBlock config.DefaultBlock
+}
+
+type consensusChanged struct {
+	application *model.Application
+	newAddress  *common.Address
 }
 
 func (self *claimerBlockchain) submitClaimToBlockchain(
@@ -286,6 +263,26 @@ func (self *claimerBlockchain) findClaimAcceptanceEventAndSucc(
 			return nil, nil, nil, err
 		}
 	}
+}
+
+func (self *claimerBlockchain) checkApplicationsForConsensusAddressChange(
+	ctx context.Context,
+	apps []*model.Application,
+	endBlock *big.Int,
+) ([]consensusChanged, []error) {
+	var changed []consensusChanged
+	var errs []error
+	for _, app := range apps {
+		consensusAddr, err := ethutil.GetConsensus(ctx, self.client, app.IApplicationAddress)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if app.IConsensusAddress != consensusAddr {
+			changed = append(changed, consensusChanged{app, &consensusAddr})
+		}
+	}
+	return changed, errs
 }
 
 /* poll a transaction hash for its submission status and receipt */

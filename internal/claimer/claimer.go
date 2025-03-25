@@ -41,19 +41,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log/slog"
 	"math/big"
+	"time"
 
-	"github.com/cartesi/rollups-node/internal/config"
-	"github.com/cartesi/rollups-node/internal/config/auth"
 	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/repository"
 	"github.com/cartesi/rollups-node/pkg/contracts/iconsensus"
-	"github.com/cartesi/rollups-node/pkg/service"
 
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
 )
 
 var (
@@ -62,119 +57,65 @@ var (
 	ErrMissingEvent  = fmt.Errorf("accepted claim has no matching blockchain event")
 )
 
-type CreateInfo struct {
-	service.CreateInfo
+type iclaimerRepository interface {
+	ListApplications(ctx context.Context, f repository.ApplicationFilter, p repository.Pagination) ([]*Application, uint64, error)
 
-	Config config.Config
+	SelectSubmissionClaimPairsPerApp(ctx context.Context) (
+		map[common.Address]*ClaimRow,
+		map[common.Address]*ClaimRow,
+		error,
+	)
+	SelectAcceptanceClaimPairsPerApp(ctx context.Context) (
+		map[common.Address]*ClaimRow,
+		map[common.Address]*ClaimRow,
+		error,
+	)
+	UpdateEpochWithSubmittedClaim(
+		ctx context.Context,
+		application_id int64,
+		index uint64,
+		transaction_hash common.Hash,
+	) error
+	UpdateEpochWithAcceptedClaim(
+		ctx context.Context,
+		application_id int64,
+		index uint64,
+	) error
 
-	EthConn    *ethclient.Client
-	Repository repository.Repository
+	UpdateApplicationState(
+		ctx context.Context,
+		appID int64,
+		state ApplicationState,
+		reason *string,
+	) error
+
+	SaveNodeConfigRaw(ctx context.Context, key string, rawJSON []byte) error
+	LoadNodeConfigRaw(ctx context.Context, key string) (rawJSON []byte, createdAt, updatedAt time.Time, err error)
 }
 
-type Service struct {
-	service.Service
-
-	repository        iclaimerRepository
-	blockchain        iclaimerBlockchain
-	claimsInFlight    map[common.Address]common.Hash // -> txHash
-	submissionEnabled bool
-}
-
-const ClaimerConfigKey = "claimer"
-
-type PersistentConfig struct {
-	DefaultBlock           DefaultBlock
-	ClaimSubmissionEnabled bool
-	ChainID                uint64
-}
-
-func Create(ctx context.Context, c *CreateInfo) (*Service, error) {
-	var err error
-	if err = ctx.Err(); err != nil {
-		return nil, err // This returns context.Canceled or context.DeadlineExceeded.
+func (s *Service) checkApplicationConsensus(endBlock *big.Int) []error {
+	f := repository.ApplicationFilter{
+		State: Pointer(ApplicationState_Enabled),
 	}
-	if c.Repository == nil {
-		return nil, fmt.Errorf("repository on claimer service Create is nil")
-	}
-	if c.EthConn == nil {
-		return nil, fmt.Errorf("ethclient on claimer service Create is nil")
-	}
-
-	s := &Service{}
-	c.CreateInfo.Impl = s
-
-	err = service.Create(ctx, &c.CreateInfo, &s.Service)
+	apps, _, err := s.repository.ListApplications(s.Context, f, repository.Pagination{})
 	if err != nil {
-		return nil, err
+		s.Logger.Error("Error retrieving enabled applications", "error", err)
+		return []error{err}
 	}
 
-	nodeConfig, err := setupPersistentConfig(ctx, s.Logger, c.Repository, &c.Config)
-	if err != nil {
-		return nil, err
+	var errs []error
+	changedList, errs := s.blockchain.checkApplicationsForConsensusAddressChange(s.Context, apps, endBlock)
+	for _, changed := range changedList {
+		err = s.setApplicationInoperable(
+			s.Context,
+			changed.application.IApplicationAddress,
+			changed.application.ID,
+			"Application consensus address has changed. Application: %v, previous: %v, current: %v.",
+			changed.application.IApplicationAddress,
+			changed.application.IConsensusAddress,
+			changed.newAddress,
+		)
 	}
-
-	chainId, err := c.EthConn.ChainID(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if chainId.Uint64() != c.Config.BlockchainId {
-		return nil, fmt.Errorf("chainId mismatch: network %d != provided %d", chainId.Uint64(), c.Config.BlockchainId)
-	}
-
-	if chainId.Uint64() != nodeConfig.ChainID {
-		return nil, fmt.Errorf("NodeConfig chainId mismatch: network %d != config %d",
-			chainId.Uint64(), nodeConfig.ChainID)
-	}
-	s.submissionEnabled = nodeConfig.ClaimSubmissionEnabled
-	s.claimsInFlight = map[common.Address]common.Hash{}
-
-	var txOpts *bind.TransactOpts = nil
-	if s.submissionEnabled {
-		txOpts, err = auth.GetTransactOpts(chainId)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	s.repository = c.Repository
-
-	s.blockchain = &claimerBlockchain{
-		logger:       s.Logger,
-		client:       c.EthConn,
-		txOpts:       txOpts,
-		defaultBlock: c.Config.BlockchainDefaultBlock,
-	}
-
-	return s, nil
-}
-
-func (s *Service) Alive() bool {
-	return true
-}
-
-func (s *Service) Ready() bool {
-	return true
-}
-
-func (s *Service) Reload() []error {
-	return nil
-}
-
-func (s *Service) Stop(bool) []error {
-	return nil
-}
-
-func (s *Service) Tick() []error {
-	errs := []error{}
-	endBlock, err := s.blockchain.getBlockNumber(s.Context)
-	if err != nil {
-		errs = append(errs, err)
-		return errs
-	}
-
-	errs = append(errs, s.submitClaimsAndUpdateDatabase(endBlock)...)
-	errs = append(errs, s.acceptClaimsAndUpdateDatabase(endBlock)...)
-
 	return errs
 }
 
@@ -223,9 +164,9 @@ func (s *Service) submitClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 
 	// check computed claims
 	for key, computedClaim := range computedClaims {
-		var ic *iconsensus.IConsensus = nil
-		var prevEvent *iconsensus.IConsensusClaimSubmission = nil
-		var currEvent *iconsensus.IConsensusClaimSubmission = nil
+		var ic *iconsensus.IConsensus
+		var prevEvent *iconsensus.IConsensusClaimSubmission
+		var currEvent *iconsensus.IConsensusClaimSubmission
 
 		if _, isInFlight := s.claimsInFlight[key]; isInFlight {
 			continue
@@ -380,37 +321,6 @@ func (s *Service) submitClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 	return errs
 }
 
-func setupPersistentConfig(
-	ctx context.Context,
-	logger *slog.Logger,
-	repo iclaimerRepository,
-	c *config.Config,
-) (*PersistentConfig, error) {
-	config, err := repository.LoadNodeConfig[PersistentConfig](ctx, repo, ClaimerConfigKey)
-	if config == nil && err == nil {
-		nc := NodeConfig[PersistentConfig]{
-			Key: ClaimerConfigKey,
-			Value: PersistentConfig{
-				DefaultBlock:           c.BlockchainDefaultBlock,
-				ClaimSubmissionEnabled: c.FeatureClaimSubmissionEnabled,
-				ChainID:                c.BlockchainId,
-			},
-		}
-		logger.Info("Initializing claimer persistent config", "config", nc.Value)
-		err = repository.SaveNodeConfig(ctx, repo, &nc)
-		if err != nil {
-			return nil, err
-		}
-		return &nc.Value, nil
-	} else if err == nil {
-		logger.Info("Claimer was already configured. Using previous persistent config", "config", config.Value)
-		return &config.Value, nil
-	}
-
-	logger.Error("Could not retrieve persistent config from Database. %w", "error", err)
-	return nil, err
-}
-
 /* transition claims from submitted to accepted */
 func (s *Service) acceptClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 	errs := []error{}
@@ -422,8 +332,8 @@ func (s *Service) acceptClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 
 	// check submitted claims
 	for key, submittedClaim := range submittedClaims {
-		var prevEvent *iconsensus.IConsensusClaimAcceptance = nil
-		var currEvent *iconsensus.IConsensusClaimAcceptance = nil
+		var prevEvent *iconsensus.IConsensusClaimAcceptance
+		var currEvent *iconsensus.IConsensusClaimAcceptance
 
 		acceptedClaim, prevExists := acceptedClaims[key]
 		if prevExists {
@@ -520,7 +430,13 @@ func (s *Service) acceptClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 
 // setApplicationInoperable marks an application as inoperable with the given reason,
 // logs any error that occurs during the update, and returns an error with the reason.
-func (s *Service) setApplicationInoperable(ctx context.Context, iApplicationAddress common.Address, id int64, reasonFmt string, args ...any) error {
+func (s *Service) setApplicationInoperable(
+	ctx context.Context,
+	iApplicationAddress common.Address,
+	id int64,
+	reasonFmt string,
+	args ...any,
+) error {
 	reason := fmt.Sprintf(reasonFmt, args...)
 	appAddress := iApplicationAddress.String()
 

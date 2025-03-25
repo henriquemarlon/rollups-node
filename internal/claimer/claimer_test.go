@@ -14,6 +14,7 @@ import (
 
 	"github.com/cartesi/rollups-node/internal/model"
 	. "github.com/cartesi/rollups-node/internal/model"
+	"github.com/cartesi/rollups-node/internal/repository"
 	"github.com/cartesi/rollups-node/pkg/contracts/iconsensus"
 	"github.com/cartesi/rollups-node/pkg/service"
 	"github.com/lmittmann/tint"
@@ -27,6 +28,15 @@ import (
 
 type claimerRepositoryMock struct {
 	mock.Mock
+}
+
+func (m *claimerRepositoryMock) ListApplications(
+	ctx context.Context,
+	f repository.ApplicationFilter,
+	pagination repository.Pagination,
+) ([]*Application, uint64, error) {
+	args := m.Called(ctx, f, pagination)
+	return args.Get(0).([]*Application), args.Get(1).(uint64), args.Error(2)
 }
 
 func (m *claimerRepositoryMock) SelectSubmissionClaimPairsPerApp(ctx context.Context) (
@@ -156,6 +166,15 @@ func (m *claimerBlockchainMock) getBlockNumber(ctx context.Context) (*big.Int, e
 	args := m.Called(ctx)
 	return args.Get(0).(*big.Int),
 		args.Error(1)
+}
+
+func (m *claimerBlockchainMock) checkApplicationsForConsensusAddressChange(
+	ctx context.Context,
+	apps []*model.Application,
+	endBlock *big.Int,
+) ([]consensusChanged, []error) {
+	args := m.Called(ctx, apps, endBlock)
+	return args.Get(0).([]consensusChanged), args.Get(1).([]error)
 }
 
 func newServiceMock() (*Service, *claimerRepositoryMock, *claimerBlockchainMock) {

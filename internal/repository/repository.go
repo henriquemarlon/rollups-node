@@ -13,6 +13,10 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
+var (
+	ErrApplicationNotFound = fmt.Errorf("Application not found")
+)
+
 type Pagination struct {
 	Limit  uint64
 	Offset uint64
@@ -56,6 +60,7 @@ type ReportFilter struct {
 type ApplicationRepository interface {
 	CreateApplication(ctx context.Context, app *Application) (int64, error)
 	GetApplication(ctx context.Context, nameOrAddress string) (*Application, error)
+	GetProcessedInputs(ctx context.Context, nameOrAddress string) (uint64, error)
 	UpdateApplication(ctx context.Context, app *Application) error
 	UpdateApplicationState(ctx context.Context, appID int64, state ApplicationState, reason *string) error
 	DeleteApplication(ctx context.Context, id int64) error

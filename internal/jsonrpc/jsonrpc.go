@@ -7,6 +7,7 @@ import (
 	"embed"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -465,15 +466,14 @@ func (s *Service) handleGetProcessedInputCount(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	app, err := s.repository.GetApplication(r.Context(), params.Application)
+	processedInputs, err := s.repository.GetProcessedInputs(r.Context(), params.Application)
+	if errors.Is(err, repository.ErrApplicationNotFound) {
+		writeRPCError(w, req.ID, JSONRPC_RESOURCE_NOT_FOUND, "Application not found", nil)
+		return
+	}
 	if err != nil {
 		s.Logger.Error("Unable to retrieve application from repository", "err", err)
 		writeRPCError(w, req.ID, JSONRPC_INTERNAL_ERROR, "Internal server error", nil)
-		return
-	}
-
-	if app == nil {
-		writeRPCError(w, req.ID, JSONRPC_RESOURCE_NOT_FOUND, "Application not found", nil)
 		return
 	}
 
@@ -481,7 +481,7 @@ func (s *Service) handleGetProcessedInputCount(w http.ResponseWriter, r *http.Re
 	result := struct {
 		ProcessedInputs uint64 `json:"processed_inputs"`
 	}{
-		ProcessedInputs: app.ProcessedInputs,
+		ProcessedInputs: processedInputs,
 	}
 
 	writeRPCResult(w, req.ID, result)

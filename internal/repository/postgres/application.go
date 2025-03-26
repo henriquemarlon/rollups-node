@@ -194,6 +194,38 @@ func (r *PostgresRepository) GetApplication(
 	return &app, nil
 }
 
+// GetProcessedInputs retrieves the ProcessedInputs field from a application by Name or address.
+func (r *PostgresRepository) GetProcessedInputs(
+	ctx context.Context,
+	nameOrAddress string,
+) (uint64, error) {
+
+	whereClause, err := getWhereClauseFromNameOrAddress(nameOrAddress)
+	if err != nil {
+		return 0, err
+	}
+
+	stmt := table.Application.
+		SELECT(table.Application.ProcessedInputs).
+		FROM(
+			table.Application.INNER_JOIN(
+				table.ExecutionParameters,
+				table.ExecutionParameters.ApplicationID.EQ(table.Application.ID),
+			),
+		).
+		WHERE(whereClause)
+
+	sqlStr, args := stmt.Sql()
+	row := r.db.QueryRow(ctx, sqlStr, args...)
+
+	var processedInputs uint64
+	err = row.Scan(&processedInputs)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, repository.ErrApplicationNotFound
+	}
+	return processedInputs, err
+}
+
 // UpdateApplication updates an existing application row.
 func (r *PostgresRepository) UpdateApplication(
 	ctx context.Context,

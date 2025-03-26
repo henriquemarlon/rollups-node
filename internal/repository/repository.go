@@ -78,6 +78,7 @@ type EpochRepository interface {
 	CreateEpochsAndInputs(ctx context.Context, nameOrAddress string, epochInputMap map[*Epoch][]*Input, blockNumber uint64) error
 
 	GetEpoch(ctx context.Context, nameOrAddress string, index uint64) (*Epoch, error)
+	GetLastAcceptedEpoch(ctx context.Context, nameOrAddress string) (*Epoch, error)
 	GetEpochByVirtualIndex(ctx context.Context, nameOrAddress string, index uint64) (*Epoch, error)
 
 	UpdateEpoch(ctx context.Context, nameOrAddress string, e *Epoch) error

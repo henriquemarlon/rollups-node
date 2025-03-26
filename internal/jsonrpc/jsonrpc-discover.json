@@ -139,6 +139,27 @@
 			}
 		},
 		{
+			"name": "cartesi_getLastAcceptedEpoch",
+			"summary": "Get the last accepted epoch",
+			"description": "Fetches the latest accepted epoch by application.",
+			"params": [
+				{
+					"name": "application",
+					"description": "The application's name or hex encoded address.",
+					"schema": {
+						"type": "string"
+					},
+					"required": true
+				}
+			],
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/EpochGetResult"
+				}
+			}
+		},
+		{
 			"name": "cartesi_listInputs",
 			"summary": "Retrieve a List of Inputs",
 			"description": "Returns a paginated list of inputs, with options to filter by epoch index or input sender.",

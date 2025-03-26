@@ -280,6 +280,67 @@ func (r *PostgresRepository) GetEpoch(
 	return &ep, nil
 }
 
+func (r *PostgresRepository) GetLastAcceptedEpoch(
+	ctx context.Context,
+	nameOrAddress string,
+) (*model.Epoch, error) {
+
+	whereClause, err := getWhereClauseFromNameOrAddress(nameOrAddress)
+	if err != nil {
+		return nil, err
+	}
+
+	stmt := table.Epoch.
+		SELECT(
+			table.Epoch.ApplicationID,
+			table.Epoch.Index,
+			table.Epoch.FirstBlock,
+			table.Epoch.LastBlock,
+			table.Epoch.ClaimHash,
+			table.Epoch.ClaimTransactionHash,
+			table.Epoch.Status,
+			table.Epoch.VirtualIndex,
+			table.Epoch.CreatedAt,
+			table.Epoch.UpdatedAt,
+		).
+		FROM(
+			table.Epoch.
+				INNER_JOIN(table.Application,
+					table.Epoch.ApplicationID.EQ(table.Application.ID),
+				),
+		).
+		WHERE(
+			whereClause.
+				AND(table.Epoch.Status.EQ(postgres.NewEnumValue(model.EpochStatus_ClaimAccepted.String()))),
+		).
+		ORDER_BY(table.Epoch.Index.DESC()).
+		LIMIT(1)
+
+	sqlStr, args := stmt.Sql()
+	row := r.db.QueryRow(ctx, sqlStr, args...)
+
+	var ep model.Epoch
+	err = row.Scan(
+		&ep.ApplicationID,
+		&ep.Index,
+		&ep.FirstBlock,
+		&ep.LastBlock,
+		&ep.ClaimHash,
+		&ep.ClaimTransactionHash,
+		&ep.Status,
+		&ep.VirtualIndex,
+		&ep.CreatedAt,
+		&ep.UpdatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &ep, nil
+}
+
 func (r *PostgresRepository) GetEpochByVirtualIndex(
 	ctx context.Context,
 	nameOrAddress string,

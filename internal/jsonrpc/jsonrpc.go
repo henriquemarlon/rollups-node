@@ -68,6 +68,8 @@ func (s *Service) handleRPC(w http.ResponseWriter, r *http.Request) {
 		s.handleListEpochs(w, r, req)
 	case "cartesi_getEpoch":
 		s.handleGetEpoch(w, r, req)
+	case "cartesi_getLastAcceptedEpoch":
+		s.handleGetLastAcceptedEpoch(w, r, req)
 	case "cartesi_listInputs":
 		s.handleListInputs(w, r, req)
 	case "cartesi_getInput":
@@ -299,6 +301,40 @@ func (s *Service) handleGetEpoch(w http.ResponseWriter, r *http.Request, req RPC
 	}
 
 	epoch, err := s.repository.GetEpoch(r.Context(), params.Application, index)
+	if err != nil {
+		s.Logger.Error("Unable to retrieve epoch from repository", "err", err)
+		writeRPCError(w, req.ID, JSONRPC_INTERNAL_ERROR, "Internal server error", nil)
+		return
+	}
+	if epoch == nil {
+		writeRPCError(w, req.ID, JSONRPC_RESOURCE_NOT_FOUND, "Epoch not found", nil)
+		return
+	}
+
+	// Format response according to spec
+	result := struct {
+		Data *model.Epoch `json:"data"`
+	}{
+		Data: epoch,
+	}
+
+	writeRPCResult(w, req.ID, result)
+}
+
+func (s *Service) handleGetLastAcceptedEpoch(w http.ResponseWriter, r *http.Request, req RPCRequest) {
+	var params GetEpochParams
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, "Invalid params", nil)
+		return
+	}
+
+	// Validate application parameter
+	if err := validateNameOrAddress(params.Application); err != nil {
+		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, fmt.Sprintf("Invalid application identifier: %v", err), nil)
+		return
+	}
+
+	epoch, err := s.repository.GetLastAcceptedEpoch(r.Context(), params.Application)
 	if err != nil {
 		s.Logger.Error("Unable to retrieve epoch from repository", "err", err)
 		writeRPCError(w, req.ID, JSONRPC_INTERNAL_ERROR, "Internal server error", nil)

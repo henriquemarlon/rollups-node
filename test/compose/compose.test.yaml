@@ -40,9 +40,6 @@ services:
   unit-test:
     image: cartesi/rollups-node:tester
     profiles: [unit-test]
-    build:
-      dockerfile: Dockerfile
-      target: go-tester
     entrypoint: ["sh", "-c"]
     command: |
       '

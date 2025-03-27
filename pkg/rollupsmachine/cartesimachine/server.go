@@ -89,18 +89,18 @@ func StartServer(logger *slog.Logger, verbosity MachineLogLevel, port uint32, st
 		return "", fmt.Errorf("mismatching ports (%d != %d)", port, actualPort)
 	}
 
-	return fmt.Sprintf("127.0.0.1:%d", port), nil
+	address := fmt.Sprintf("127.0.0.1:%d", port)
+	return address, nil
 }
 
 // StopServer shuts down the JSON RPC remote cartesi machine server hosted at address.
 func StopServer(address string, logger *slog.Logger) error {
 	logger.Info("Stopping server at", "address", address)
-	remote, err := emulator.NewRemoteMachineManager(address)
+	remote, err := emulator.ConnectServer(address)
 	if err != nil {
 		return err
 	}
-	defer remote.Delete()
-	return remote.Shutdown()
+	return remote.ShutdownServer()
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -124,7 +124,7 @@ type portInterceptor struct {
 	found *bool
 }
 
-var portRegex = regexp.MustCompile("remote machine bound to [^:]+:([0-9]+)")
+var portRegex = regexp.MustCompile("remote machine server bound to [^:]+:([0-9]+)")
 
 func (writer portInterceptor) Write(p []byte) (n int, err error) {
 	if *writer.found {

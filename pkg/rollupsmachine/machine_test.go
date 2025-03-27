@@ -32,7 +32,7 @@ func init() {
 
 const (
 	cycles          = uint64(1_000_000_000)
-	serverVerbosity = cartesimachine.MachineLogLevelInfo
+	serverVerbosity = cartesimachine.MachineLogLevelDebug
 )
 
 // ------------------------------------------------------------------------------------------------
@@ -137,7 +137,7 @@ func (s *NewSuite) TestInvalidAddress() {
 	require.Nil(cartesiMachine)
 	require.NotNil(err)
 
-	require.ErrorContains(err, "could not load the machine")
+	require.ErrorContains(err, "could not connect to the remote machine")
 	require.ErrorIs(err, cartesimachine.ErrCartesiMachine)
 }
 
@@ -465,7 +465,7 @@ func (s *UnitSuite) TestNew() {
 		mock := new(CartesiMachineMock)
 		mock.IsAtManualYieldReturn = true
 		mock.IsAtManualYieldError = nil
-		mock.ReadYieldReasonReturn = []emulator.HtifYieldReason{emulator.ManualYieldReasonAccepted}
+		mock.ReadYieldReasonReturn = []emulator.CmioYieldReason{emulator.ManualYieldReasonAccepted}
 		mock.ReadYieldReasonError = []error{nil}
 		return mock
 	}
@@ -483,7 +483,7 @@ func (s *UnitSuite) TestNew() {
 		s.Run("Rejected", func() {
 			require := s.Require()
 			mock := newCartesiMachine()
-			mock.ReadYieldReasonReturn = []emulator.HtifYieldReason{
+			mock.ReadYieldReasonReturn = []emulator.CmioYieldReason{
 				emulator.ManualYieldReasonRejected,
 			}
 
@@ -507,7 +507,7 @@ func (s *UnitSuite) TestNew() {
 		s.Run("Exception", func() {
 			require := s.Require()
 			mock := newCartesiMachine()
-			mock.ReadYieldReasonReturn = []emulator.HtifYieldReason{
+			mock.ReadYieldReasonReturn = []emulator.CmioYieldReason{
 				emulator.ManualYieldReasonException,
 			}
 
@@ -520,7 +520,7 @@ func (s *UnitSuite) TestNew() {
 			require := s.Require()
 			require.PanicsWithValue(ErrUnreachable, func() {
 				mock := newCartesiMachine()
-				mock.ReadYieldReasonReturn = []emulator.HtifYieldReason{10}
+				mock.ReadYieldReasonReturn = []emulator.CmioYieldReason{10}
 				_, _ = New(ctx, mock, defaultInc, defaultMax, service.NewLogger(slog.LevelDebug, true))
 			})
 		})
@@ -735,7 +735,7 @@ func (s *UnitSuite) TestRun() {
 			mock.RunError = []error{nil, nil, nil}
 			mock.ReadCycleError = []error{nil, nil, nil}
 
-			mock.ReadYieldReasonReturn = []emulator.HtifYieldReason{
+			mock.ReadYieldReasonReturn = []emulator.CmioYieldReason{
 				emulator.AutomaticYieldReasonOutput,
 			}
 			mock.ReadYieldReasonError = []error{nil}
@@ -768,7 +768,7 @@ func (s *UnitSuite) TestRun() {
 			mock.RunError = []error{nil, nil, nil}
 			mock.ReadCycleError = []error{nil, nil, nil}
 
-			mock.ReadYieldReasonReturn = []emulator.HtifYieldReason{
+			mock.ReadYieldReasonReturn = []emulator.CmioYieldReason{
 				emulator.AutomaticYieldReasonReport,
 			}
 			mock.ReadYieldReasonError = []error{nil}
@@ -804,7 +804,7 @@ func (s *UnitSuite) TestRun() {
 			mock.RunError = []error{nil, nil, nil, nil, nil, nil, nil}
 			mock.ReadCycleError = []error{nil, nil, nil, nil, nil, nil, nil}
 
-			mock.ReadYieldReasonReturn = []emulator.HtifYieldReason{
+			mock.ReadYieldReasonReturn = []emulator.CmioYieldReason{
 				emulator.AutomaticYieldReasonOutput,
 				emulator.AutomaticYieldReasonReport,
 				emulator.AutomaticYieldReasonOutput,
@@ -1168,7 +1168,7 @@ type CartesiMachineMock struct {
 	AddressReturn string
 
 	Responses             uint
-	ReadYieldReasonReturn []emulator.HtifYieldReason
+	ReadYieldReasonReturn []emulator.CmioYieldReason
 	ReadYieldReasonError  []error
 	ReadMemoryReturn      [][]byte
 	ReadMemoryError       []error
@@ -1219,7 +1219,7 @@ func (machine *CartesiMachineMock) Address() string {
 
 func (machine *CartesiMachineMock) ReadYieldReason(
 	_ context.Context,
-) (emulator.HtifYieldReason, error) {
+) (emulator.CmioYieldReason, error) {
 	yieldReason := machine.ReadYieldReasonReturn[machine.Responses]
 	err := machine.ReadYieldReasonError[machine.Responses]
 	return yieldReason, err

@@ -6,12 +6,11 @@
 package snapshot
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"math/rand"
 	"os"
-	"strings"
 
 	"github.com/cartesi/rollups-node/pkg/emulator"
 )
@@ -46,9 +45,10 @@ func FromScript(command string, cycles uint64) (*Snapshot, error) {
 		return nil, err
 	}
 
-	config := defaultMachineConfig()
-	config.Dtb.Entrypoint = command
-
+	config, err := getMachineConfig(command)
+	if err != nil {
+		return nil, err
+	}
 	err = snapshot.createRunAndStore(config, cycles)
 	return snapshot, err
 }
@@ -65,25 +65,26 @@ func (snapshot *Snapshot) Close() error {
 
 // ------------------------------------------------------------------------------------------------
 
-func defaultMachineConfig() *emulator.MachineConfig {
-	config := emulator.NewDefaultMachineConfig()
-	config.Ram.Length = ramLength
-	config.Ram.ImageFilename = ImagesPath + "linux.bin"
-	config.Dtb.Bootargs = strings.Join([]string{"quiet",
-		"no4lvl",
-		"quiet",
-		"earlycon=sbi",
-		"console=hvc0",
-		"rootfstype=ext2",
-		"root=/dev/pmem0",
-		"rw",
-		"init=/usr/sbin/cartesi-init"}, " ")
-	config.FlashDrive = []emulator.MemoryRangeConfig{{
-		Start:         0x80000000000000, //nolint:mnd
-		Length:        math.MaxUint64,
-		ImageFilename: ImagesPath + "rootfs.ext2",
-	}}
-	return config
+func getMachineConfig(command string) (string, error) {
+	entrypoint, err := json.Marshal(command)
+	if err != nil {
+		return "", err
+	}
+	linux := ImagesPath + "linux.bin"
+	rootfs := ImagesPath + "rootfs.ext2"
+	config := fmt.Sprintf(`{
+	    "ram": {
+		"length": %d,
+		"image_filename": "%s"
+	    },
+	    "flash_drive": [{
+		"image_filename": "%s"
+	    }],
+	    "dtb": {
+		"entrypoint": %s
+	    }
+	}`, ramLength, linux, rootfs, string(entrypoint))
+	return config, nil
 }
 
 func (snapshot *Snapshot) createTempDir() error {
@@ -96,9 +97,8 @@ func (snapshot *Snapshot) createTempDir() error {
 	return nil
 }
 
-func (snapshot *Snapshot) createRunAndStore(config *emulator.MachineConfig, cycles uint64) error {
-	// Creates the (local) machine.
-	machine, err := emulator.NewMachine(config, &emulator.MachineRuntimeConfig{})
+func (snapshot *Snapshot) createRunAndStore(config string, cycles uint64) error {
+	machine, err := emulator.CreateMachine(config, "")
 	if err != nil {
 		return errors.Join(err, snapshot.Close())
 	}

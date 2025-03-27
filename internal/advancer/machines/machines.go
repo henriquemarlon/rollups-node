@@ -264,7 +264,7 @@ func createMachine(ctx context.Context,
 	logger.Info("Loading machine on server", "application", app.Name, "address", appAddress,
 		"remote-machine", address, "template-path", app.TemplateURI)
 	// Creates a CartesiMachine from the snapshot.
-	runtimeConfig := &emulator.MachineRuntimeConfig{}
+	runtimeConfig := emulator.NewMachineRuntimeConfig()
 	cartesiMachine, err := cm.Load(ctx, app.TemplateURI, address, runtimeConfig)
 	if err != nil {
 		return nil, errors.Join(err, cm.StopServer(address, logger))

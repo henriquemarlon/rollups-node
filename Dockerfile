@@ -3,23 +3,35 @@
 
 # syntax=docker.io/docker/dockerfile:1
 
-ARG EMULATOR_VERSION=0.18.1
+ARG EMULATOR_VERSION=0.19.0
 
 # Build directories.
 ARG GO_BUILD_PATH=/build/cartesi/go
 
-FROM cartesi/machine-emulator:${EMULATOR_VERSION} AS common-env
+FROM debian:bookworm-20250113 AS common-env
 
 USER root
 
 # Re-declare ARGs so they can be used in the RUN block
+ARG EMULATOR_VERSION
 ARG GO_BUILD_PATH
 
 # Install ca-certificates and curl (setup).
 RUN <<EOF
     set -e
     apt-get update
-    apt-get install -y --no-install-recommends ca-certificates curl wget build-essential pkg-config libssl-dev
+    apt-get install -y --no-install-recommends \
+        ca-certificates curl wget build-essential pkg-config libssl-dev
+    addgroup --system --gid 102 cartesi
+    adduser --system --uid 102 --ingroup cartesi --disabled-login --no-create-home --home /nonexistent --gecos "cartesi user" --shell /bin/false cartesi
+    ARCH=$(dpkg --print-architecture)
+    wget -O /tmp/cartesi-machine.deb "https://github.com/cartesi/machine-emulator/releases/download/v${EMULATOR_VERSION}-alpha3/cartesi-machine-v${EMULATOR_VERSION}_${ARCH}.deb"
+    case "$ARCH" in
+        amd64) echo "726c510632eedad51aec366634711f5062808c5aedf34b7fb7e6b2263de88e1f  /tmp/cartesi-machine.deb" | sha256sum --check ;;
+        arm64) echo "45712294ddd9cef0130074066b800d3b090a5e576ec9215e1a16f3ddcb146d29  /tmp/cartesi-machine.deb" | sha256sum --check ;;
+        *) echo "unsupported architecture: $ARCH"; exit 1 ;;
+    esac
+    apt-get install -y --no-install-recommends /tmp/cartesi-machine.deb
     mkdir -p /opt/go ${GO_BUILD_PATH}/rollups-node
     chown -R cartesi:cartesi /opt/go ${GO_BUILD_PATH}
 EOF
@@ -38,7 +50,6 @@ RUN <<EOF
     set -e
     ARCH=$(dpkg --print-architecture)
     wget -O /tmp/go.tar.gz "https://go.dev/dl/go1.23.6.linux-${ARCH}.tar.gz"
-    sha256sum /tmp/go.tar.gz
     case "$ARCH" in
         amd64) echo "9379441ea310de000f33a4dc767bd966e72ab2826270e038e78b2c53c2e7802d  /tmp/go.tar.gz" | sha256sum --check ;;
         arm64) echo "561c780e8f4a8955d32bf72e46af0b5ee5e0debe1e4633df9a03781878219202  /tmp/go.tar.gz" | sha256sum --check ;;
@@ -109,13 +120,16 @@ RUN make build-debian-package DESTDIR=$PWD/_install
 # (This stage copies the binaries from previous stages.)
 # =============================================================================
 
-FROM cartesi/machine-emulator:${EMULATOR_VERSION} AS rollups-node
+FROM debian:bookworm-20250113 AS rollups-node
 
 ARG NODE_RUNTIME_DIR=/var/lib/cartesi-rollups-node
 ARG GO_BUILD_PATH
 
 USER root
 
+COPY --from=common-env \
+    /tmp/cartesi-machine.deb \
+    cartesi-machine.deb
 COPY --from=debian-packager \
     ${GO_BUILD_PATH}/rollups-node/cartesi-rollups-node-v*.deb \
     cartesi-rollups-node.deb
@@ -124,13 +138,16 @@ COPY --from=debian-packager \
 ARG DEBIAN_FRONTEND=noninteractive
 RUN <<EOF
     set -e
+    addgroup --system --gid 102 cartesi
+    adduser --system --uid 102 --ingroup cartesi --disabled-login --no-create-home --home /nonexistent --gecos "cartesi user" --shell /bin/false cartesi
     apt-get update
     apt-get install -y --no-install-recommends \
         ca-certificates \
         curl \
         procps \
+        ./cartesi-machine.deb \
         ./cartesi-rollups-node.deb
-    rm -rf /var/lib/apt/lists/* cartesi-rollups-node.deb
+    rm -rf /var/lib/apt/lists/* cartesi-*.deb
     mkdir -p ${NODE_RUNTIME_DIR}/snapshots ${NODE_RUNTIME_DIR}/data
     chown -R cartesi:cartesi ${NODE_RUNTIME_DIR}
 EOF

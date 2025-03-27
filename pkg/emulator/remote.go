@@ -1,94 +1,110 @@
 // (c) Cartesi and individual authors (see AUTHORS)
 // SPDX-License-Identifier: Apache-2.0 (see LICENSE)
 
+// This package is a binding to the emulator's C API.
+// Refer to the machine-c files in the emulator's repository for documentation
+// (mainly machine-c-api.h and jsonrpc-machine-c-api.h).
 package emulator
 
 // #include <stdlib.h>
 // #include "cartesi-machine/jsonrpc-machine-c-api.h"
 import "C"
+
 import (
 	"unsafe"
 )
 
-// A connection to the remote jsonrpc machine manager.
-type RemoteMachineManager struct {
-	c *C.cm_jsonrpc_mgr
+// -----------------------------------------------------------------------------
+// RemoteMachine: the remote machine object
+// -----------------------------------------------------------------------------
 
-	Address string
+type RemoteMachine struct {
+	Machine
 }
 
-func NewRemoteMachineManager(address string) (*RemoteMachineManager, error) {
-	manager := &RemoteMachineManager{Address: address}
-	cRemoteAddress := C.CString(address)
-	defer C.free(unsafe.Pointer(cRemoteAddress))
-	var msg *C.char
-	code := C.cm_create_jsonrpc_mgr(cRemoteAddress, &manager.c, &msg)
-	return manager, newError(code, msg)
+// set_timeout
+func (m *RemoteMachine) SetTimeout(milliseconds int64) error {
+	return newError(C.cm_jsonrpc_set_timeout(m.ptr, C.int64_t(milliseconds)))
 }
 
-func (remote *RemoteMachineManager) Delete() {
-	if remote.c != nil {
-		C.cm_delete_jsonrpc_mgr(remote.c)
-		remote.c = nil
+// get_timeout
+func (m *RemoteMachine) GetTimeout() (int64, error) {
+	var ms C.int64_t
+	if err := newError(C.cm_jsonrpc_get_timeout(m.ptr, &ms)); err != nil {
+		return 0, err
 	}
+	return int64(ms), nil
 }
 
-func (remote *RemoteMachineManager) NewMachine(
-	config *MachineConfig,
-	runtime *MachineRuntimeConfig,
-) (*Machine, error) {
-	var msg *C.char
-	machine := &Machine{remote: remote}
-	configRef := config.makeCRef()
-	defer configRef.free()
-	runtimeRef := runtime.makeCRef()
-	defer runtimeRef.free()
-	code := C.cm_create_jsonrpc_machine(remote.c, configRef.cref, runtimeRef.cref, &machine.c, &msg)
-	return machine, newError(code, msg)
+// set_cleanup_call
+func (m *RemoteMachine) SetCleanupCall(call int32) error {
+	// call is one of {CM_JSONRPC_NOTHING, CM_JSONRPC_DESTROY, CM_JSONRPC_SHUTDOWN}
+	return newError(C.cm_jsonrpc_set_cleanup_call(m.ptr, C.cm_jsonrpc_cleanup_call(call)))
 }
 
-func (remote *RemoteMachineManager) LoadMachine(
-	directory string,
-	runtime *MachineRuntimeConfig,
-) (*Machine, error) {
-	var msg *C.char
-	machine := &Machine{remote: remote}
-	dir := C.CString(directory)
-	defer C.free(unsafe.Pointer(dir))
-	runtimeRef := runtime.makeCRef()
-	defer runtimeRef.free()
-	code := C.cm_load_jsonrpc_machine(remote.c, dir, runtimeRef.cref, &machine.c, &msg)
-	return machine, newError(code, msg)
-}
-
-func (remote *RemoteMachineManager) GetMachine() (*Machine, error) {
-	var msg *C.char
-	machine := &Machine{remote: remote}
-	code := C.cm_get_jsonrpc_machine(remote.c, &machine.c, &msg)
-	return machine, newError(code, msg)
-}
-
-func (remote *RemoteMachineManager) GetDefaultMachineConfig() (*MachineConfig, error) {
-	var msg *C.char
-	theirCfg := theirMachineConfigCRef{}
-	defer theirCfg.free()
-	code := C.cm_jsonrpc_get_default_config(remote.c, &theirCfg.cref, &msg)
-	if err := newError(code, msg); err != nil {
-		return nil, err
+// get_cleanup_call
+func (m *RemoteMachine) GetCleanupCall() (int32, error) {
+	var call C.cm_jsonrpc_cleanup_call
+	if err := newError(C.cm_jsonrpc_get_cleanup_call(m.ptr, &call)); err != nil {
+		return 0, err
 	}
-	return theirCfg.makeGoRef(), nil
+	return int32(call), nil
 }
 
-func (remote *RemoteMachineManager) Fork() (newAddress string, _ error) {
-	var msg *C.char
-	var address *C.char
-	defer C.cm_delete_cstring(address)
-	code := C.cm_jsonrpc_fork(remote.c, &address, &msg)
-	return C.GoString(address), newError(code, msg)
+// get_server_address
+func (m *RemoteMachine) GetServerAddress() (string, error) {
+	var addr *C.char
+	if err := newError(C.cm_jsonrpc_get_server_address(m.ptr, &addr)); err != nil {
+		return "", err
+	}
+	return C.GoString(addr), nil
 }
 
-func (remote *RemoteMachineManager) Shutdown() error {
-	var msg *C.char
-	code := C.cm_jsonrpc_shutdown(remote.c, &msg)
-	return newError(code, msg)
+// get_server_version
+func (m *RemoteMachine) GetServerVersion() (string, error) {
+	var ver *C.char
+	if err := newError(C.cm_jsonrpc_get_server_version(m.ptr, &ver)); err != nil {
+		return "", err
+	}
+	return C.GoString(ver), nil
+}
+
+// fork_server
+func (m *RemoteMachine) ForkServer() (*RemoteMachine, string, uint32, error) {
+	var forked *C.cm_machine
+	var addr *C.char
+	var pid C.uint32_t
+	if err := newError(C.cm_jsonrpc_fork_server(m.ptr, &forked, &addr, &pid)); err != nil {
+		return nil, "", 0, err
+	}
+	return &RemoteMachine{Machine: Machine{ptr: forked}}, C.GoString(addr), uint32(pid), nil
+}
+
+// rebind_server
+func (m *RemoteMachine) RebindServer(newAddr string) (string, error) {
+	cAddr := C.CString(newAddr)
+	defer C.free(unsafe.Pointer(cAddr))
+
+	var bound *C.char
+	if err := newError(C.cm_jsonrpc_rebind_server(m.ptr, cAddr, &bound)); err != nil {
+		return "", err
+	}
+	return C.GoString(bound), nil
+}
+
+// shutdown_server
+func (m *RemoteMachine) ShutdownServer() error {
+	return newError(C.cm_jsonrpc_shutdown_server(m.ptr))
+}
+
+// emancipate_server
+func (m *RemoteMachine) EmancipateServer() error {
+	code := C.cm_jsonrpc_emancipate_server(m.ptr)
+	err := newError(code)
+	return err
+}
+
+// delay_next_request
+func (m *RemoteMachine) DelayNextRequest(milliseconds uint64) error {
+	return newError(C.cm_jsonrpc_delay_next_request(m.ptr, C.uint64_t(milliseconds)))
 }

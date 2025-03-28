@@ -65,6 +65,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cartesi/rollups-node/internal/version"
 	"github.com/lmittmann/tint"
 )
 
@@ -190,7 +191,10 @@ func Create(ctx context.Context, c *CreateInfo, s *Service) error {
 		go s.TelemetryFunc()
 	}
 
-	s.Logger.Info("Create", "LogLevel", c.LogLevel, "pid", os.Getpid())
+	s.Logger.Info("Create", "version", version.BuildVersion, "log_level", c.LogLevel, "pid", os.Getpid())
+	if s.Telemetry != nil {
+		s.Logger.Info("Telemetry", "address", s.Telemetry.Addr)
+	}
 	return nil
 }
 
@@ -305,7 +309,6 @@ func (s *Service) CreateDefaultTelemetry(
 		ErrorLog: slog.NewLogLogger(s.Logger.Handler(), slog.LevelError),
 	}
 	return server, func() error {
-		s.Logger.Info("Telemetry", "addr", addr)
 		var err error = nil
 		for retry := 0; retry < maxRetries+1; retry++ {
 			switch err = server.ListenAndServe(); err {

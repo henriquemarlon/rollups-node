@@ -132,7 +132,7 @@ func generateBinding(b contractBinding, content []byte) {
 		libs    = make(map[string]string)
 		aliases = make(map[string]string)
 	)
-	code, err := bind.Bind(types, abis, bins, sigs, pkg, bind.LangGo, libs, aliases)
+	code, err := bind.Bind(types, abis, bins, sigs, pkg, libs, aliases)
 	checkErr("generate binding", err)
 
 	if fileExists(pkg) {

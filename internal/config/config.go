@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -63,6 +64,13 @@ func ToUint64FromString(s string) (uint64, error) {
 	return value, err
 }
 
+func ToUint64FromDecimalOrHexString(s string) (uint64, error) {
+	if len(s) >= 2 && (strings.HasPrefix(s, "0x") || strings.HasPrefix(s, "0X")) {
+		return strconv.ParseUint(s[2:], 16, 64)
+	}
+	return ToUint64FromString(s)
+}
+
 func ToStringFromString(s string) (string, error) {
 	return s, nil
 }
@@ -100,6 +108,31 @@ func ToAddressFromString(s string) (Address, error) {
 		return Address{}, err
 	}
 	return common.BytesToAddress(b), nil
+}
+
+func ToApplicationNameFromString(s string) (string, error) {
+	if s == "" {
+		return "", fmt.Errorf("application name cannot be empty")
+	}
+	validNamePattern := regexp.MustCompile(`^[a-z0-9_-]+$`)
+	if !validNamePattern.MatchString(s) {
+		return "", fmt.Errorf("invalid application name '%s': must contain only lowercase letters, numbers, underscores, and hyphens", s)
+	}
+	return s, nil
+}
+
+func ToApplicationNameOrAddressFromString(s string) (string, error) {
+	if s == "" {
+		return "", fmt.Errorf("application name or address cannot be empty")
+	}
+	if len(s) >= 3 && (strings.HasPrefix(s, "0x") || strings.HasPrefix(s, "0X")) {
+		_, err := ToAddressFromString(s)
+		if err != nil {
+			return "", fmt.Errorf("invalid Ethereum address '%s'", s)
+		}
+		return s, nil
+	}
+	return ToApplicationNameFromString(s)
 }
 
 func ToDefaultBlockFromString(s string) (DefaultBlock, error) {

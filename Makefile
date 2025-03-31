@@ -281,10 +281,10 @@ start-postgres: ## Run the PostgreSQL 16 docker container
 start: start-postgres start-devnet ## Start the anvil devnet and PostgreSQL 16 docker containers
 
 stop-devnet: ## Stop the anvil devnet docker container
-	@docker stop devnet
+	@docker stop devnet || true
 
 stop-postgres: ## Stop the PostgreSQL 16 docker container
-	@docker stop postgres
+	@docker stop postgres || true
 
 stop: stop-devnet stop-postgres ## Stop all running docker containers
 
@@ -296,7 +296,11 @@ restart-postgres: ## Restart the PostgreSQL 16 docker container and migrate it
 	@$(MAKE) stop-postgres
 	@$(MAKE) start-postgres
 
-restart: restart-devnet restart-postgres ## Restart all running docker containers
+restart: ## Restart all running docker containers
+	@$(MAKE) stop-devnet
+	@$(MAKE) stop-postgres
+	@$(MAKE) start-devnet
+	@$(MAKE) start-postgres
 
 shutdown-compose: ## Remove the containers and volumes from previous compose run
 	@docker compose down -v

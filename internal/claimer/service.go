@@ -33,7 +33,7 @@ type Service struct {
 
 	repository        iclaimerRepository
 	blockchain        iclaimerBlockchain
-	claimsInFlight    map[common.Address]common.Hash // -> txHash
+	claimsInFlight    map[int64]common.Hash // application.ID -> txHash
 	submissionEnabled bool
 }
 
@@ -83,7 +83,7 @@ func Create(ctx context.Context, c *CreateInfo) (*Service, error) {
 			chainId.Uint64(), nodeConfig.ChainID)
 	}
 	s.submissionEnabled = nodeConfig.ClaimSubmissionEnabled
-	s.claimsInFlight = map[common.Address]common.Hash{}
+	s.claimsInFlight = map[int64]common.Hash{}
 
 	var txOpts *bind.TransactOpts = nil
 	if s.submissionEnabled {

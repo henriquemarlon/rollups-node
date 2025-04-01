@@ -12,7 +12,6 @@ import (
 
 	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/internal/model"
-	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/pkg/contracts/iconsensus"
 	"github.com/cartesi/rollups-node/pkg/ethutil"
 
@@ -28,7 +27,8 @@ import (
 type iclaimerBlockchain interface {
 	findClaimSubmittedEventAndSucc(
 		ctx context.Context,
-		claim *ClaimRow,
+		application *model.Application,
+		epoch *model.Epoch,
 		endBlock *big.Int,
 	) (
 		*iconsensus.IConsensus,
@@ -39,7 +39,8 @@ type iclaimerBlockchain interface {
 
 	submitClaimToBlockchain(
 		ic *iconsensus.IConsensus,
-		claim *ClaimRow,
+		application *model.Application,
+		epoch *model.Epoch,
 	) (common.Hash, error)
 
 	pollTransaction(
@@ -50,7 +51,8 @@ type iclaimerBlockchain interface {
 
 	findClaimAcceptedEventAndSucc(
 		ctx context.Context,
-		claim *ClaimRow,
+		application *model.Application,
+		epoch *model.Epoch,
 		endBlock *big.Int,
 	) (
 		*iconsensus.IConsensus,
@@ -82,24 +84,25 @@ type consensusChanged struct {
 
 func (self *claimerBlockchain) submitClaimToBlockchain(
 	ic *iconsensus.IConsensus,
-	claim *ClaimRow,
+	application *model.Application,
+	epoch *model.Epoch,
 ) (common.Hash, error) {
 	txHash := common.Hash{}
-	lastBlockNumber := new(big.Int).SetUint64(claim.LastBlock)
-	tx, err := ic.SubmitClaim(self.txOpts, claim.IApplicationAddress,
-		lastBlockNumber, *claim.ClaimHash)
+	lastBlockNumber := new(big.Int).SetUint64(epoch.LastBlock)
+	tx, err := ic.SubmitClaim(self.txOpts, application.IApplicationAddress,
+		lastBlockNumber, *epoch.ClaimHash)
 	if err != nil {
 		self.logger.Error("submitClaimToBlockchain:failed",
-			"appContractAddress", claim.IApplicationAddress,
-			"claimHash", *claim.ClaimHash,
-			"last_block", claim.LastBlock,
+			"appContractAddress", application.IApplicationAddress,
+			"claimHash", *epoch.ClaimHash,
+			"last_block", epoch.LastBlock,
 			"error", err)
 	} else {
 		txHash = tx.Hash()
 		self.logger.Debug("submitClaimToBlockchain:success",
-			"appContractAddress", claim.IApplicationAddress,
-			"claimHash", *claim.ClaimHash,
-			"last_block", claim.LastBlock,
+			"appContractAddress", application.IApplicationAddress,
+			"claimHash", *epoch.ClaimHash,
+			"last_block", epoch.LastBlock,
 			"TxHash", txHash)
 	}
 	return txHash, err
@@ -125,7 +128,8 @@ func unwrapClaimSubmitted(
 // return this event and its successor
 func (self *claimerBlockchain) findClaimSubmittedEventAndSucc(
 	ctx context.Context,
-	claim *ClaimRow,
+	application *model.Application,
+	epoch *model.Epoch,
 	endBlock *big.Int,
 ) (
 	*iconsensus.IConsensus,
@@ -133,7 +137,7 @@ func (self *claimerBlockchain) findClaimSubmittedEventAndSucc(
 	*iconsensus.IConsensusClaimSubmitted,
 	error,
 ) {
-	ic, err := iconsensus.NewIConsensus(claim.IConsensusAddress, self.client)
+	ic, err := iconsensus.NewIConsensus(application.IConsensusAddress, self.client)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -144,18 +148,18 @@ func (self *claimerBlockchain) findClaimSubmittedEventAndSucc(
 	// - appContract == claim.IApplicationAddress
 	c, err := iconsensus.IConsensusMetaData.GetAbi()
 	topics, err := abi.MakeTopics(
-		[]any{c.Events[MonitoredEvent_ClaimSubmitted.String()].ID},
+		[]any{c.Events[model.MonitoredEvent_ClaimSubmitted.String()].ID},
 		nil,
-		[]any{claim.IApplicationAddress},
+		[]any{application.IApplicationAddress},
 	)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
 	it, err := ethutil.ChunkedFilterLogs(ctx, self.client, ethereum.FilterQuery{
-		FromBlock: new(big.Int).SetUint64(claim.Epoch.LastBlock),
+		FromBlock: new(big.Int).SetUint64(epoch.LastBlock),
 		ToBlock:   endBlock,
-		Addresses: []common.Address{claim.IConsensusAddress},
+		Addresses: []common.Address{application.IConsensusAddress},
 		Topics:    topics,
 	})
 	if err != nil {
@@ -172,14 +176,14 @@ func (self *claimerBlockchain) findClaimSubmittedEventAndSucc(
 		}
 		lastBlock := event.LastProcessedBlockNumber.Uint64()
 
-		if claimSubmittedMatch(claim, event) {
+		if claimSubmittedEventMatches(application, epoch, event) {
 			// found the event, does it has a successor? try to fetch it
 			succ, ok, err := unwrapClaimSubmitted(ic, next)
 			if !ok || err != nil {
 				return ic, event, nil, err
 			}
 			return ic, event, succ, err
-		} else if lastBlock > claim.Epoch.LastBlock {
+		} else if lastBlock > epoch.LastBlock {
 			err = fmt.Errorf("No matching claim, searched up to %v", event)
 			return nil, nil, nil, err
 		}
@@ -206,7 +210,8 @@ func unwrapClaimAccepted(
 // return this event and its successor
 func (self *claimerBlockchain) findClaimAcceptedEventAndSucc(
 	ctx context.Context,
-	claim *ClaimRow,
+	application *model.Application,
+	epoch *model.Epoch,
 	endBlock *big.Int,
 ) (
 	*iconsensus.IConsensus,
@@ -214,7 +219,7 @@ func (self *claimerBlockchain) findClaimAcceptedEventAndSucc(
 	*iconsensus.IConsensusClaimAccepted,
 	error,
 ) {
-	ic, err := iconsensus.NewIConsensus(claim.IConsensusAddress, self.client)
+	ic, err := iconsensus.NewIConsensus(application.IConsensusAddress, self.client)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -224,17 +229,17 @@ func (self *claimerBlockchain) findClaimAcceptedEventAndSucc(
 	// - appContract == claim.IApplicationAddress
 	c, err := iconsensus.IConsensusMetaData.GetAbi()
 	topics, err := abi.MakeTopics(
-		[]any{c.Events[MonitoredEvent_ClaimAccepted.String()].ID},
-		[]any{claim.IApplicationAddress},
+		[]any{c.Events[model.MonitoredEvent_ClaimAccepted.String()].ID},
+		[]any{application.IApplicationAddress},
 	)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
 	it, err := ethutil.ChunkedFilterLogs(ctx, self.client, ethereum.FilterQuery{
-		FromBlock: new(big.Int).SetUint64(claim.Epoch.LastBlock),
+		FromBlock: new(big.Int).SetUint64(epoch.LastBlock),
 		ToBlock:   endBlock,
-		Addresses: []common.Address{claim.IConsensusAddress},
+		Addresses: []common.Address{application.IConsensusAddress},
 		Topics:    topics,
 	})
 	if err != nil {
@@ -251,14 +256,14 @@ func (self *claimerBlockchain) findClaimAcceptedEventAndSucc(
 		}
 		lastBlock := event.LastProcessedBlockNumber.Uint64()
 
-		if claimAcceptedMatch(claim, event) {
+		if claimAcceptedEventMatches(application, epoch, event) {
 			// found the event, does it has a successor? try to fetch it
 			succ, ok, err := unwrapClaimAccepted(ic, next)
 			if !ok || err != nil {
 				return ic, event, nil, err
 			}
 			return ic, event, succ, err
-		} else if lastBlock > claim.Epoch.LastBlock {
+		} else if lastBlock > epoch.LastBlock {
 			err = fmt.Errorf("No matching claim, searched up to %v", event)
 			return nil, nil, nil, err
 		}

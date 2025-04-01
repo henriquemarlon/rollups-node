@@ -29,6 +29,7 @@ type Schema struct {
 
 var (
 	ErrMigrationNotCompleted = errors.New("Schema version is dirty")
+	ErrNoValidDatabaseSchema = errors.New("No valid database schema found")
 )
 
 func New(postgresEndpoint string) (*Schema, error) {
@@ -68,7 +69,7 @@ func NewWithPool(pool *pgxpool.Pool) (*Schema, error) {
 func (s *Schema) Version() (uint, bool, error) {
 	version, dirty, err := s.migrate.Version()
 	if err != nil && errors.Is(err, migrate.ErrNilVersion) {
-		return version, dirty, fmt.Errorf("No valid database schema found")
+		return version, dirty, ErrNoValidDatabaseSchema
 	}
 	return version, dirty, err
 }
@@ -108,7 +109,7 @@ func (s *Schema) ValidateVersion() (uint, error) {
 	}
 
 	if version != ExpectedVersion {
-		format := "Database schema version mismatch. Expected %d but it is %d"
+		format := "database schema version mismatch. Expected %d but it is %d"
 		return 0, fmt.Errorf(format, ExpectedVersion, version)
 	}
 	return version, nil

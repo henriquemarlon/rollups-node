@@ -23,22 +23,23 @@ func run(cmd *cobra.Command, args []string) {
 	cobra.CheckErr(err)
 
 	var s *schema.Schema
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		s, err = schema.New(dsnURL.String())
 		if err == nil {
 			break
 		}
-		if i == 4 {
+		if i == 4 { // nolint: mnd
 			fmt.Fprintf(os.Stderr, "Failed to connect to database. (%s)\n", dsnURL.Redacted())
 			os.Exit(1)
 		}
 		fmt.Fprintf(os.Stderr, "Connection to database failed. Trying again... (%s)\n", dsnURL.Redacted())
-		time.Sleep(5 * time.Second) // wait before retrying
+		// wait before retrying
+		time.Sleep(5 * time.Second) // nolint: mnd
 	}
 	defer s.Close()
 
 	version, err := s.ValidateVersion()
 	cobra.CheckErr(err)
 
-	fmt.Printf("Database Schema is at the correct version: %d", version)
+	fmt.Printf("Database Schema is at the correct version: %d\n", version)
 }

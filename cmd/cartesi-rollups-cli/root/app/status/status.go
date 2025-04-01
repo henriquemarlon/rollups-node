@@ -6,6 +6,7 @@ package status
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -15,48 +16,25 @@ import (
 )
 
 var Cmd = &cobra.Command{
-	Use:     "status",
-	Short:   "Display and set application status",
+	Use:     "status [app-name-or-address] [new-status]",
+	Short:   "Display or set application status (enabled or disabled)",
 	Example: examples,
+	Args:    cobra.RangeArgs(1, 2), // nolint: mnd
 	Run:     run,
 }
 
 const examples = `# Get application status:
-cartesi-rollups-cli app status -n echo-dapp`
+cartesi-rollups-cli app status echo-dapp
 
-var (
-	name    string
-	address string
-	enable  bool
-	disable bool
-)
-
-func init() {
-	Cmd.Flags().StringVarP(&name, "name", "n", "", "Application name")
-
-	Cmd.Flags().StringVarP(&address, "address", "a", "", "Application contract address")
-
-	Cmd.Flags().BoolVarP(&enable, "enable", "e", false, "Enable the application")
-
-	Cmd.Flags().BoolVarP(&disable, "disable", "d", false, "Disable the application")
-
-	Cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
-		if name == "" && address == "" {
-			return fmt.Errorf("either 'name' or 'address' must be specified")
-		}
-		if name != "" && address != "" {
-			return fmt.Errorf("only one of 'name' or 'address' can be specified")
-		}
-		if cmd.Flags().Changed("enable") && cmd.Flags().Changed("disable") {
-			return fmt.Errorf("Cannot enable and disable at the same time")
-		}
-		return nil
-	}
-
-}
+# Set application status:
+cartesi-rollups-cli app status echo-dapp enabled
+cartesi-rollups-cli app status echo-dapp disabled`
 
 func run(cmd *cobra.Command, args []string) {
 	ctx := cmd.Context()
+
+	nameOrAddress, err := config.ToApplicationNameOrAddressFromString(args[0])
+	cobra.CheckErr(err)
 
 	dsn, err := config.GetDatabaseConnection()
 	cobra.CheckErr(err)
@@ -65,13 +43,6 @@ func run(cmd *cobra.Command, args []string) {
 	cobra.CheckErr(err)
 	defer repo.Close()
 
-	var nameOrAddress string
-	if cmd.Flags().Changed("name") {
-		nameOrAddress = name
-	} else if cmd.Flags().Changed("address") {
-		nameOrAddress = address
-	}
-
 	app, err := repo.GetApplication(ctx, nameOrAddress)
 	cobra.CheckErr(err)
 	if app == nil {
@@ -79,32 +50,38 @@ func run(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	if (!cmd.Flags().Changed("enable")) && (!cmd.Flags().Changed("disable")) {
+	// If no new status is provided, just display the current status
+	if len(args) == 1 {
 		fmt.Println(app.State)
 		os.Exit(0)
 	}
 
+	// Handle status change
+	newStatus := strings.ToLower(args[1])
+
 	if app.State == model.ApplicationState_Inoperable {
-		fmt.Fprintf(os.Stderr, "Error: Cannot execute operation. Application %s is on %s state\n", app.Name, app.State)
+		fmt.Fprintf(os.Stderr, "Error: Cannot execute operation. Application %s is in %s state\n", app.Name, app.State)
 		os.Exit(1)
 	}
 
-	dirty := false
-	if cmd.Flags().Changed("enable") && app.State == model.ApplicationState_Disabled {
-		app.State = model.ApplicationState_Enabled
-		dirty = true
-	} else if cmd.Flags().Changed("disable") && app.State == model.ApplicationState_Enabled {
-		app.State = model.ApplicationState_Disabled
-		dirty = true
+	var targetState model.ApplicationState
+	switch newStatus {
+	case "enabled", "enable":
+		targetState = model.ApplicationState_Enabled
+	case "disabled", "disable":
+		targetState = model.ApplicationState_Disabled
+	default:
+		fmt.Fprintf(os.Stderr, "Error: Invalid status %q. Valid values are 'enabled' or 'disabled'\n", newStatus)
+		os.Exit(1)
 	}
 
-	if !dirty {
-		fmt.Printf("Application %s status was already %s\n", app.Name, app.State)
+	if app.State == targetState {
+		fmt.Printf("Application %s status is already %s\n", app.Name, app.State)
 		os.Exit(0)
 	}
 
-	err = repo.UpdateApplicationState(ctx, app.ID, app.State, nil)
+	err = repo.UpdateApplicationState(ctx, app.ID, targetState, nil)
 	cobra.CheckErr(err)
 
-	fmt.Printf("Application %s status updated to %s\n", app.Name, app.State)
+	fmt.Printf("Application %s status updated to %s\n", app.Name, targetState)
 }

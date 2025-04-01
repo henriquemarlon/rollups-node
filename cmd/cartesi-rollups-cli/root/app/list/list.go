@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/cartesi/rollups-node/internal/config"
+	"github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/repository"
 	"github.com/cartesi/rollups-node/internal/repository/factory"
 	"github.com/spf13/cobra"
@@ -35,6 +36,10 @@ func run(cmd *cobra.Command, args []string) {
 
 	applications, _, err := repo.ListApplications(ctx, repository.ApplicationFilter{}, repository.Pagination{})
 	cobra.CheckErr(err)
+
+	if applications == nil {
+		applications = []*model.Application{}
+	}
 
 	result, err := json.MarshalIndent(applications, "", "    ")
 	cobra.CheckErr(err)

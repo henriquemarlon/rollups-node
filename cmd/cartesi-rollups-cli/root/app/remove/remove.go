@@ -15,40 +15,31 @@ import (
 )
 
 var Cmd = &cobra.Command{
-	Use:     "remove",
+	Use:     "remove [app-name-or-address]",
 	Aliases: []string{"rm"},
 	Short:   "Remove registered applications",
 	Example: examples,
+	Args:    cobra.ExactArgs(1),
 	Run:     run,
 }
 
-const examples = `# Get application status:
-cartesi-rollups-cli app status -n echo-dapp`
+const examples = `# Remove application:
+cartesi-rollups-cli app remove echo-dapp
 
-var (
-	name    string
-	address string
-)
+# Remove application without confirmation:
+cartesi-rollups-cli app remove echo-dapp --force`
+
+var force bool
 
 func init() {
-	Cmd.Flags().StringVarP(&name, "name", "n", "", "Application name")
-
-	Cmd.Flags().StringVarP(&address, "address", "a", "", "Application contract address")
-
-	Cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
-		if name == "" && address == "" {
-			return fmt.Errorf("either 'name' or 'address' must be specified")
-		}
-		if name != "" && address != "" {
-			return fmt.Errorf("only one of 'name' or 'address' can be specified")
-		}
-		return nil
-	}
-
+	Cmd.Flags().BoolVarP(&force, "force", "f", false, "Force removal without confirmation")
 }
 
 func run(cmd *cobra.Command, args []string) {
 	ctx := cmd.Context()
+
+	nameOrAddress, err := config.ToApplicationNameOrAddressFromString(args[0])
+	cobra.CheckErr(err)
 
 	dsn, err := config.GetDatabaseConnection()
 	cobra.CheckErr(err)
@@ -56,13 +47,6 @@ func run(cmd *cobra.Command, args []string) {
 	repo, err := factory.NewRepositoryFromConnectionString(ctx, dsn.String())
 	cobra.CheckErr(err)
 	defer repo.Close()
-
-	var nameOrAddress string
-	if cmd.Flags().Changed("name") {
-		nameOrAddress = name
-	} else if cmd.Flags().Changed("address") {
-		nameOrAddress = address
-	}
 
 	app, err := repo.GetApplication(ctx, nameOrAddress)
 	cobra.CheckErr(err)
@@ -76,8 +60,20 @@ func run(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
+	if !force {
+		fmt.Printf("Are you sure you want to remove application %s (%s)? [y/N] ",
+			app.Name, app.IApplicationAddress.String())
+
+		var response string
+		_, err = fmt.Scanln(&response)
+		if err != nil || (response != "y" && response != "Y") {
+			fmt.Println("Operation cancelled")
+			return
+		}
+	}
+
 	err = repo.DeleteApplication(ctx, app.ID)
 	cobra.CheckErr(err)
 
-	fmt.Printf("Application %s successfully removed\n", app.Name)
+	fmt.Printf("Application %s (%s) successfully removed\n", app.Name, app.IApplicationAddress.String())
 }

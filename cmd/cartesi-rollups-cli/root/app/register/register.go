@@ -70,7 +70,7 @@ func init() {
 		"Application template hash. (DO NOT USE IN PRODUCTION)\nThis value is retrieved from the application contract",
 	)
 
-	Cmd.Flags().Uint64VarP(&epochLength, "epoch-length", "e", 10,
+	Cmd.Flags().Uint64VarP(&epochLength, "epoch-length", "e", 10, // nolint: mnd
 		"Consensus Epoch length. (DO NOT USE IN PRODUCTION)\nThis value is retrieved from the consensus contract",
 	)
 
@@ -79,7 +79,7 @@ func init() {
 	)
 
 	Cmd.Flags().StringVar(&inputBoxAddress, "inputbox", "", "Input Box contract address")
-	viper.BindPFlag(config.CONTRACTS_INPUT_BOX_ADDRESS, Cmd.Flags().Lookup("inputbox"))
+	cobra.CheckErr(viper.BindPFlag(config.CONTRACTS_INPUT_BOX_ADDRESS, Cmd.Flags().Lookup("inputbox")))
 
 	Cmd.Flags().BoolVar(&inputBoxAddressFromEnv, "inputbox-from-env", false, "Read Input Box contract address from environment")
 	Cmd.Flags().Uint64Var(&inputBoxBlockNumber, "inputbox-block-number", 0, "InputBox deployment block number")
@@ -89,14 +89,18 @@ func init() {
 	Cmd.Flags().BoolVarP(&printAsJSON, "print-json", "j", false, "Prints the application data as JSON")
 
 	Cmd.Flags().StringVar(&blockchainHttpEndpoint, "blockchain-http-endpoint", "", "Blockchain HTTP endpoint")
-	viper.BindPFlag(config.BLOCKCHAIN_HTTP_ENDPOINT, Cmd.Flags().Lookup("blockchain-http-endpoint"))
+	cobra.CheckErr(viper.BindPFlag(config.BLOCKCHAIN_HTTP_ENDPOINT, Cmd.Flags().Lookup("blockchain-http-endpoint")))
 
-	Cmd.Flags().BoolVar(&enableMachineHashCheck, "machine-hash-check", true, "Enable or disable machine hash check (DO NOT DISABLE IN PRODUCTION)")
-	viper.BindPFlag(config.FEATURE_MACHINE_HASH_CHECK_ENABLED, Cmd.Flags().Lookup("machine-hash-check"))
+	Cmd.Flags().BoolVar(&enableMachineHashCheck, "machine-hash-check", true,
+		"Enable or disable machine hash check (DO NOT DISABLE IN PRODUCTION)")
+	cobra.CheckErr(viper.BindPFlag(config.FEATURE_MACHINE_HASH_CHECK_ENABLED, Cmd.Flags().Lookup("machine-hash-check")))
 }
 
 func run(cmd *cobra.Command, args []string) {
 	ctx := cmd.Context()
+
+	validName, err := config.ToApplicationNameFromString(name)
+	cobra.CheckErr(err)
 
 	dsn, err := config.GetDatabaseConnection()
 	cobra.CheckErr(err)
@@ -179,7 +183,7 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	application := model.Application{
-		Name:                 name,
+		Name:                 validName,
 		IApplicationAddress:  address,
 		IConsensusAddress:    consensus,
 		IInputBoxAddress:     *inputBoxAddress,
@@ -216,7 +220,7 @@ func getTemplateHash(
 	cobra.CheckErr(err)
 	client, err := ethclient.Dial(ethEndpoint.String())
 	if err != nil {
-		return nil, fmt.Errorf("Failed to connect to the blockchain http endpoint: %s", ethEndpoint.Redacted())
+		return nil, fmt.Errorf("failed to connect to the blockchain http endpoint: %s", ethEndpoint.Redacted())
 	}
 	return ethutil.GetTemplateHash(ctx, client, appAddress)
 }
@@ -231,7 +235,7 @@ func getConsensus(
 	}
 	client, err := ethclient.Dial(ethEndpoint.String())
 	if err != nil {
-		return common.Address{}, fmt.Errorf("Failed to connect to the blockchain http endpoint: %s", ethEndpoint.Redacted())
+		return common.Address{}, fmt.Errorf("failed to connect to the blockchain http endpoint: %s", ethEndpoint.Redacted())
 	}
 	return ethutil.GetConsensus(ctx, client, appAddress)
 }

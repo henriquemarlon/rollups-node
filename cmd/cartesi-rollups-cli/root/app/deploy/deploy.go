@@ -83,21 +83,21 @@ func init() {
 	)
 
 	Cmd.Flags().StringVarP(&appFactoryAddr, "application-factory", "a", "", "Application Factory Address")
-	viper.BindPFlag(config.CONTRACTS_APPLICATION_FACTORY_ADDRESS, Cmd.Flags().Lookup("application-factory"))
+	cobra.CheckErr(viper.BindPFlag(config.CONTRACTS_APPLICATION_FACTORY_ADDRESS, Cmd.Flags().Lookup("application-factory")))
 
 	Cmd.Flags().StringVarP(&consensusAddr, "consensus", "c", "", "Application IConsensus Address")
 
 	Cmd.Flags().StringVarP(&authorityFactoryAddr, "authority-factory", "C", "",
 		"Authority Factory Address. If defined, epoch-length value will be used to create a new consensus",
 	)
-	viper.BindPFlag(config.CONTRACTS_AUTHORITY_FACTORY_ADDRESS, Cmd.Flags().Lookup("authority-factory"))
+	cobra.CheckErr(viper.BindPFlag(config.CONTRACTS_AUTHORITY_FACTORY_ADDRESS, Cmd.Flags().Lookup("authority-factory")))
 
-	Cmd.Flags().Uint64VarP(&epochLength, "epoch-length", "e", 10,
+	Cmd.Flags().Uint64VarP(&epochLength, "epoch-length", "e", 10, // nolint: mnd
 		"Consensus Epoch length. If consensus address is provided, the value will be read from the contract",
 	)
 
 	Cmd.Flags().StringVar(&inputBoxAddr, "inputbox", "", "Input Box contract address")
-	viper.BindPFlag(config.CONTRACTS_INPUT_BOX_ADDRESS, Cmd.Flags().Lookup("inputbox"))
+	cobra.CheckErr(viper.BindPFlag(config.CONTRACTS_INPUT_BOX_ADDRESS, Cmd.Flags().Lookup("inputbox")))
 
 	Cmd.Flags().StringVar(&salt, "salt", "0000000000000000000000000000000000000000000000000000000000000000", "salt")
 
@@ -107,11 +107,14 @@ func init() {
 	Cmd.Flags().BoolVarP(&printAsJSON, "print-json", "j", false, "Prints the application data as JSON")
 
 	Cmd.Flags().StringVar(&blockchainHttpEndpoint, "blockchain-http-endpoint", "", "Blockchain HTTP endpoint")
-	viper.BindPFlag(config.BLOCKCHAIN_HTTP_ENDPOINT, Cmd.Flags().Lookup("blockchain-http-endpoint"))
+	cobra.CheckErr(viper.BindPFlag(config.BLOCKCHAIN_HTTP_ENDPOINT, Cmd.Flags().Lookup("blockchain-http-endpoint")))
 }
 
 func run(cmd *cobra.Command, args []string) {
 	ctx := cmd.Context()
+
+	validName, err := config.ToApplicationNameFromString(name)
+	cobra.CheckErr(err)
 
 	applicationState := model.ApplicationState_Enabled
 	if disabled {
@@ -188,7 +191,7 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	application := model.Application{
-		Name:                 name,
+		Name:                 validName,
 		IApplicationAddress:  appAddr,
 		IConsensusAddress:    consensus,
 		IInputBoxAddress:     *inputBoxAddress,
@@ -241,21 +244,21 @@ func deployApplication(
 
 	templateHashBytes, err := hex.DecodeString(templateHash)
 	if err != nil {
-		return common.Address{}, fmt.Errorf("Failed to decode template hash: %v", err)
+		return common.Address{}, fmt.Errorf("failed to decode template hash: %v", err)
 	}
 	saltBytes, err := hex.DecodeString(salt)
 	if err != nil {
-		return common.Address{}, fmt.Errorf("Failed to decode salt: %v", err)
+		return common.Address{}, fmt.Errorf("failed to decode salt: %v", err)
 	}
 
 	factory, err := iapplicationfactory.NewIApplicationFactory(applicationFactoryAddr, client)
 	if err != nil {
-		return common.Address{}, fmt.Errorf("Failed to instantiate contract: %v", err)
+		return common.Address{}, fmt.Errorf("failed to instantiate contract: %v", err)
 	}
 
 	tx, err := factory.NewApplication(txOpts, authorityAddr, owner, toBytes32(templateHashBytes), dataAvailability, toBytes32(saltBytes))
 	if err != nil {
-		return common.Address{}, fmt.Errorf("Transaction failed: %v", err)
+		return common.Address{}, fmt.Errorf("transaction failed: %v", err)
 	}
 
 	if !printAsJSON {
@@ -265,7 +268,7 @@ func deployApplication(
 	// Wait for the transaction to be mined
 	receipt, err := bind.WaitMined(ctx, client, tx)
 	if err != nil {
-		return common.Address{}, fmt.Errorf("Failed to wait for transaction mining: %v", err)
+		return common.Address{}, fmt.Errorf("failed to wait for transaction mining: %v", err)
 	}
 
 	if receipt.Status == 1 {
@@ -273,7 +276,7 @@ func deployApplication(
 			fmt.Println("Transaction successful!")
 		}
 	} else {
-		return common.Address{}, fmt.Errorf("Transaction failed!")
+		return common.Address{}, fmt.Errorf("transaction failed")
 	}
 
 	// Look for the specific event in the receipt logs
@@ -305,17 +308,17 @@ func deployAuthority(
 ) (common.Address, error) {
 	saltBytes, err := hex.DecodeString(salt)
 	if err != nil {
-		return common.Address{}, fmt.Errorf("Failed to decode salt: %v", err)
+		return common.Address{}, fmt.Errorf("failed to decode salt: %v", err)
 	}
 
 	contract, err := iauthorityfactory.NewIAuthorityFactory(authorityFactoryAddr, client)
 	if err != nil {
-		return common.Address{}, fmt.Errorf("Failed to instantiate contract: %v", err)
+		return common.Address{}, fmt.Errorf("failed to instantiate contract: %v", err)
 	}
 
 	tx, err := contract.NewAuthority0(txOpts, owner, big.NewInt(int64(epochLength)), toBytes32(saltBytes))
 	if err != nil {
-		return common.Address{}, fmt.Errorf("Transaction failed: %v", err)
+		return common.Address{}, fmt.Errorf("transaction failed: %v", err)
 	}
 
 	if !printAsJSON {
@@ -325,7 +328,7 @@ func deployAuthority(
 	// Wait for the transaction to be mined
 	receipt, err := bind.WaitMined(ctx, client, tx)
 	if err != nil {
-		return common.Address{}, fmt.Errorf("Failed to wait for transaction mining: %v", err)
+		return common.Address{}, fmt.Errorf("failed to wait for transaction mining: %v", err)
 	}
 
 	if receipt.Status == 1 {
@@ -333,7 +336,7 @@ func deployAuthority(
 			fmt.Println("Transaction successful!")
 		}
 	} else {
-		return common.Address{}, fmt.Errorf("Transaction failed!")
+		return common.Address{}, fmt.Errorf("transaction failed")
 	}
 
 	// Look for the specific event in the receipt logs
@@ -361,12 +364,12 @@ func getEpochLength(
 
 	client, err := ethclient.Dial(ethEndpoint.String())
 	if err != nil {
-		return 0, fmt.Errorf("Failed to connect to the blockchain http endpoint: %s", ethEndpoint.Redacted())
+		return 0, fmt.Errorf("failed to connect to the blockchain http endpoint: %s", ethEndpoint.Redacted())
 	}
 
 	consensus, err := iconsensus.NewIConsensus(consensusAddr, client)
 	if err != nil {
-		return 0, fmt.Errorf("Failed to instantiate contract: %v", err)
+		return 0, fmt.Errorf("failed to instantiate contract: %v", err)
 	}
 
 	epochLengthRaw, err := consensus.GetEpochLength(nil)
@@ -451,7 +454,7 @@ func processDataAvailability(
 
 func toBytes32(data []byte) [32]byte {
 	var arr [32]byte
-	if len(data) != 32 {
+	if len(data) != 32 { // nolint: mnd
 		fmt.Fprintf(os.Stderr, "Invalid length: expected 32 bytes, got %d bytes", len(data))
 		os.Exit(1)
 	}

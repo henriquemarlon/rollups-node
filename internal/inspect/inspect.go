@@ -51,7 +51,7 @@ type ReportResponse struct {
 
 type InspectResponse struct {
 	Status          string           `json:"status"`
-	Exception       string           `json:"exception"`
+	Exception       string           `json:"exception,omitempty"`
 	Reports         []ReportResponse `json:"reports"`
 	ProcessedInputs uint64           `json:"processed_input_count"`
 }

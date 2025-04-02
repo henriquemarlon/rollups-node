@@ -15,25 +15,24 @@ import (
 )
 
 var Cmd = &cobra.Command{
-	Use:     "epochs",
+	Use:     "epochs [application-name-or-address]",
 	Short:   "Reads epochs",
 	Example: examples,
+	Args:    cobra.RangeArgs(1, 2), // nolint: mnd
 	Run:     run,
 }
 
 const examples = `# Read all epochs:
-cartesi-rollups-cli read epochs -n echo-dapp`
+cartesi-rollups-cli read epochs echo-dapp
 
-var (
-	epochIndex uint64
-)
-
-func init() {
-	Cmd.Flags().Uint64Var(&epochIndex, "epoch-index", 0, "index of the epoch")
-}
+# Read specific epoch by index:
+cartesi-rollups-cli read epochs echo-dapp 2`
 
 func run(cmd *cobra.Command, args []string) {
 	ctx := cmd.Context()
+
+	nameOrAddress, err := config.ToApplicationNameOrAddressFromString(args[0])
+	cobra.CheckErr(err)
 
 	dsn, err := config.GetDatabaseConnection()
 	cobra.CheckErr(err)
@@ -42,24 +41,20 @@ func run(cmd *cobra.Command, args []string) {
 	cobra.CheckErr(err)
 	defer repo.Close()
 
-	var nameOrAddress string
-	pFlags := cmd.Flags()
-	if pFlags.Changed("name") {
-		nameOrAddress = pFlags.Lookup("name").Value.String()
-	} else if pFlags.Changed("address") {
-		nameOrAddress = pFlags.Lookup("address").Value.String()
-	}
-
 	var result []byte
-	if cmd.Flags().Changed("epoch-index") {
-		epoch, err := repo.GetEpoch(ctx, nameOrAddress, epochIndex)
-		cobra.CheckErr(err)
-		result, err = json.MarshalIndent(epoch, "", "    ")
-		cobra.CheckErr(err)
-	} else {
+	if len(args) == 1 {
 		epochs, _, err := repo.ListEpochs(ctx, nameOrAddress, repository.EpochFilter{}, repository.Pagination{})
 		cobra.CheckErr(err)
 		result, err = json.MarshalIndent(epochs, "", "    ")
+		cobra.CheckErr(err)
+	} else {
+		epochIndex, err := config.ToUint64FromDecimalOrHexString(args[1])
+		if err != nil {
+			cobra.CheckErr(fmt.Errorf("invalid value for epoch-index: %w", err))
+		}
+		epoch, err := repo.GetEpoch(ctx, nameOrAddress, epochIndex)
+		cobra.CheckErr(err)
+		result, err = json.MarshalIndent(epoch, "", "    ")
 		cobra.CheckErr(err)
 	}
 

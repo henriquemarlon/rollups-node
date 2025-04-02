@@ -4,8 +4,6 @@
 package read
 
 import (
-	"fmt"
-
 	"github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/read/epochs"
 	"github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/read/inputs"
 	"github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/read/outputs"
@@ -22,28 +20,13 @@ var Cmd = &cobra.Command{
 }
 
 var (
-	name               string
-	address            string
 	databaseConnection string
 )
 
 func init() {
-	Cmd.PersistentFlags().StringVarP(&name, "name", "n", "", "Application name")
-
-	Cmd.PersistentFlags().StringVarP(&address, "address", "a", "", "Application contract address")
-
-	Cmd.Flags().StringVar(&databaseConnection, "database-connection", "", "Database connection string in the URL format\n(eg.: 'postgres://user:password@hostname:port/database') ")
-	viper.BindPFlag(config.DATABASE_CONNECTION, Cmd.Flags().Lookup("database-connection"))
-
-	Cmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
-		if name == "" && address == "" {
-			return fmt.Errorf("either 'name' or 'address' must be specified")
-		}
-		if name != "" && address != "" {
-			return fmt.Errorf("only one of 'name' or 'address' can be specified")
-		}
-		return nil
-	}
+	Cmd.PersistentFlags().StringVar(&databaseConnection, "database-connection", "",
+		"Database connection string in the URL format\n(eg.: 'postgres://user:password@hostname:port/database') ")
+	cobra.CheckErr(viper.BindPFlag(config.DATABASE_CONNECTION, Cmd.PersistentFlags().Lookup("database-connection")))
 
 	Cmd.AddCommand(epochs.Cmd)
 	Cmd.AddCommand(inputs.Cmd)

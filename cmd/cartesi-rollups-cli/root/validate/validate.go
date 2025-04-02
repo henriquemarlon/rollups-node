@@ -17,51 +17,41 @@ import (
 )
 
 var Cmd = &cobra.Command{
-	Use:     "validate",
+	Use:     "validate [app-name-or-address] [output-index]",
 	Short:   "Validates a notice",
 	Example: examples,
+	Args:    cobra.ExactArgs(2), // nolint: mnd
 	Run:     run,
 }
 
 const examples = `# Validates output with index 5:
-cartesi-rollups-cli validate -n echo-dapp --output-index 5`
+cartesi-rollups-cli validate echo-dapp 5
+
+# Validates output with index 3 using application address:
+cartesi-rollups-cli validate 0x1234567890123456789012345678901234567890 3`
 
 var (
-	name                   string
-	address                string
-	outputIndex            uint64
 	databaseConnection     string
 	blockchainHttpEndpoint string
 )
 
 func init() {
-	Cmd.Flags().StringVarP(&name, "name", "n", "", "Application name")
-
-	Cmd.Flags().StringVarP(&address, "address", "a", "", "Application contract address")
-
-	Cmd.Flags().Uint64Var(&outputIndex, "output-index", 0, "index of the output")
-	cobra.CheckErr(Cmd.MarkFlagRequired("output-index"))
-
-	Cmd.Flags().StringVar(&databaseConnection, "database-connection", "", "Database connection string in the URL format\n(eg.: 'postgres://user:password@hostname:port/database') ")
-	viper.BindPFlag(config.DATABASE_CONNECTION, Cmd.Flags().Lookup("database-connection"))
+	Cmd.Flags().StringVar(&databaseConnection, "database-connection", "",
+		"Database connection string in the URL format\n(eg.: 'postgres://user:password@hostname:port/database') ")
+	cobra.CheckErr(viper.BindPFlag(config.DATABASE_CONNECTION, Cmd.Flags().Lookup("database-connection")))
 
 	Cmd.Flags().StringVar(&blockchainHttpEndpoint, "blockchain-http-endpoint", "", "Blockchain HTTP endpoint")
-	viper.BindPFlag(config.BLOCKCHAIN_HTTP_ENDPOINT, Cmd.Flags().Lookup("blockchain-http-endpoint"))
-
-	Cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
-		if name == "" && address == "" {
-			return fmt.Errorf("either 'name' or 'address' must be specified")
-		}
-		if name != "" && address != "" {
-			return fmt.Errorf("only one of 'name' or 'address' can be specified")
-		}
-		return nil
-	}
-
+	cobra.CheckErr(viper.BindPFlag(config.BLOCKCHAIN_HTTP_ENDPOINT, Cmd.Flags().Lookup("blockchain-http-endpoint")))
 }
 
 func run(cmd *cobra.Command, args []string) {
 	ctx := cmd.Context()
+
+	nameOrAddress, err := config.ToApplicationNameOrAddressFromString(args[0])
+	cobra.CheckErr(err)
+
+	outputIndex, err := config.ToUint64FromDecimalOrHexString(args[1])
+	cobra.CheckErr(err)
 
 	dsn, err := config.GetDatabaseConnection()
 	cobra.CheckErr(err)
@@ -72,13 +62,6 @@ func run(cmd *cobra.Command, args []string) {
 	repo, err := factory.NewRepositoryFromConnectionString(ctx, dsn.String())
 	cobra.CheckErr(err)
 	defer repo.Close()
-
-	var nameOrAddress string
-	if cmd.Flags().Changed("name") {
-		nameOrAddress = name
-	} else if cmd.Flags().Changed("address") {
-		nameOrAddress = address
-	}
 
 	output, err := repo.GetOutput(ctx, nameOrAddress, outputIndex)
 	cobra.CheckErr(err)

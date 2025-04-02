@@ -21,75 +21,65 @@ import (
 )
 
 var Cmd = &cobra.Command{
-	Use:     "send",
-	Short:   "Send a rollups input to the Ethereum node",
+	Use:     "send [app-name-or-address] [payload]",
+	Short:   "Sends a rollups input transaction to the ethereum provider",
 	Example: examples,
+	Args:    cobra.MinimumNArgs(1),
 	Run:     run,
 }
 
 const examples = `# Send the string "hi":
-cartesi-rollups-cli send -n echo-dapp --payload "hi"
+cartesi-rollups-cli send echo-dapp "hi"
 
 # Send the string "hi" encoded as hex:
-cartesi-rollups-cli send -n echo-dapp --payload 0x6869 --hex
+cartesi-rollups-cli send echo-dapp 0x6869 --hex
 
 # Read from stdin:
-echo "hi" | cartesi-rollups-cli send -n echo-dapp`
+echo "hi" | cartesi-rollups-cli send echo-dapp
+
+# Skip confirmation prompt:
+cartesi-rollups-cli send echo-dapp "hi" --yes`
 
 var (
-	name                   string
-	address                string
 	blockchainHttpEndpoint string
 	databaseConnection     string
 	inputBoxAddress        string
-	cmdPayload             string
 	isHex                  bool
+	skipConfirmation       bool
 )
 
 func init() {
-	Cmd.Flags().StringVarP(&name, "name", "n", "", "Application name")
-
-	Cmd.Flags().StringVarP(&address, "address", "a", "", "Application contract address")
-
-	Cmd.Flags().StringVar(&cmdPayload, "payload", "", "input payload hex-encoded starting with 0x")
-
-	Cmd.Flags().BoolVarP(&isHex, "hex", "x", false, "Force interpretation of --payload as hex.")
+	Cmd.Flags().BoolVarP(&isHex, "hex", "x", false, "Force interpretation of payload as hex.")
+	Cmd.Flags().BoolVarP(&skipConfirmation, "yes", "y", false, "Skip confirmation prompt")
 
 	Cmd.Flags().StringVar(&inputBoxAddress, "inputbox-address", "", "Input Box contract address")
-	viper.BindPFlag(config.CONTRACTS_INPUT_BOX_ADDRESS, Cmd.Flags().Lookup("inputbox-address"))
+	cobra.CheckErr(viper.BindPFlag(config.CONTRACTS_INPUT_BOX_ADDRESS, Cmd.Flags().Lookup("inputbox-address")))
 
-	Cmd.Flags().StringVar(&databaseConnection, "database-connection", "", "Database connection string in the URL format\n(eg.: 'postgres://user:password@hostname:port/database') ")
-	viper.BindPFlag(config.DATABASE_CONNECTION, Cmd.Flags().Lookup("database-connection"))
+	Cmd.Flags().StringVar(&databaseConnection, "database-connection", "",
+		"Database connection string in the URL format\n(eg.: 'postgres://user:password@hostname:port/database') ")
+	cobra.CheckErr(viper.BindPFlag(config.DATABASE_CONNECTION, Cmd.Flags().Lookup("database-connection")))
 
 	Cmd.Flags().StringVar(&blockchainHttpEndpoint, "blockchain-http-endpoint", "", "Blockchain HTTP endpoint")
-	viper.BindPFlag(config.BLOCKCHAIN_HTTP_ENDPOINT, Cmd.Flags().Lookup("blockchain-http-endpoint"))
-
-	Cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
-		if name == "" && address == "" {
-			return fmt.Errorf("either 'name' or 'address' must be specified")
-		}
-		if name != "" && address != "" {
-			return fmt.Errorf("only one of 'name' or 'address' can be specified")
-		}
-		// TODO check auth from env
-		return nil
-	}
+	cobra.CheckErr(viper.BindPFlag(config.BLOCKCHAIN_HTTP_ENDPOINT, Cmd.Flags().Lookup("blockchain-http-endpoint")))
 }
 
-func resolvePayload(cmd *cobra.Command) ([]byte, error) {
-	if !cmd.Flags().Changed("payload") {
+func resolvePayload(args []string) ([]byte, error) {
+	// If we have exactly one argument (just the app name/address), read from stdin
+	if len(args) == 1 {
 		stdinBytes, err := io.ReadAll(os.Stdin)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read from stdin: %w", err)
 		}
+		if isHex {
+			return decodeHex(string(stdinBytes))
+		}
 		return stdinBytes, nil
 	}
-
+	// Otherwise, use the second argument as payload
 	if isHex {
-		return decodeHex(cmdPayload)
+		return decodeHex(args[1])
 	}
-
-	return []byte(cmdPayload), nil
+	return []byte(args[1]), nil
 }
 
 func decodeHex(s string) ([]byte, error) {
@@ -104,8 +94,32 @@ func decodeHex(s string) ([]byte, error) {
 	return b, nil
 }
 
+// isStdinPiped returns true if stdin is being piped (not a terminal)
+func isStdinPiped() bool {
+	fileInfo, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return (fileInfo.Mode() & os.ModeCharDevice) == 0
+}
+
+// promptForConfirmation asks the user for confirmation
+func promptForConfirmation() bool {
+	var response string
+	fmt.Print("Do you want to proceed? [y/N]: ")
+	_, err := fmt.Scanln(&response)
+	if err != nil {
+		return false
+	}
+	response = strings.ToLower(strings.TrimSpace(response))
+	return response == "y" || response == "yes"
+}
+
 func run(cmd *cobra.Command, args []string) {
 	ctx := cmd.Context()
+
+	nameOrAddress, err := config.ToApplicationNameOrAddressFromString(args[0])
+	cobra.CheckErr(err)
 
 	dsn, err := config.GetDatabaseConnection()
 	cobra.CheckErr(err)
@@ -120,13 +134,6 @@ func run(cmd *cobra.Command, args []string) {
 	cobra.CheckErr(err)
 	defer repo.Close()
 
-	var nameOrAddress string
-	if cmd.Flags().Changed("name") {
-		nameOrAddress = name
-	} else if cmd.Flags().Changed("address") {
-		nameOrAddress = address
-	}
-
 	app, err := repo.GetApplication(ctx, nameOrAddress)
 	cobra.CheckErr(err)
 	if app == nil {
@@ -134,7 +141,12 @@ func run(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
-	payload, err := resolvePayload(cmd)
+	// Check if stdin is being used for payload and --yes flag is not set
+	if len(args) == 1 && !skipConfirmation && isStdinPiped() {
+		cobra.CheckErr(fmt.Errorf("reading payload from stdin. Use --yes flag to skip confirmation when piping data"))
+	}
+
+	payload, err := resolvePayload(args)
 	cobra.CheckErr(err)
 
 	client, err := ethclient.DialContext(ctx, ethEndpoint.String())
@@ -145,6 +157,17 @@ func run(cmd *cobra.Command, args []string) {
 
 	txOpts, err := auth.GetTransactOpts(chainId)
 	cobra.CheckErr(err)
+
+	// Ask for confirmation unless --yes flag is set
+	if !skipConfirmation {
+		fmt.Printf("Preparing to send input to application %v (%v) with account %v\n",
+			app.Name, app.IApplicationAddress, txOpts.From)
+
+		if !promptForConfirmation() {
+			fmt.Println("Operation cancelled")
+			return
+		}
+	}
 
 	inputIndex, blockNumber, err := ethutil.AddInput(ctx, client, txOpts, iboxAddr, app.IApplicationAddress, payload)
 	cobra.CheckErr(err)

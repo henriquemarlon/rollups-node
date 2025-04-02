@@ -6,7 +6,6 @@ package reports
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 
@@ -16,30 +15,36 @@ import (
 )
 
 var Cmd = &cobra.Command{
-	Use:     "reports",
-	Short:   "Reads reports. If an input index is specified, reads all reports from that input",
+	Use:     "reports [application-name-or-address] [report-index]",
+	Short:   "Reads reports",
 	Example: examples,
+	Args:    cobra.RangeArgs(1, 2), // nolint: mnd
 	Run:     run,
 }
 
 const examples = `# Read all reports:
-cartesi-rollups-cli read reports -n echo-dapp`
+cartesi-rollups-cli read reports echo-dapp
+
+# Read specific report by index:
+cartesi-rollups-cli read reports echo-dapp 42
+
+# Read all reports filtering by input index:
+cartesi-rollups-cli read reports echo-dapp --input-index=23`
 
 var (
-	inputIndex  uint64
-	reportIndex uint64
+	inputIndex uint64
 )
 
 func init() {
 	Cmd.Flags().Uint64Var(&inputIndex, "input-index", 0,
-		"index of the input")
-
-	Cmd.Flags().Uint64Var(&reportIndex, "report-index", 0,
-		"index of the report")
+		"filter reports by input index")
 }
 
 func run(cmd *cobra.Command, args []string) {
 	ctx := cmd.Context()
+
+	nameOrAddress, err := config.ToApplicationNameOrAddressFromString(args[0])
+	cobra.CheckErr(err)
 
 	dsn, err := config.GetDatabaseConnection()
 	cobra.CheckErr(err)
@@ -48,33 +53,26 @@ func run(cmd *cobra.Command, args []string) {
 	cobra.CheckErr(err)
 	defer repo.Close()
 
-	var nameOrAddress string
-	pFlags := cmd.Flags()
-	if pFlags.Changed("name") {
-		nameOrAddress = pFlags.Lookup("name").Value.String()
-	} else if pFlags.Changed("address") {
-		nameOrAddress = pFlags.Lookup("address").Value.String()
-	}
-
 	var result []byte
-	if cmd.Flags().Changed("report-index") {
-		if cmd.Flags().Changed("input-index") {
-			fmt.Fprintf(os.Stderr, "Error: Only one of 'output-index' or 'input-index' can be used at a time.\n")
-			os.Exit(1)
+	if len(args) == 2 { // nolint: mnd
+		// Get a specific report by index
+		reportIndex, err := config.ToUint64FromDecimalOrHexString(args[1])
+		if err != nil {
+			cobra.CheckErr(fmt.Errorf("invalid report index value: %w", err))
 		}
-		reports, err := repo.GetReport(ctx, nameOrAddress, reportIndex)
+
+		report, err := repo.GetReport(ctx, nameOrAddress, reportIndex)
 		cobra.CheckErr(err)
-		result, err = json.MarshalIndent(reports, "", "    ")
-		cobra.CheckErr(err)
-	} else if cmd.Flags().Changed("input-index") {
-		f := repository.ReportFilter{InputIndex: &inputIndex}
-		p := repository.Pagination{}
-		reports, _, err := repo.ListReports(ctx, nameOrAddress, f, p)
-		cobra.CheckErr(err)
-		result, err = json.MarshalIndent(reports, "", "    ")
+		result, err = json.MarshalIndent(report, "", "    ")
 		cobra.CheckErr(err)
 	} else {
+		// List reports with optional input index filter
 		f := repository.ReportFilter{}
+		if cmd.Flags().Changed("input-index") {
+			inputIndexPtr := &inputIndex
+			f.InputIndex = inputIndexPtr
+		}
+
 		p := repository.Pagination{}
 		reports, _, err := repo.ListReports(ctx, nameOrAddress, f, p)
 		cobra.CheckErr(err)

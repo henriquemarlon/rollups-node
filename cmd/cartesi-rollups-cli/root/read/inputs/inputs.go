@@ -21,22 +21,27 @@ import (
 )
 
 var Cmd = &cobra.Command{
-	Use:     "inputs",
+	Use:     "inputs [application-name-or-address] [input-index]",
 	Short:   "Reads inputs ordered by index",
 	Example: examples,
+	Args:    cobra.RangeArgs(1, 2), // nolint: mnd
 	Run:     run,
 }
 
-const examples = `# Read inputs from GraphQL:
-cartesi-rollups-cli read inputs -n echo-dapp`
+const examples = `# Read all inputs:
+cartesi-rollups-cli read inputs echo-dapp
+
+# Read specific input by index:
+cartesi-rollups-cli read inputs echo-dapp 42
+
+# Read with decoded input data:
+cartesi-rollups-cli read inputs echo-dapp 42 --decode`
 
 var (
-	index       uint64
 	decodeInput bool
 )
 
 func init() {
-	Cmd.Flags().Uint64Var(&index, "index", 0, "index of the input")
 	Cmd.Flags().BoolVarP(&decodeInput, "decode", "d", false,
 		"Prints the decoded input RawData")
 }
@@ -76,6 +81,9 @@ func decodeInputData(input *model.Input, parsedAbi *abi.ABI) (EvmAdvance, error)
 func run(cmd *cobra.Command, args []string) {
 	ctx := cmd.Context()
 
+	nameOrAddress, err := config.ToApplicationNameOrAddressFromString(args[0])
+	cobra.CheckErr(err)
+
 	dsn, err := config.GetDatabaseConnection()
 	cobra.CheckErr(err)
 
@@ -83,34 +91,9 @@ func run(cmd *cobra.Command, args []string) {
 	cobra.CheckErr(err)
 	defer repo.Close()
 
-	var nameOrAddress string
-	pFlags := cmd.Flags()
-	if pFlags.Changed("name") {
-		nameOrAddress = pFlags.Lookup("name").Value.String()
-	} else if pFlags.Changed("address") {
-		nameOrAddress = pFlags.Lookup("address").Value.String()
-	}
-
 	var result []byte
-	if cmd.Flags().Changed("index") {
-		input, err := repo.GetInput(ctx, nameOrAddress, index)
-		cobra.CheckErr(err)
-
-		if decodeInput {
-			parsedAbi, err := inputs.InputsMetaData.GetAbi()
-			cobra.CheckErr(err)
-
-			params, err := decodeInputData(input, parsedAbi)
-			cobra.CheckErr(err)
-
-			result, err = json.MarshalIndent(params, "", "  ")
-			cobra.CheckErr(err)
-		} else {
-			result, err = json.MarshalIndent(input, "", "    ")
-			cobra.CheckErr(err)
-		}
-
-	} else {
+	if len(args) == 1 {
+		// List all inputs
 		inputList, _, err := repo.ListInputs(ctx, nameOrAddress, repository.InputFilter{}, repository.Pagination{})
 		cobra.CheckErr(err)
 
@@ -129,6 +112,29 @@ func run(cmd *cobra.Command, args []string) {
 			cobra.CheckErr(err)
 		} else {
 			result, err = json.MarshalIndent(inputList, "", "    ")
+			cobra.CheckErr(err)
+		}
+	} else {
+		// Get specific input by index
+		inputIndex, err := config.ToUint64FromDecimalOrHexString(args[1])
+		if err != nil {
+			cobra.CheckErr(fmt.Errorf("invalid value for input-index: %w", err))
+		}
+
+		input, err := repo.GetInput(ctx, nameOrAddress, inputIndex)
+		cobra.CheckErr(err)
+
+		if decodeInput {
+			parsedAbi, err := inputs.InputsMetaData.GetAbi()
+			cobra.CheckErr(err)
+
+			params, err := decodeInputData(input, parsedAbi)
+			cobra.CheckErr(err)
+
+			result, err = json.MarshalIndent(params, "", "  ")
+			cobra.CheckErr(err)
+		} else {
+			result, err = json.MarshalIndent(input, "", "    ")
 			cobra.CheckErr(err)
 		}
 	}

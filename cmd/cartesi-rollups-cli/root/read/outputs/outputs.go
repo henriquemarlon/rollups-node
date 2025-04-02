@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"os"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
@@ -22,30 +21,36 @@ import (
 )
 
 var Cmd = &cobra.Command{
-	Use:     "outputs",
-	Short:   "Reads outputs. If an input index is specified, reads all outputs from that input",
+	Use:     "outputs [application-name-or-address] [output-index]",
+	Short:   "Reads outputs",
 	Example: examples,
+	Args:    cobra.RangeArgs(1, 2), // nolint: mnd
 	Run:     run,
 }
 
-const examples = `# Read all notices:
-cartesi-rollups-cli read outputs -n echo-dapp`
+const examples = `# Read all outputs:
+cartesi-rollups-cli read outputs echo-dapp
+
+# Read specific output by index:
+cartesi-rollups-cli read outputs echo-dapp 42
+
+# Read all outputs filtering by input index:
+cartesi-rollups-cli read outputs echo-dapp --input-index=23
+
+# Read outputs with decoded data:
+cartesi-rollups-cli read outputs echo-dapp --decode`
 
 var (
-	outputIndex  uint64
 	inputIndex   uint64
 	decodeOutput bool
 )
 
 func init() {
 	Cmd.Flags().Uint64Var(&inputIndex, "input-index", 0,
-		"filter by input index")
-
-	Cmd.Flags().Uint64Var(&outputIndex, "output-index", 0,
-		"filter by output index")
+		"filter outputs by input index")
 
 	Cmd.Flags().BoolVarP(&decodeOutput, "decode", "d", false,
-		"Prints the decoded Output RawData")
+		"prints the decoded Output RawData")
 }
 
 type Notice struct {
@@ -66,8 +71,8 @@ type DelegateCallVoucher struct {
 	Payload     string `json:"payload"`
 }
 
-func decodeOutputData(output *model.Output, parsedAbi *abi.ABI) (interface{}, error) {
-	if len(output.RawData) < 4 {
+func decodeOutputData(output *model.Output, parsedAbi *abi.ABI) (any, error) {
+	if len(output.RawData) < 4 { // nolint: mnd
 		return nil, fmt.Errorf("raw data too short")
 	}
 
@@ -76,7 +81,7 @@ func decodeOutputData(output *model.Output, parsedAbi *abi.ABI) (interface{}, er
 		return nil, err
 	}
 
-	decoded := make(map[string]interface{})
+	decoded := make(map[string]any)
 	if err := method.Inputs.UnpackIntoMap(decoded, output.RawData[4:]); err != nil {
 		return nil, fmt.Errorf("failed to unpack %s: %w", method.Name, err)
 	}
@@ -129,6 +134,9 @@ func decodeOutputData(output *model.Output, parsedAbi *abi.ABI) (interface{}, er
 func run(cmd *cobra.Command, args []string) {
 	ctx := cmd.Context()
 
+	nameOrAddress, err := config.ToApplicationNameOrAddressFromString(args[0])
+	cobra.CheckErr(err)
+
 	dsn, err := config.GetDatabaseConnection()
 	cobra.CheckErr(err)
 
@@ -136,22 +144,17 @@ func run(cmd *cobra.Command, args []string) {
 	cobra.CheckErr(err)
 	defer repo.Close()
 
-	var nameOrAddress string
-	pFlags := cmd.Flags()
-	if pFlags.Changed("name") {
-		nameOrAddress = pFlags.Lookup("name").Value.String()
-	} else if pFlags.Changed("address") {
-		nameOrAddress = pFlags.Lookup("address").Value.String()
-	}
-
 	var result []byte
-	if cmd.Flags().Changed("output-index") {
-		if cmd.Flags().Changed("input-index") {
-			fmt.Fprintf(os.Stderr, "Error: Only one of 'output-index' or 'input-index' can be used at a time.\n")
-			os.Exit(1)
+	if len(args) == 2 { // nolint: mnd
+		// Get a specific output by index
+		outputIndex, err := config.ToUint64FromDecimalOrHexString(args[1])
+		if err != nil {
+			cobra.CheckErr(fmt.Errorf("invalid output index value: %w", err))
 		}
+
 		output, err := repo.GetOutput(ctx, nameOrAddress, outputIndex)
 		cobra.CheckErr(err)
+
 		if decodeOutput {
 			parsedAbi, err := outputs.OutputsMetaData.GetAbi()
 			cobra.CheckErr(err)
@@ -166,24 +169,22 @@ func run(cmd *cobra.Command, args []string) {
 			cobra.CheckErr(err)
 		}
 	} else {
-		var outputList []*model.Output
-		var err error
+		// List outputs with optional input index filter
+		f := repository.OutputFilter{}
 		if cmd.Flags().Changed("input-index") {
-			f := repository.OutputFilter{InputIndex: &inputIndex}
-			p := repository.Pagination{}
-			outputList, _, err = repo.ListOutputs(ctx, nameOrAddress, f, p)
-			cobra.CheckErr(err)
-		} else {
-			f := repository.OutputFilter{}
-			p := repository.Pagination{}
-			outputList, _, err = repo.ListOutputs(ctx, nameOrAddress, f, p)
-			cobra.CheckErr(err)
+			inputIndexPtr := &inputIndex
+			f.InputIndex = inputIndexPtr
 		}
+
+		p := repository.Pagination{}
+		outputList, _, err := repo.ListOutputs(ctx, nameOrAddress, f, p)
+		cobra.CheckErr(err)
+
 		if decodeOutput {
 			parsedAbi, err := outputs.OutputsMetaData.GetAbi()
 			cobra.CheckErr(err)
 
-			var decodedOutputs []interface{}
+			var decodedOutputs []any
 			for _, output := range outputList {
 				decoded, err := decodeOutputData(output, parsedAbi)
 				if err != nil {
@@ -200,7 +201,6 @@ func run(cmd *cobra.Command, args []string) {
 			// Marshal the decoded outputs as indented JSON.
 			result, err = json.MarshalIndent(decodedOutputs, "", "  ")
 			cobra.CheckErr(err)
-
 		} else {
 			result, err = json.MarshalIndent(outputList, "", "    ")
 			cobra.CheckErr(err)

@@ -100,32 +100,6 @@ type iclaimerRepository interface {
 	LoadNodeConfigRaw(ctx context.Context, key string) (rawJSON []byte, createdAt, updatedAt time.Time, err error)
 }
 
-func (s *Service) checkApplicationConsensus(endBlock *big.Int) []error {
-	f := repository.ApplicationFilter{
-		State: model.Pointer(model.ApplicationState_Enabled),
-	}
-	apps, _, err := s.repository.ListApplications(s.Context, f, repository.Pagination{})
-	if err != nil {
-		s.Logger.Error("Error retrieving enabled applications", "error", err)
-		return []error{err}
-	}
-
-	var errs []error
-	changedList, errs := s.blockchain.checkApplicationsForConsensusAddressChange(s.Context, apps, endBlock)
-	for _, changed := range changedList {
-		err = s.setApplicationInoperable(
-			s.Context,
-			changed.application.IApplicationAddress,
-			changed.application.ID,
-			"Application consensus address has changed. Application: %v, previous: %v, current: %v.",
-			changed.application.IApplicationAddress,
-			changed.application.IConsensusAddress,
-			changed.newAddress,
-		)
-	}
-	return errs
-}
-
 /* transition claims from computed to submitted */
 func (s *Service) submitClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 	errs := []error{}
@@ -186,6 +160,13 @@ func (s *Service) submitClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 
 		app := apps[key] // guaranteed to exist because of the query and database constraints
 		prevEpoch, previousEpochExists := acceptedOrSubmittedEpochs[key]
+
+		// check address for changes
+		if err := s.checkConsensusForAddressChange(app); err != nil {
+			delete(computedEpochs, key)
+			errs = append(errs, err)
+			goto nextApp
+		}
 		if previousEpochExists {
 			err := checkEpochSequenceConstraint(prevEpoch, currEpoch)
 			if err != nil {
@@ -338,65 +319,74 @@ func (s *Service) submitClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 /* transition claims from submitted to accepted */
 func (s *Service) acceptClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 	errs := []error{}
-	acceptedClaims, submittedClaims, applications, err := s.repository.SelectAcceptedClaimPairsPerApp(s.Context)
+	acceptedEpochs, submittedEpochs, apps, err := s.repository.SelectAcceptedClaimPairsPerApp(s.Context)
 	if err != nil {
 		errs = append(errs, err)
 		return errs
 	}
 
 	// check submitted claims
-	for key, submittedClaim := range submittedClaims {
+	for key, submittedEpoch := range submittedEpochs {
 		var prevEvent *iconsensus.IConsensusClaimAccepted
 		var currEvent *iconsensus.IConsensusClaimAccepted
 
-		application := applications[key]
-		acceptedClaim, prevExists := acceptedClaims[key]
+		app := apps[key]
+		acceptedEpoch, prevExists := acceptedEpochs[key]
+		// check address for changes
+		if err := s.checkConsensusForAddressChange(app); err != nil {
+			delete(submittedEpochs, key)
+			errs = append(errs, err)
+			goto nextApp
+		}
 		if prevExists {
-			err := checkEpochSequenceConstraint(acceptedClaim, submittedClaim)
+			err := checkEpochSequenceConstraint(acceptedEpoch, submittedEpoch)
 			if err != nil {
-				s.Logger.Error("database mismatch",
-					"prevClaim", acceptedClaim,
-					"currClaim", submittedClaim,
+				s.Logger.Error("Database mismatch on epochs.",
+					"app", app.IApplicationAddress,
+					"previous_epoch_index", acceptedEpoch.Index,
+					"current_epoch_index", submittedEpoch.Index,
 					"err", err,
 				)
-				delete(submittedClaims, key)
+				delete(submittedEpochs, key)
 				errs = append(errs, err)
 				goto nextApp
 			}
 
 			// if prevClaimRow exists, there must be a matching event
 			_, prevEvent, currEvent, err =
-				s.blockchain.findClaimAcceptedEventAndSucc(s.Context, application, acceptedClaim, endBlock)
+				s.blockchain.findClaimAcceptedEventAndSucc(s.Context, app, acceptedEpoch, endBlock)
 			if err != nil {
-				delete(submittedClaims, key)
+				delete(submittedEpochs, key)
 				errs = append(errs, err)
 				goto nextApp
 			}
 			if prevEvent == nil {
-				s.Logger.Error("missing event",
-					"claim", acceptedClaim,
+				s.Logger.Error("Missing event",
+					"app", app.IApplicationAddress,
+					"claim", acceptedEpoch,
 					"err", ErrMissingEvent,
 				)
-				delete(submittedClaims, key)
+				delete(submittedEpochs, key)
 				errs = append(errs, ErrMissingEvent)
 				goto nextApp
 			}
-			if !claimAcceptedEventMatches(application, acceptedClaim, prevEvent) {
-				s.Logger.Error("event mismatch",
-					"claim", acceptedClaim,
+			if !claimAcceptedEventMatches(app, acceptedEpoch, prevEvent) {
+				s.Logger.Error("Event mismatch",
+					"app", app.IApplicationAddress,
+					"claim", acceptedEpoch,
 					"event", prevEvent,
 					"err", ErrEventMismatch,
 				)
-				delete(submittedClaims, key)
+				delete(submittedEpochs, key)
 				errs = append(errs, ErrEventMismatch)
 				goto nextApp
 			}
 		} else {
 			// first claim
 			_, currEvent, _, err =
-				s.blockchain.findClaimAcceptedEventAndSucc(s.Context, application, submittedClaim, endBlock)
+				s.blockchain.findClaimAcceptedEventAndSucc(s.Context, app, submittedEpoch, endBlock)
 			if err != nil {
-				delete(submittedClaims, key)
+				delete(submittedEpochs, key)
 				errs = append(errs, err)
 				goto nextApp
 			}
@@ -408,25 +398,25 @@ func (s *Service) acceptClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 				"claim_hash", fmt.Sprintf("%x", currEvent.OutputsMerkleRoot),
 				"last_block", currEvent.LastProcessedBlockNumber.Uint64(),
 			)
-			if !claimAcceptedEventMatches(application, submittedClaim, currEvent) {
+			if !claimAcceptedEventMatches(app, submittedEpoch, currEvent) {
 				s.Logger.Error("event mismatch",
-					"claim", submittedClaim,
+					"claim", submittedEpoch,
 					"event", currEvent,
 					"err", ErrEventMismatch,
 				)
-				delete(submittedClaims, key)
+				delete(submittedEpochs, key)
 				errs = append(errs, ErrEventMismatch)
 				goto nextApp
 			}
 			s.Logger.Debug("Updating claim status to accepted",
-				"app", application.IApplicationAddress,
-				"claim_hash", fmt.Sprintf("%x", submittedClaim.ClaimHash),
-				"last_block", submittedClaim.LastBlock,
+				"app", app.IApplicationAddress,
+				"claim_hash", fmt.Sprintf("%x", submittedEpoch.ClaimHash),
+				"last_block", submittedEpoch.LastBlock,
 			)
 			txHash := currEvent.Raw.TxHash
-			err = s.repository.UpdateEpochWithAcceptedClaim(s.Context, submittedClaim.ApplicationID, submittedClaim.Index)
+			err = s.repository.UpdateEpochWithAcceptedClaim(s.Context, submittedEpoch.ApplicationID, submittedEpoch.Index)
 			if err != nil {
-				delete(submittedClaims, key)
+				delete(submittedEpochs, key)
 				errs = append(errs, err)
 				goto nextApp
 			}
@@ -468,18 +458,38 @@ func (s *Service) setApplicationInoperable(
 	return errors.New(reason)
 }
 
+func (s *Service) checkConsensusForAddressChange(
+	app *model.Application,
+) error {
+	newConsensusAddress, err := s.blockchain.getConsensusAddress(s.Context, app)
+	if err != nil {
+		return err
+	}
+	if app.IConsensusAddress != newConsensusAddress {
+		err = s.setApplicationInoperable(
+			s.Context,
+			app.IApplicationAddress,
+			app.ID,
+			"consensus change detected. application: %v.",
+			app.IApplicationAddress,
+		)
+		return err
+	}
+	return nil
+}
+
 func checkEpochConstraint(c *model.Epoch) error {
 	if c.FirstBlock > c.LastBlock {
-		return ErrClaimMismatch
+		return fmt.Errorf("unexpected epoch state. first_block: %v > last_block: %v", c.FirstBlock, c.LastBlock)
 	}
 	if c.Status == model.EpochStatus_ClaimSubmitted {
 		if c.ClaimHash == nil {
-			return ErrClaimMismatch
+			return fmt.Errorf("unexpected epoch state. missing claim_hash.")
 		}
 	}
 	if c.Status == model.EpochStatus_ClaimAccepted || c.Status == model.EpochStatus_ClaimSubmitted {
 		if c.ClaimTransactionHash == nil {
-			return ErrClaimMismatch
+			return fmt.Errorf("unexpected epoch state. missing claim_transaction_hash.")
 		}
 	}
 	return nil
@@ -490,21 +500,21 @@ func checkEpochSequenceConstraint(prevEpoch *model.Epoch, currEpoch *model.Epoch
 
 	err = checkEpochConstraint(currEpoch)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w on current epoch.", err)
 	}
 	err = checkEpochConstraint(prevEpoch)
 	if err != nil {
-		return err
+		return fmt.Errorf("%w on previous epoch.", err)
 	}
 
 	if prevEpoch.LastBlock > currEpoch.LastBlock {
-		return ErrClaimMismatch
+		return fmt.Errorf("unexpected epochs sequence on field last_block: previous(%v) > current(%v)", prevEpoch.LastBlock, currEpoch.LastBlock)
 	}
 	if prevEpoch.FirstBlock > currEpoch.FirstBlock {
-		return ErrClaimMismatch
+		return fmt.Errorf("unexpected epochs sequence on field first_block: previous(%v) > current(%v)", prevEpoch.FirstBlock, currEpoch.FirstBlock)
 	}
 	if prevEpoch.Index > currEpoch.Index {
-		return ErrClaimMismatch
+		return fmt.Errorf("unexpected epochs sequence on field index: previous(%v) > current(%v)", prevEpoch.Index, currEpoch.Index)
 	}
 	return nil
 }

@@ -63,11 +63,10 @@ type iclaimerBlockchain interface {
 
 	getBlockNumber(ctx context.Context) (*big.Int, error)
 
-	checkApplicationsForConsensusAddressChange(
+	getConsensusAddress(
 		ctx context.Context,
-		apps []*model.Application,
-		endBlock *big.Int,
-	) ([]consensusChanged, []error)
+		app *model.Application,
+	) (common.Address, error)
 }
 
 type claimerBlockchain struct {
@@ -75,11 +74,6 @@ type claimerBlockchain struct {
 	txOpts       *bind.TransactOpts
 	logger       *slog.Logger
 	defaultBlock config.DefaultBlock
-}
-
-type consensusChanged struct {
-	application *model.Application
-	newAddress  *common.Address
 }
 
 func (self *claimerBlockchain) submitClaimToBlockchain(
@@ -270,24 +264,11 @@ func (self *claimerBlockchain) findClaimAcceptedEventAndSucc(
 	}
 }
 
-func (self *claimerBlockchain) checkApplicationsForConsensusAddressChange(
+func (self *claimerBlockchain) getConsensusAddress(
 	ctx context.Context,
-	apps []*model.Application,
-	endBlock *big.Int,
-) ([]consensusChanged, []error) {
-	var changed []consensusChanged
-	var errs []error
-	for _, app := range apps {
-		consensusAddr, err := ethutil.GetConsensus(ctx, self.client, app.IApplicationAddress)
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		if app.IConsensusAddress != consensusAddr {
-			changed = append(changed, consensusChanged{app, &consensusAddr})
-		}
-	}
-	return changed, errs
+	app *model.Application,
+) (common.Address, error) {
+	return ethutil.GetConsensus(ctx, self.client, app.IApplicationAddress)
 }
 
 /* poll a transaction hash for its submission status and receipt */

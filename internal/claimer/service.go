@@ -129,7 +129,6 @@ func (s *Service) Tick() []error {
 		return errs
 	}
 
-	errs = append(errs, s.checkApplicationConsensus(endBlock)...)
 	errs = append(errs, s.submitClaimsAndUpdateDatabase(endBlock)...)
 	errs = append(errs, s.acceptClaimsAndUpdateDatabase(endBlock)...)
 

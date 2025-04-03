@@ -21,6 +21,9 @@ func (s *EvmReaderSuite) TestOutputExecution() {
 	wsClient := FakeWSEhtClient{}
 	s.evmReader.wsClient = &wsClient
 
+	otherDA := DataAvailability_InputBox
+	otherDA[0]++
+
 	// Prepare repository
 	s.repository.Unset("ListApplications")
 	s.repository.On(
@@ -32,6 +35,7 @@ func (s *EvmReaderSuite) TestOutputExecution() {
 		IApplicationAddress:  common.HexToAddress("0x2E663fe9aE92275242406A185AA4fC8174339D3E"),
 		IConsensusAddress:    common.HexToAddress("0xdeadbeef"),
 		IInputBoxAddress:     common.HexToAddress("0xBa3Cf8fB82E43D370117A0b7296f91ED674E94e3"),
+		DataAvailability:     DataAvailability_InputBox,
 		IInputBoxBlock:       0x10,
 		EpochLength:          10,
 		LastOutputCheckBlock: 0x10,
@@ -45,6 +49,7 @@ func (s *EvmReaderSuite) TestOutputExecution() {
 		IApplicationAddress:  common.HexToAddress("0x2E663fe9aE92275242406A185AA4fC8174339D3E"),
 		IConsensusAddress:    common.HexToAddress("0xdeadbeef"),
 		IInputBoxAddress:     common.HexToAddress("0xBa3Cf8fB82E43D370117A0b7296f91ED674E94e3"),
+		DataAvailability:     otherDA,
 		IInputBoxBlock:       0x10,
 		EpochLength:          10,
 		LastOutputCheckBlock: 0x11,

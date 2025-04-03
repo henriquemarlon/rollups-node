@@ -25,7 +25,14 @@ func (r *Service) checkForNewInputs(
 
 	r.Logger.Debug("Checking for new inputs")
 
-	appsByInputBox := indexApps(byInputBoxAddress, applications)
+	appsByInputBox := map[common.Address][]appContracts{}
+	for _, app := range applications {
+		if app.application.DataAvailability != DataAvailability_InputBox {
+			continue
+		}
+		key := app.application.IInputBoxAddress
+		appsByInputBox[key] = append(appsByInputBox[key], app)
+	}
 
 	for inputBoxAddress, inputBoxApps := range appsByInputBox {
 		r.Logger.Debug("Checking inputs for applications with the same InputBox",
@@ -337,8 +344,4 @@ func (r *Service) readInputsFromBlockchain(
 // byLastInputCheckBlock key extractor function intended to be used with `indexApps` function
 func byLastInputCheckBlock(app appContracts) uint64 {
 	return app.application.LastInputCheckBlock
-}
-
-func byInputBoxAddress(app appContracts) string {
-	return app.application.IInputBoxAddress.String()
 }

@@ -268,7 +268,6 @@ func (r *Service) Run(ctx context.Context, ready chan struct{}) error {
 func getAllRunningApplications(ctx context.Context, er EvmReaderRepository) ([]*Application, uint64, error) {
 	f := repository.ApplicationFilter{
 		State:            Pointer(ApplicationState_Enabled),
-		DataAvailability: &model.DataAvailability_InputBox,
 	}
 	return er.ListApplications(ctx, f, repository.Pagination{})
 }

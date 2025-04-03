@@ -13,10 +13,13 @@ import (
 	"github.com/stretchr/testify/mock"
 )
 
-func (s *EvmReaderSuite) TestItReadsInputsFromNewBlocks() {
+func (s *EvmReaderSuite) TestItReadsInputsFromNewBlocksFilteredByDA() {
 	//New EVM Reader
 	wsClient := FakeWSEhtClient{}
 	s.evmReader.wsClient = &wsClient
+
+	otherDA := DataAvailability_InputBox
+	otherDA[0]++
 
 	// Prepare repository
 	s.repository.Unset("ListApplications")
@@ -29,6 +32,7 @@ func (s *EvmReaderSuite) TestItReadsInputsFromNewBlocks() {
 		IApplicationAddress: common.HexToAddress("0x2E663fe9aE92275242406A185AA4fC8174339D3E"),
 		IConsensusAddress:   common.HexToAddress("0xdeadbeef"),
 		IInputBoxAddress:    common.HexToAddress("0xBa3Cf8fB82E43D370117A0b7296f91ED674E94e3"),
+		DataAvailability:    DataAvailability_InputBox,
 		IInputBoxBlock:      0x10,
 		EpochLength:         10,
 		LastInputCheckBlock: 0x00,
@@ -42,6 +46,7 @@ func (s *EvmReaderSuite) TestItReadsInputsFromNewBlocks() {
 		IApplicationAddress: common.HexToAddress("0x2E663fe9aE92275242406A185AA4fC8174339D3E"),
 		IConsensusAddress:   common.HexToAddress("0xdeadbeef"),
 		IInputBoxAddress:    common.HexToAddress("0xBa3Cf8fB82E43D370117A0b7296f91ED674E94e3"),
+		DataAvailability:    otherDA,
 		IInputBoxBlock:      0x10,
 		EpochLength:         10,
 		LastInputCheckBlock: 0x11,
@@ -134,11 +139,12 @@ func (s *EvmReaderSuite) TestItReadsInputsFromNewBlocks() {
 	wsClient.fireNewHead(&header1)
 	time.Sleep(time.Second)
 
-	inputBox.AssertNumberOfCalls(s.T(), "RetrieveInputs", 2)
+	// retrieve inputs only for the application with: DataAvailability_InputBox
+	inputBox.AssertNumberOfCalls(s.T(), "RetrieveInputs", 1)
 	s.repository.AssertNumberOfCalls(
 		s.T(),
 		"CreateEpochsAndInputs",
-		2,
+		1,
 	)
 }
 
@@ -157,6 +163,7 @@ func (s *EvmReaderSuite) TestItUpdatesLastInputCheckBlockWhenThereIsNoInputs() {
 		IApplicationAddress: common.HexToAddress("0x2E663fe9aE92275242406A185AA4fC8174339D3E"),
 		IConsensusAddress:   common.HexToAddress("0xdeadbeef"),
 		IInputBoxAddress:    common.HexToAddress("0xBa3Cf8fB82E43D370117A0b7296f91ED674E94e3"),
+		DataAvailability:    DataAvailability_InputBox,
 		IInputBoxBlock:      0x10,
 		EpochLength:         10,
 		LastInputCheckBlock: 0x00,
@@ -170,6 +177,7 @@ func (s *EvmReaderSuite) TestItUpdatesLastInputCheckBlockWhenThereIsNoInputs() {
 		IApplicationAddress: common.HexToAddress("0x2E663fe9aE92275242406A185AA4fC8174339D3E"),
 		IConsensusAddress:   common.HexToAddress("0xdeadbeef"),
 		IInputBoxAddress:    common.HexToAddress("0xBa3Cf8fB82E43D370117A0b7296f91ED674E94e3"),
+		DataAvailability:    DataAvailability_InputBox,
 		IInputBoxBlock:      0x10,
 		EpochLength:         10,
 		LastInputCheckBlock: 0x11,
@@ -329,6 +337,7 @@ func (s *EvmReaderSuite) TestItReadsMultipleInputsFromSingleNewBlock() {
 		IApplicationAddress: common.HexToAddress("0x2E663fe9aE92275242406A185AA4fC8174339D3E"),
 		IConsensusAddress:   common.HexToAddress("0xdeadbeef"),
 		IInputBoxAddress:    common.HexToAddress("0xBa3Cf8fB82E43D370117A0b7296f91ED674E94e3"),
+		DataAvailability:    DataAvailability_InputBox,
 		IInputBoxBlock:      0x10,
 		EpochLength:         10,
 		LastInputCheckBlock: 0x12,
@@ -411,6 +420,7 @@ func (s *EvmReaderSuite) TestItStartsWhenLasProcessedBlockIsTheMostRecentBlock()
 		IApplicationAddress: common.HexToAddress("0x2E663fe9aE92275242406A185AA4fC8174339D3E"),
 		IConsensusAddress:   common.HexToAddress("0xdeadbeef"),
 		IInputBoxAddress:    common.HexToAddress("0xBa3Cf8fB82E43D370117A0b7296f91ED674E94e3"),
+		DataAvailability:    DataAvailability_InputBox,
 		IInputBoxBlock:      0x10,
 		EpochLength:         10,
 		LastInputCheckBlock: 0x13,

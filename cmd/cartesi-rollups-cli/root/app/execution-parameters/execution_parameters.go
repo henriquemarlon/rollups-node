@@ -295,8 +295,6 @@ func getParameterValue(params *model.ExecutionParameters, parameter string) (str
 	switch parameter {
 	case "snapshot_policy":
 		return string(params.SnapshotPolicy), nil
-	case "snapshot_retention":
-		return fmt.Sprintf("%d", params.SnapshotRetention), nil
 	case "advance_inc_cycles":
 		return fmt.Sprintf("%d", params.AdvanceIncCycles), nil
 	case "advance_max_cycles":
@@ -342,12 +340,6 @@ func setParameterValue(params *model.ExecutionParameters, parameter, value strin
 		default:
 			return fmt.Errorf("invalid snapshot policy: %s. Valid values are: NONE, EACH_INPUT, EACH_EPOCH", value)
 		}
-	case "snapshot_retention":
-		val, err := strconv.ParseUint(value, 10, 64)
-		if err != nil {
-			return fmt.Errorf("invalid value for snapshot_retention: %w", err)
-		}
-		params.SnapshotRetention = val
 	case "advance_inc_cycles":
 		val, err := strconv.ParseUint(value, 10, 64)
 		if err != nil {
@@ -478,7 +470,6 @@ func validateParameters(params *model.ExecutionParameters) error {
 
 func printParameters(params *model.ExecutionParameters) {
 	fmt.Printf("snapshot_policy: %s\n", params.SnapshotPolicy)
-	fmt.Printf("snapshot_retention: %d\n", params.SnapshotRetention)
 	fmt.Printf("advance_inc_cycles: %d\n", params.AdvanceIncCycles)
 	fmt.Printf("advance_max_cycles: %d\n", params.AdvanceMaxCycles)
 	fmt.Printf("inspect_inc_cycles: %d\n", params.InspectIncCycles)

@@ -951,9 +951,6 @@
 					"snapshot_policy": {
 						"$ref": "#/components/schemas/SnapshotPolicy"
 					},
-					"snapshot_retention": {
-						"type": "integer"
-					},
 					"advance_inc_cycles": {
 						"type": "integer"
 					},

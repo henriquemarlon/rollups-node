@@ -120,7 +120,6 @@ func (r *PostgresRepository) GetApplication(
 			table.Application.UpdatedAt,
 			table.ExecutionParameters.ApplicationID,
 			table.ExecutionParameters.SnapshotPolicy,
-			table.ExecutionParameters.SnapshotRetention,
 			table.ExecutionParameters.AdvanceIncCycles,
 			table.ExecutionParameters.AdvanceMaxCycles,
 			table.ExecutionParameters.InspectIncCycles,
@@ -168,7 +167,6 @@ func (r *PostgresRepository) GetApplication(
 		&app.UpdatedAt,
 		&app.ExecutionParameters.ApplicationID,
 		&app.ExecutionParameters.SnapshotPolicy,
-		&app.ExecutionParameters.SnapshotRetention,
 		&app.ExecutionParameters.AdvanceIncCycles,
 		&app.ExecutionParameters.AdvanceMaxCycles,
 		&app.ExecutionParameters.InspectIncCycles,
@@ -385,7 +383,6 @@ func (r *PostgresRepository) ListApplications(
 			table.Application.UpdatedAt,
 			table.ExecutionParameters.ApplicationID,
 			table.ExecutionParameters.SnapshotPolicy,
-			table.ExecutionParameters.SnapshotRetention,
 			table.ExecutionParameters.AdvanceIncCycles,
 			table.ExecutionParameters.AdvanceMaxCycles,
 			table.ExecutionParameters.InspectIncCycles,
@@ -462,7 +459,6 @@ func (r *PostgresRepository) ListApplications(
 			&app.UpdatedAt,
 			&app.ExecutionParameters.ApplicationID,
 			&app.ExecutionParameters.SnapshotPolicy,
-			&app.ExecutionParameters.SnapshotRetention,
 			&app.ExecutionParameters.AdvanceIncCycles,
 			&app.ExecutionParameters.AdvanceMaxCycles,
 			&app.ExecutionParameters.InspectIncCycles,
@@ -497,7 +493,6 @@ func (r *PostgresRepository) GetExecutionParameters(
 		SELECT(
 			table.ExecutionParameters.ApplicationID,
 			table.ExecutionParameters.SnapshotPolicy,
-			table.ExecutionParameters.SnapshotRetention,
 			table.ExecutionParameters.AdvanceIncCycles,
 			table.ExecutionParameters.AdvanceMaxCycles,
 			table.ExecutionParameters.InspectIncCycles,
@@ -522,7 +517,6 @@ func (r *PostgresRepository) GetExecutionParameters(
 	err := row.Scan(
 		&ep.ApplicationID,
 		&ep.SnapshotPolicy,
-		&ep.SnapshotRetention,
 		&ep.AdvanceIncCycles,
 		&ep.AdvanceMaxCycles,
 		&ep.InspectIncCycles,
@@ -555,7 +549,6 @@ func (r *PostgresRepository) UpdateExecutionParameters(
 	upd := table.ExecutionParameters.
 		UPDATE(
 			table.ExecutionParameters.SnapshotPolicy,
-			table.ExecutionParameters.SnapshotRetention,
 			table.ExecutionParameters.AdvanceIncCycles,
 			table.ExecutionParameters.AdvanceMaxCycles,
 			table.ExecutionParameters.InspectIncCycles,
@@ -571,7 +564,6 @@ func (r *PostgresRepository) UpdateExecutionParameters(
 		).
 		SET(
 			ep.SnapshotPolicy,
-			ep.SnapshotRetention,
 			ep.AdvanceIncCycles,
 			ep.AdvanceMaxCycles,
 			ep.InspectIncCycles,

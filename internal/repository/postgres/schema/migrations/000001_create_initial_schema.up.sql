@@ -93,7 +93,6 @@ FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 CREATE TABLE "execution_parameters" (
     "application_id" INT PRIMARY KEY,
     "snapshot_policy" "SnapshotPolicy" NOT NULL DEFAULT 'NONE',
-    "snapshot_retention" BIGINT NOT NULL CHECK ("snapshot_retention" >= 0) DEFAULT 0, -- 0 means no retention
     "advance_inc_cycles" BIGINT NOT NULL CHECK ("advance_inc_cycles" > 0) DEFAULT 4194304, -- 1 << 22
     "advance_max_cycles" BIGINT NOT NULL CHECK ("advance_max_cycles" > 0) DEFAULT 4611686018427387903, -- uint64 max >> 2
     "inspect_inc_cycles" BIGINT NOT NULL CHECK ("inspect_inc_cycles" > 0) DEFAULT 4194304, -- 1 << 22

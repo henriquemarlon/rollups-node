@@ -172,7 +172,6 @@ func (e SnapshotPolicy) String() string {
 type ExecutionParameters struct {
 	ApplicationID         int64          `sql:"primary_key" json:"-"`
 	SnapshotPolicy        SnapshotPolicy `json:"snapshot_policy"`
-	SnapshotRetention     uint64         `json:"snapshot_retention"`
 	AdvanceIncCycles      uint64         `json:"advance_inc_cycles"`
 	AdvanceMaxCycles      uint64         `json:"advance_max_cycles"`
 	InspectIncCycles      uint64         `json:"inspect_inc_cycles"`

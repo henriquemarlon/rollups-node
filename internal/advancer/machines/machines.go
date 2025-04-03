@@ -51,58 +51,25 @@ type Machines struct {
 	Logger     *slog.Logger
 }
 
-func getAllRunningApplications(ctx context.Context, mr MachinesRepository) ([]*Application, uint64, error) {
-	f := repository.ApplicationFilter{State: Pointer(ApplicationState_Enabled)}
-	return mr.ListApplications(ctx, f, repository.Pagination{})
-}
-
-// Load initializes the cartesi machines.
-// Load advances a machine to the last processed input stored in the database.
-//
-// Load does not fail when one of those machines fail to initialize.
-// It stores the error to be returned later and continues to initialize the other machines.
-func Load(
+func New(
 	ctx context.Context,
 	repo MachinesRepository,
 	verbosity cm.MachineLogLevel,
 	logger *slog.Logger,
 	checkHash bool,
-) (*Machines, error) {
-	apps, _, err := getAllRunningApplications(ctx, repo)
-	if err != nil {
-		return nil, err
-	}
-
-	machines := map[int64]*nm.NodeMachine{}
-	var errs error
-
-	for _, app := range apps {
-		// Creates the machine.
-		machine, err := createMachine(ctx, verbosity, app, logger, checkHash)
-		if err != nil {
-			err = fmt.Errorf("failed to create machine from snapshot %s (%s): %w", app.TemplateURI, app.Name, err)
-			errs = errors.Join(errs, err)
-			continue
-		}
-
-		// Advances the machine until it catches up with the state of the database (if necessary).
-		err = catchUp(ctx, repo, app, machine, logger)
-		if err != nil {
-			err = fmt.Errorf("failed to advance cartesi machine (%v): %w", app, err)
-			errs = errors.Join(errs, err, machine.Close())
-			continue
-		}
-
-		machines[app.ID] = machine
-	}
-
+) *Machines {
 	return &Machines{
-		machines:   machines,
+		machines:   map[int64]*nm.NodeMachine{},
 		repository: repo,
 		verbosity:  verbosity,
 		checkHash:  checkHash,
 		Logger:     logger,
-	}, errs
+	}
+}
+
+func getAllRunningApplications(ctx context.Context, mr MachinesRepository) ([]*Application, uint64, error) {
+	f := repository.ApplicationFilter{State: Pointer(ApplicationState_Enabled)}
+	return mr.ListApplications(ctx, f, repository.Pagination{})
 }
 
 func (m *Machines) UpdateMachines(ctx context.Context) error {

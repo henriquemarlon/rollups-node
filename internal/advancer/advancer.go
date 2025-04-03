@@ -74,10 +74,7 @@ func Create(ctx context.Context, c *CreateInfo) (*Service, error) {
 		return nil, fmt.Errorf("repository on advancer service Create is nil")
 	}
 
-	machines, err := machines.Load(ctx, c.Repository, c.Config.RemoteMachineLogLevel, s.Logger, c.Config.FeatureMachineHashCheckEnabled)
-	if err != nil {
-		return nil, err
-	}
+	machines := machines.New(ctx, c.Repository, c.Config.RemoteMachineLogLevel, s.Logger, c.Config.FeatureMachineHashCheckEnabled)
 	s.machines = machines
 
 	if c.Config.FeatureInspectEnabled {

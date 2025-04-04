@@ -429,7 +429,7 @@
 		{
 			"name": "cartesi_getReport",
 			"summary": "Get a specific report",
-			"description": "Fetches a single report by application, epoch_index, input_index, and report_index.",
+			"description": "Fetches a single report by application and report_index.",
 			"params": [
 				{
 					"name": "application",

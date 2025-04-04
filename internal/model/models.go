@@ -382,6 +382,7 @@ func (e InputCompletionStatus) String() string {
 
 type Output struct {
 	InputEpochApplicationID  int64         `sql:"primary_key" json:"-"`
+	EpochIndex               uint64        `json:"epoch_index"`
 	InputIndex               uint64        `json:"input_index"`
 	Index                    uint64        `sql:"primary_key" json:"index"`
 	RawData                  []byte        `json:"raw_data"`
@@ -397,11 +398,13 @@ func (i *Output) MarshalJSON() ([]byte, error) {
 	type Alias Output
 	// Define a new structure that embeds the alias but overrides the hex fields.
 	aux := &struct {
+		EpochIndex string `json:"epoch_index"`
 		InputIndex string `json:"input_index"`
 		Index      string `json:"index"`
 		RawData    string `json:"raw_data"`
 		*Alias
 	}{
+		EpochIndex: fmt.Sprintf("0x%x", i.EpochIndex),
 		InputIndex: fmt.Sprintf("0x%x", i.InputIndex),
 		Index:      fmt.Sprintf("0x%x", i.Index),
 		RawData:    "0x" + hex.EncodeToString(i.RawData),
@@ -412,6 +415,7 @@ func (i *Output) MarshalJSON() ([]byte, error) {
 
 type Report struct {
 	InputEpochApplicationID int64     `sql:"primary_key" json:"-"`
+	EpochIndex              uint64    `json:"epoch_index"`
 	InputIndex              uint64    `json:"input_index"`
 	Index                   uint64    `sql:"primary_key" json:"index"`
 	RawData                 []byte    `json:"raw_data"`
@@ -424,11 +428,13 @@ func (r *Report) MarshalJSON() ([]byte, error) {
 	type Alias Report
 	// Define a new structure that embeds the alias but overrides the hex fields.
 	aux := &struct {
+		EpochIndex string `json:"epoch_index"`
 		InputIndex string `json:"input_index"`
 		Index      string `json:"index"`
 		RawData    string `json:"raw_data"`
 		*Alias
 	}{
+		EpochIndex: fmt.Sprintf("0x%x", r.EpochIndex),
 		InputIndex: fmt.Sprintf("0x%x", r.InputIndex),
 		Index:      fmt.Sprintf("0x%x", r.Index),
 		RawData:    "0x" + hex.EncodeToString(r.RawData),

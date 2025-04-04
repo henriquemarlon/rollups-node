@@ -756,6 +756,9 @@
 			"Output": {
 				"type": "object",
 				"properties": {
+					"epoch_index": {
+						"type": "string"
+					},
 					"input_index": {
 						"type": "string"
 					},
@@ -889,6 +892,9 @@
 			"Report": {
 				"type": "object",
 				"properties": {
+					"epoch_index": {
+						"type": "string"
+					},
 					"input_index": {
 						"type": "string"
 					},

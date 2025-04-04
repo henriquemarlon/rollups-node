@@ -38,12 +38,17 @@ func (r *PostgresRepository) GetOutput(
 			table.Output.ExecutionTransactionHash,
 			table.Output.CreatedAt,
 			table.Output.UpdatedAt,
+			table.Input.EpochIndex,
 		).
 		FROM(
-			table.Output.
-				INNER_JOIN(table.Application,
-					table.Output.InputEpochApplicationID.EQ(table.Application.ID),
-				),
+			table.Output.INNER_JOIN(
+				table.Application,
+				table.Output.InputEpochApplicationID.EQ(table.Application.ID),
+			).INNER_JOIN(
+				table.Input,
+				table.Output.InputIndex.EQ(table.Input.Index).
+					AND(table.Output.InputEpochApplicationID.EQ(table.Input.EpochApplicationID)),
+			),
 		).
 		WHERE(
 			whereClause.
@@ -64,6 +69,7 @@ func (r *PostgresRepository) GetOutput(
 		&o.ExecutionTransactionHash,
 		&o.CreatedAt,
 		&o.UpdatedAt,
+		&o.EpochIndex,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -175,53 +181,30 @@ func (r *PostgresRepository) ListOutputs(
 			table.Output.ExecutionTransactionHash,
 			table.Output.CreatedAt,
 			table.Output.UpdatedAt,
+			table.Input.EpochIndex,
 			postgres.COUNT(postgres.STAR).OVER().AS("total_count"),
 		).
 		FROM(
-			table.Output.
-				INNER_JOIN(
-					table.Application,
-					table.Output.InputEpochApplicationID.EQ(table.Application.ID),
-				),
+			table.Output.INNER_JOIN(
+				table.Application,
+				table.Output.InputEpochApplicationID.EQ(table.Application.ID),
+			).INNER_JOIN(
+				table.Input,
+				table.Output.InputIndex.EQ(table.Input.Index).
+					AND(table.Output.InputEpochApplicationID.EQ(table.Input.EpochApplicationID)),
+			),
 		)
 
 	conditions := []postgres.BoolExpression{whereClause}
 	if f.BlockRange != nil {
-		sel = sel.
-			FROM( // Overwrite FROM clause to include input table
-				table.Output.INNER_JOIN(
-					table.Application,
-					table.Output.InputEpochApplicationID.EQ(table.Application.ID),
-				).
-					INNER_JOIN(
-						table.Input,
-						table.Output.InputIndex.EQ(table.Input.Index).
-							AND(table.Output.InputEpochApplicationID.EQ(table.Input.EpochApplicationID)),
-					),
-			)
-
 		conditions = append(conditions, table.Input.BlockNumber.BETWEEN(
 			postgres.RawFloat(fmt.Sprintf("%d", f.BlockRange.Start)),
 			postgres.RawFloat(fmt.Sprintf("%d", f.BlockRange.End)),
 		))
-
 		conditions = append(conditions, table.Input.Status.EQ(postgres.NewEnumValue(model.InputCompletionStatus_Accepted.String())))
 	}
 
 	if f.EpochIndex != nil {
-		sel = sel.
-			FROM( // Overwrite FROM clause to include input table
-				table.Output.INNER_JOIN(
-					table.Application,
-					table.Output.InputEpochApplicationID.EQ(table.Application.ID),
-				).
-					INNER_JOIN(
-						table.Input,
-						table.Output.InputIndex.EQ(table.Input.Index).
-							AND(table.Output.InputEpochApplicationID.EQ(table.Input.EpochApplicationID)),
-					),
-			)
-
 		conditions = append(conditions, table.Input.EpochIndex.EQ(postgres.RawFloat(fmt.Sprintf("%d", *f.EpochIndex))))
 		conditions = append(conditions, table.Input.Status.EQ(postgres.NewEnumValue(model.InputCompletionStatus_Accepted.String())))
 	}
@@ -272,6 +255,7 @@ func (r *PostgresRepository) ListOutputs(
 			&out.ExecutionTransactionHash,
 			&out.CreatedAt,
 			&out.UpdatedAt,
+			&out.EpochIndex,
 			&total,
 		)
 		if err != nil {
@@ -304,6 +288,7 @@ func (r *PostgresRepository) GetLastOutputBeforeBlock(
 			table.Output.ExecutionTransactionHash,
 			table.Output.CreatedAt,
 			table.Output.UpdatedAt,
+			table.Input.EpochIndex,
 		).
 		FROM(
 			table.Output.INNER_JOIN(
@@ -340,6 +325,7 @@ func (r *PostgresRepository) GetLastOutputBeforeBlock(
 		&out.ExecutionTransactionHash,
 		&out.CreatedAt,
 		&out.UpdatedAt,
+		&out.EpochIndex,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil

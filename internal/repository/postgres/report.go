@@ -35,12 +35,17 @@ func (r *PostgresRepository) GetReport(
 			table.Report.RawData,
 			table.Report.CreatedAt,
 			table.Report.UpdatedAt,
+			table.Input.EpochIndex,
 		).
 		FROM(
-			table.Report.
-				INNER_JOIN(table.Application,
-					table.Report.InputEpochApplicationID.EQ(table.Application.ID),
-				),
+			table.Report.INNER_JOIN(
+				table.Application,
+				table.Report.InputEpochApplicationID.EQ(table.Application.ID),
+			).INNER_JOIN(
+				table.Input,
+				table.Report.InputIndex.EQ(table.Input.Index).
+					AND(table.Report.InputEpochApplicationID.EQ(table.Input.EpochApplicationID)),
+			),
 		).
 		WHERE(
 			whereClause.
@@ -58,6 +63,7 @@ func (r *PostgresRepository) GetReport(
 		&rp.RawData,
 		&rp.CreatedAt,
 		&rp.UpdatedAt,
+		&rp.EpochIndex,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -88,13 +94,18 @@ func (r *PostgresRepository) ListReports(
 			table.Report.RawData,
 			table.Report.CreatedAt,
 			table.Report.UpdatedAt,
+			table.Input.EpochIndex,
 			postgres.COUNT(postgres.STAR).OVER().AS("total_count"),
 		).
 		FROM(
-			table.Report.
-				INNER_JOIN(table.Application,
-					table.Report.InputEpochApplicationID.EQ(table.Application.ID),
-				),
+			table.Report.INNER_JOIN(
+				table.Application,
+				table.Report.InputEpochApplicationID.EQ(table.Application.ID),
+			).INNER_JOIN(
+				table.Input,
+				table.Report.InputIndex.EQ(table.Input.Index).
+					AND(table.Report.InputEpochApplicationID.EQ(table.Input.EpochApplicationID)),
+			),
 		)
 
 	conditions := []postgres.BoolExpression{whereClause}
@@ -103,19 +114,6 @@ func (r *PostgresRepository) ListReports(
 	}
 
 	if f.EpochIndex != nil {
-		sel = sel.
-			FROM( // Overwrite FROM clause to include input table
-				table.Report.INNER_JOIN(
-					table.Application,
-					table.Report.InputEpochApplicationID.EQ(table.Application.ID),
-				).
-					INNER_JOIN(
-						table.Input,
-						table.Report.InputIndex.EQ(table.Input.Index).
-							AND(table.Report.InputEpochApplicationID.EQ(table.Input.EpochApplicationID)),
-					),
-			)
-
 		conditions = append(conditions, table.Input.EpochIndex.EQ(postgres.RawFloat(fmt.Sprintf("%d", *f.EpochIndex))))
 		conditions = append(conditions, table.Input.Status.EQ(postgres.NewEnumValue(model.InputCompletionStatus_Accepted.String())))
 	}
@@ -147,6 +145,7 @@ func (r *PostgresRepository) ListReports(
 			&rp.RawData,
 			&rp.CreatedAt,
 			&rp.UpdatedAt,
+			&rp.EpochIndex,
 			&total,
 		)
 		if err != nil {

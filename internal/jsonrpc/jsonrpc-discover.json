@@ -48,7 +48,7 @@
 					"name": "application",
 					"description": "The application's name or hex encoded address.",
 					"schema": {
-						"type": "string"
+						"$ref": "#/components/schemas/NameOrAddress"
 					},
 					"required": true
 				}
@@ -69,7 +69,7 @@
 					"name": "application",
 					"description": "The application's name or hex encoded address.",
 					"schema": {
-						"type": "string"
+						"$ref": "#/components/schemas/NameOrAddress"
 					},
 					"required": true
 				},
@@ -118,7 +118,7 @@
 					"name": "application",
 					"description": "The application's name or hex encoded address.",
 					"schema": {
-						"type": "string"
+						"$ref": "#/components/schemas/NameOrAddress"
 					},
 					"required": true
 				},
@@ -126,7 +126,7 @@
 					"name": "epoch_index",
 					"description": "The index of the epoch to be retrieved (hex encoded).",
 					"schema": {
-						"type": "string"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"required": true
 				}
@@ -147,7 +147,7 @@
 					"name": "application",
 					"description": "The application's name or hex encoded address.",
 					"schema": {
-						"type": "string"
+						"$ref": "#/components/schemas/NameOrAddress"
 					},
 					"required": true
 				}
@@ -168,7 +168,7 @@
 					"name": "application",
 					"description": "The application's name or hex encoded address.",
 					"schema": {
-						"type": "string"
+						"$ref": "#/components/schemas/NameOrAddress"
 					},
 					"required": true
 				},
@@ -176,7 +176,7 @@
 					"name": "epoch_index",
 					"description": "Filter inputs by a specific epoch index (hex encoded).",
 					"schema": {
-						"type": "string"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"required": false
 				},
@@ -184,8 +184,7 @@
 					"name": "sender",
 					"description": "Filter inputs by the sender's address (hex encoded), extracted from raw data.",
 					"schema": {
-						"type": "string",
-						"format": "byte"
+						"$ref": "#/components/schemas/EthereumAddress"
 					},
 					"required": false
 				},
@@ -226,7 +225,7 @@
 					"name": "application",
 					"description": "The application's name or hex encoded address.",
 					"schema": {
-						"type": "string"
+						"$ref": "#/components/schemas/NameOrAddress"
 					},
 					"required": true
 				},
@@ -234,7 +233,7 @@
 					"name": "input_index",
 					"description": "The index of the input to be retrieved (hex encoded).",
 					"schema": {
-						"type": "string"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"required": true
 				}
@@ -255,7 +254,7 @@
 					"name": "application",
 					"description": "The application's name or hex encoded address.",
 					"schema": {
-						"type": "string"
+						"$ref": "#/components/schemas/NameOrAddress"
 					},
 					"required": true
 				}
@@ -276,7 +275,7 @@
 					"name": "application",
 					"description": "The application's name or hex encoded address.",
 					"schema": {
-						"type": "string"
+						"$ref": "#/components/schemas/NameOrAddress"
 					},
 					"required": true
 				},
@@ -284,7 +283,7 @@
 					"name": "epoch_index",
 					"description": "Filter outputs by a specific epoch index (hex encoded).",
 					"schema": {
-						"type": "string"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"required": false
 				},
@@ -292,7 +291,7 @@
 					"name": "input_index",
 					"description": "Filter outputs by a specific input index (hex encoded).",
 					"schema": {
-						"type": "string"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"required": false
 				},
@@ -300,8 +299,7 @@
 					"name": "output_type",
 					"description": "Filter outputs by output type (first 4 bytes of raw data hex encoded).",
 					"schema": {
-						"type": "string",
-						"format": "byte"
+						"$ref": "#/components/schemas/FunctionSelector"
 					},
 					"required": false
 				},
@@ -309,8 +307,7 @@
 					"name": "voucher_address",
 					"description": "Filter outputs by the voucher address (hex encoded), extracted from raw data.",
 					"schema": {
-						"type": "string",
-						"format": "byte"
+						"$ref": "#/components/schemas/EthereumAddress"
 					},
 					"required": false
 				},
@@ -351,7 +348,7 @@
 					"name": "application",
 					"description": "The application's name or hex encoded address.",
 					"schema": {
-						"type": "string"
+						"$ref": "#/components/schemas/NameOrAddress"
 					},
 					"required": true
 				},
@@ -359,7 +356,7 @@
 					"name": "output_index",
 					"description": "The index of the output to be retrieved (hex encoded).",
 					"schema": {
-						"type": "string"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"required": true
 				}
@@ -380,7 +377,7 @@
 					"name": "application",
 					"description": "The application's name or hex encoded address.",
 					"schema": {
-						"type": "string"
+						"$ref": "#/components/schemas/NameOrAddress"
 					},
 					"required": true
 				},
@@ -388,7 +385,7 @@
 					"name": "epoch_index",
 					"description": "Optional filter by epoch index (hex encoded).",
 					"schema": {
-						"type": "string"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"required": false
 				},
@@ -396,7 +393,7 @@
 					"name": "input_index",
 					"description": "Optional filter by input index (hex encoded).",
 					"schema": {
-						"type": "string"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"required": false
 				},
@@ -435,7 +432,7 @@
 					"name": "application",
 					"description": "The application's name or hex encoded address.",
 					"schema": {
-						"type": "string"
+						"$ref": "#/components/schemas/NameOrAddress"
 					},
 					"required": true
 				},
@@ -443,7 +440,7 @@
 					"name": "report_index",
 					"description": "The index of the report to be retrieved (hex encoded).",
 					"schema": {
-						"type": "string"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"required": true
 				}
@@ -475,55 +472,44 @@
 			"Application": {
 				"type": "object",
 				"properties": {
-					"id": {
-						"type": "integer"
-					},
 					"name": {
-						"type": "string"
+						"$ref": "#/components/schemas/ApplicationName"
 					},
 					"iapplication_address": {
-						"type": "string",
-						"format": "byte"
+						"$ref": "#/components/schemas/EthereumAddress"
 					},
 					"iconsensus_address": {
-						"type": "string",
-						"format": "byte"
+						"$ref": "#/components/schemas/EthereumAddress"
 					},
 					"iinputbox_address": {
-						"type": "string",
-						"format": "byte"
+						"$ref": "#/components/schemas/EthereumAddress"
 					},
 					"template_hash": {
-						"type": "string",
-						"format": "byte"
+						"$ref": "#/components/schemas/Hash"
 					},
 					"epoch_length": {
-						"type": "integer"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"data_availability": {
-						"type": "string",
-						"format": "byte"
+						"$ref": "#/components/schemas/FunctionSelector"
 					},
 					"state": {
-						"type": "string"
+						"$ref": "#/components/schemas/ApplicationState"
 					},
 					"reason": {
 						"type": "string"
 					},
 					"iinputbox_block": {
-						"type": "string",
-						"format": "byte"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"last_input_check_block": {
-						"type": "string",
-						"format": "byte"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"last_output_check_block": {
-						"type": "string",
-						"format": "byte"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"processed_inputs": {
-						"type": "integer"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"created_at": {
 						"type": "string",
@@ -576,29 +562,27 @@
 				"type": "object",
 				"properties": {
 					"index": {
-						"type": "string"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"first_block": {
-						"type": "string"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"last_block": {
-						"type": "string"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"claim_hash": {
-						"type": "string",
-						"format": "byte",
+						"$ref": "#/components/schemas/Hash",
 						"nullable": true
 					},
 					"claim_transaction_hash": {
-						"type": "string",
-						"format": "byte",
+						"$ref": "#/components/schemas/Hash",
 						"nullable": true
 					},
 					"status": {
 						"$ref": "#/components/schemas/EpochStatus"
 					},
 					"virtual_index": {
-						"type": "string"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"created_at": {
 						"type": "string",
@@ -650,17 +634,16 @@
 				"type": "object",
 				"properties": {
 					"epoch_index": {
-						"type": "string"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"index": {
-						"type": "string"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"block_number": {
-						"type": "string"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"raw_data": {
-						"type": "string",
-						"format": "byte"
+						"$ref": "#/components/schemas/ByteArray"
 					},
 					"decoded_data": {
 						"$ref": "#/components/schemas/EvmAdvance",
@@ -670,18 +653,15 @@
 						"$ref": "#/components/schemas/InputCompletionStatus"
 					},
 					"machine_hash": {
-						"type": "string",
-						"format": "byte",
+						"$ref": "#/components/schemas/Hash",
 						"nullable": true
 					},
 					"outputs_hash": {
-						"type": "string",
-						"format": "byte",
+						"$ref": "#/components/schemas/Hash",
 						"nullable": true
 					},
 					"transaction_reference": {
-						"type": "string",
-						"format": "byte"
+						"$ref": "#/components/schemas/ByteArray"
 					},
 					"created_at": {
 						"type": "string",
@@ -700,26 +680,25 @@
 						"type": "string"
 					},
 					"application_contract": {
-						"type": "string"
+						"$ref": "#/components/schemas/EthereumAddress"
 					},
 					"sender": {
-						"type": "string"
+						"$ref": "#/components/schemas/EthereumAddress"
 					},
 					"block_number": {
-						"type": "string"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"block_timestamp": {
-						"type": "string"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"prev_randao": {
 						"type": "string"
 					},
 					"index": {
-						"type": "string"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"payload": {
-						"type": "string",
-						"format": "byte"
+						"$ref": "#/components/schemas/ByteArray"
 					}
 				}
 			},
@@ -749,7 +728,7 @@
 				"type": "object",
 				"properties": {
 					"processed_inputs": {
-						"type": "integer"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					}
 				}
 			},
@@ -757,37 +736,33 @@
 				"type": "object",
 				"properties": {
 					"epoch_index": {
-						"type": "string"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"input_index": {
-						"type": "string"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"index": {
-						"type": "string"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"raw_data": {
-						"type": "string",
-						"format": "byte"
+						"$ref": "#/components/schemas/ByteArray"
 					},
 					"decoded_data": {
 						"$ref": "#/components/schemas/DecodedOutput",
 						"nullable": true
 					},
 					"hash": {
-						"type": "string",
-						"format": "byte",
+						"$ref": "#/components/schemas/Hash",
 						"nullable": true
 					},
 					"output_hashes_siblings": {
 						"type": "array",
 						"items": {
-							"type": "string",
-							"format": "byte"
+							"$ref": "#/components/schemas/Hash"
 						}
 					},
 					"execution_transaction_hash": {
-						"type": "string",
-						"format": "byte",
+						"$ref": "#/components/schemas/Hash",
 						"nullable": true
 					},
 					"created_at": {
@@ -804,14 +779,13 @@
 				"type": "object",
 				"properties": {
 					"index": {
-						"type": "integer"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"type": {
 						"type": "string"
 					},
 					"payload": {
-						"type": "string",
-						"format": "byte"
+						"$ref": "#/components/schemas/ByteArray"
 					}
 				}
 			},
@@ -819,20 +793,19 @@
 				"type": "object",
 				"properties": {
 					"index": {
-						"type": "integer"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"type": {
 						"type": "string"
 					},
 					"destination": {
-						"type": "string"
+						"$ref": "#/components/schemas/EthereumAddress"
 					},
 					"value": {
 						"type": "string"
 					},
 					"payload": {
-						"type": "string",
-						"format": "byte"
+						"$ref": "#/components/schemas/ByteArray"
 					}
 				}
 			},
@@ -840,17 +813,16 @@
 				"type": "object",
 				"properties": {
 					"index": {
-						"type": "integer"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"type": {
 						"type": "string"
 					},
 					"destination": {
-						"type": "string"
+						"$ref": "#/components/schemas/EthereumAddress"
 					},
 					"payload": {
-						"type": "string",
-						"format": "byte"
+						"$ref": "#/components/schemas/ByteArray"
 					}
 				}
 			},
@@ -893,17 +865,16 @@
 				"type": "object",
 				"properties": {
 					"epoch_index": {
-						"type": "string"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"input_index": {
-						"type": "string"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"index": {
-						"type": "string"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"raw_data": {
-						"type": "string",
-						"format": "byte"
+						"$ref": "#/components/schemas/ByteArray"
 					},
 					"created_at": {
 						"type": "string",
@@ -952,16 +923,16 @@
 						"$ref": "#/components/schemas/SnapshotPolicy"
 					},
 					"advance_inc_cycles": {
-						"type": "integer"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"advance_max_cycles": {
-						"type": "integer"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"inspect_inc_cycles": {
-						"type": "integer"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"inspect_max_cycles": {
-						"type": "integer"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"advance_inc_deadline": {
 						"type": "string",
@@ -1003,6 +974,53 @@
 						"format": "date-time"
 					}
 				}
+			},
+			"ApplicationState": {
+				"type": "string",
+				"enum": [
+					"ENABLED",
+					"DISABLED",
+					"INOPERABLE"
+				]
+			},
+			"EthereumAddress": {
+				"type": "string",
+				"format": "hex-byte",
+				"pattern": "^0x[a-fA-F0-9]{40}$"
+			},
+			"Hash": {
+				"type": "string",
+				"format": "hex-byte",
+				"pattern": "^0x[a-fA-F0-9]{64}$"
+			},
+			"ByteArray": {
+				"type": "string",
+				"format": "hex-byte",
+				"pattern": "^0x[a-fA-F0-9]*$"
+			},
+			"UnsignedInteger": {
+				"type": "string",
+				"format": "hex-uint64",
+				"pattern": "^0x[a-fA-F0-9]{1,16}$"
+			},
+			"FunctionSelector": {
+				"type": "string",
+				"format": "hex-byte",
+				"pattern": "^0x[a-fA-F0-9]{8}$"
+			},
+			"ApplicationName": {
+				"type": "string",
+				"pattern": "^[a-z0-9_-]+$"
+			},
+			"NameOrAddress": {
+				"oneOf": [
+					{
+						"$ref": "#/components/schemas/ApplicationName"
+					},
+					{
+						"$ref": "#/components/schemas/EthereumAddress"
+					}
+				]
 			}
 		}
 	}

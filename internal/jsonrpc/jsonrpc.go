@@ -515,9 +515,9 @@ func (s *Service) handleGetProcessedInputCount(w http.ResponseWriter, r *http.Re
 
 	// Return processed input count as specified in the spec
 	result := struct {
-		ProcessedInputs uint64 `json:"processed_inputs"`
+		ProcessedInputs string `json:"processed_inputs"`
 	}{
-		ProcessedInputs: processedInputs,
+		ProcessedInputs: fmt.Sprintf("0x%x", processedInputs),
 	}
 
 	writeRPCResult(w, req.ID, result)

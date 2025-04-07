@@ -36,7 +36,7 @@ services:
 
   migration:
     image: cartesi/rollups-node:devel
-    command: cartesi-rollups-cli db upgrade
+    command: cartesi-rollups-cli db init
     depends_on:
       database:
         condition: service_healthy
@@ -120,6 +120,23 @@ services:
       - "10011:10011" # Jsonrpc API service
     environment:
       <<: *env
+
+  grafana:
+    image: grafana/grafana-enterprise
+    networks:
+      - devnet
+    ports:
+      - "3000:3000" # web UI
+
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ${PWD}/dev/monitoring/prometheus.individual-services.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - devnet
+    ports:
+      - "9090:9090" #
+
 volumes:
   node_data:
 

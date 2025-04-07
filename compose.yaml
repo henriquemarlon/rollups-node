@@ -36,7 +36,7 @@ services:
 
   migration:
     image: cartesi/rollups-node:devel
-    command: cartesi-rollups-cli db upgrade
+    command: cartesi-rollups-cli db init
     depends_on:
       database:
         condition: service_healthy
@@ -54,6 +54,11 @@ services:
         condition: service_healthy
       ethereum_provider:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:10000/readyz"]
+      interval: 2s
+      timeout: 60s
+      retries: 20
     volumes:
       - node_data:/var/lib/cartesi-rollups-node/data
     networks:
@@ -64,6 +69,29 @@ services:
       - "10012:10012" # Inspect Service
     environment:
       <<: *env
+
+  grafana:
+    image: grafana/grafana-enterprise
+    depends_on:
+      node:
+        condition: service_healthy
+    networks:
+      - devnet
+    ports:
+      - "3000:3000" # web UI
+
+  prometheus:
+    image: prom/prometheus
+    depends_on:
+      node:
+        condition: service_healthy
+    volumes:
+      - ${PWD}/dev/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - devnet
+    ports:
+      - "9090:9090" #
+
 
 volumes:
   node_data:

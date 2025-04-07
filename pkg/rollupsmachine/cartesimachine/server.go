@@ -74,7 +74,7 @@ func StartServer(logger *slog.Logger, verbosity MachineLogLevel, port uint32, st
 	}
 
 	// Creates the command.
-	cmd := exec.Command("jsonrpc-remote-cartesi-machine", args...)
+	cmd := exec.Command("cartesi-jsonrpc-machine", args...)
 
 	// Redirects stdout and stderr.
 	interceptor := portInterceptor{

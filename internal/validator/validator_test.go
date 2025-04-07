@@ -38,7 +38,7 @@ func (s *ValidatorSuite) SetupSubTest() {
 	validator = &Service{
 		repository:          repo,
 		pristinePostContext: postContext,
-		pristineRootHash:    postContext[merkle.TREE_DEPTH-1],
+		pristineRootHash:    postContext[merkle.TREE_DEPTH],
 	}
 	serviceArgs := &service.CreateInfo{Name: "validator", Impl: validator}
 	err := service.Create(context.Background(), serviceArgs, &validator.Service)
@@ -141,9 +141,10 @@ func (s *ValidatorSuite) TestCreateClaimAndProofSuccess() {
 		).Return([]*Output{}, uint64(0), nil)
 
 		claimHash, _, err := validator.createClaimAndProofs(nil, &app, &dummyEpochs[0])
+		claimHashRef, _, err := merkle.CreateProofs(nil, merkle.TREE_DEPTH)
 		s.ErrorIs(nil, err)
 		s.NotNil(claimHash)
-		s.Equal(validator.pristineRootHash, *claimHash)
+		s.Equal(claimHashRef, *claimHash)
 		repo.AssertExpectations(s.T())
 	})
 

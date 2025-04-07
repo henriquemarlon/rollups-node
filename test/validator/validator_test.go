@@ -78,6 +78,9 @@ func (s *ValidatorRepositoryIntegrationSuite) TearDownSuite() {
 }
 
 func (s *ValidatorRepositoryIntegrationSuite) TestItReturnsPristineClaim() {
+	pristineRootHash, _, err := merkle.CreateProofs(nil, merkle.TREE_DEPTH)
+	s.Nil(err)
+
 	s.Run("WhenThereAreNoOutputsAndNoPreviousEpoch", func() {
 		app := &model.Application{
 			Name:                "test-app",
@@ -90,11 +93,6 @@ func (s *ValidatorRepositoryIntegrationSuite) TestItReturnsPristineClaim() {
 		}
 		_, err := s.repository.CreateApplication(s.ctx, app)
 		s.Require().Nil(err)
-
-		// if there are no outputs and no previous claim,
-		// a pristine claim is expected with no proofs
-		pristinePostContext := merkle.CreatePostContext()
-		pristineRootHash := pristinePostContext[merkle.TREE_DEPTH-1]
 
 		epoch := model.Epoch{
 			ApplicationID: 1,
@@ -145,6 +143,9 @@ func (s *ValidatorRepositoryIntegrationSuite) TestItReturnsPristineClaim() {
 }
 
 func (s *ValidatorRepositoryIntegrationSuite) TestItReturnsPreviousClaim() {
+	pristineRootHash, _, err := merkle.CreateProofs(nil, merkle.TREE_DEPTH)
+	s.Nil(err)
+
 	s.Run("WhenThereAreNoOutputsAndThereIsAPreviousEpoch", func() {
 		app := &model.Application{
 			Name:                "test-app",
@@ -157,9 +158,6 @@ func (s *ValidatorRepositoryIntegrationSuite) TestItReturnsPreviousClaim() {
 		}
 		_, err := s.repository.CreateApplication(s.ctx, app)
 		s.Require().Nil(err)
-
-		pristinePostContext := merkle.CreatePostContext()
-		pristineRootHash := pristinePostContext[merkle.TREE_DEPTH-1]
 
 		// insert the first epoch with a claim
 		firstEpochClaim := pristineRootHash

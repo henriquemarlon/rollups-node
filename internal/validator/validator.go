@@ -56,7 +56,7 @@ func Create(ctx context.Context, c *CreateInfo) (*Service, error) {
 	}
 
 	s.pristinePostContext = merkle.CreatePostContext()
-	s.pristineRootHash = s.pristinePostContext[merkle.TREE_DEPTH-1]
+	s.pristineRootHash = s.pristinePostContext[merkle.TREE_DEPTH]
 
 	return s, nil
 }
@@ -154,14 +154,16 @@ func (v *Service) validateApplication(ctx context.Context, app *Application) err
 			"last_block", epoch.LastBlock,
 		)
 		claim, outputs, err := v.createClaimAndProofs(ctx, app, epoch)
+		if err != nil {
+			v.Logger.Error("failed to create claim and proofs.", "error", err)
+			return err
+		}
+
 		v.Logger.Info("Claim Computed",
 			"application", appAddress,
 			"epoch_index", epoch.Index,
-			"last_block", epoch.LastBlock,
+			"claimHash", *claim,
 		)
-		if err != nil {
-			return err
-		}
 
 		// The Cartesi Machine calculates the root hash of the outputs Merkle
 		// tree after each input. Therefore, the root hash calculated after the
@@ -305,7 +307,6 @@ func (v *Service) createClaimAndProofs(
 					app.Name, lastOutput.Index, epoch.Index, epochOutputs[0].Index)
 			}
 		}
-
 	}
 
 	// we have outputs to compute, gather the values to call ComputeSiblingsMatrix

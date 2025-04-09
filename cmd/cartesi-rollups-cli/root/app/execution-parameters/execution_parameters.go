@@ -48,6 +48,16 @@ const maxValueLength = 100
 const maxDuration = 24 * time.Hour
 const maxConcurrentInspects = 1000
 
+func setHelpFunc(cmd *cobra.Command) {
+	origHelpFunc := cmd.HelpFunc()
+	newHelpFunc := func(command *cobra.Command, strings []string) {
+		command.Flags().Lookup("verbose").Hidden = false
+		command.Flags().Lookup("database-connection").Hidden = false
+		origHelpFunc(command, strings)
+	}
+	cmd.SetHelpFunc(newHelpFunc)
+}
+
 func init() {
 	// Add subcommands
 	Cmd.AddCommand(getCmd)
@@ -55,6 +65,13 @@ func init() {
 	Cmd.AddCommand(listCmd)
 	Cmd.AddCommand(dumpCmd)
 	Cmd.AddCommand(loadCmd)
+
+	setHelpFunc(getCmd)
+	setHelpFunc(setCmd)
+	setHelpFunc(listCmd)
+	setHelpFunc(dumpCmd)
+	setHelpFunc(loadCmd)
+
 }
 
 func run(cmd *cobra.Command, args []string) {
@@ -69,6 +86,9 @@ var getCmd = &cobra.Command{
 	Short: "Get a specific configuration parameter",
 	Args:  cobra.ExactArgs(2), // nolint: mnd
 	Run:   runGet,
+	Long: `
+Supported Environment Variables:
+  CARTESI_DATABASE_CONNECTION                    Database connection string`,
 }
 
 // setCmd represents the set command
@@ -77,6 +97,9 @@ var setCmd = &cobra.Command{
 	Short: "Set a specific configuration parameter",
 	Args:  cobra.ExactArgs(3), // nolint: mnd
 	Run:   runSet,
+	Long: `
+Supported Environment Variables:
+  CARTESI_DATABASE_CONNECTION                    Database connection string`,
 }
 
 // listCmd represents the list command
@@ -85,6 +108,9 @@ var listCmd = &cobra.Command{
 	Short: "List all configuration parameters",
 	Args:  cobra.ExactArgs(1),
 	Run:   runList,
+	Long: `
+Supported Environment Variables:
+  CARTESI_DATABASE_CONNECTION                    Database connection string`,
 }
 
 // dumpCmd represents the list command
@@ -93,6 +119,9 @@ var dumpCmd = &cobra.Command{
 	Short: "Dump execution parameters as a JSON object",
 	Args:  cobra.ExactArgs(1),
 	Run:   runDump,
+	Long: `
+Supported Environment Variables:
+  CARTESI_DATABASE_CONNECTION                    Database connection string`,
 }
 
 // loadCmd represents the load command
@@ -101,6 +130,9 @@ var loadCmd = &cobra.Command{
 	Short: "Load configuration from stdin",
 	Args:  cobra.ExactArgs(1),
 	Run:   runLoad,
+	Long: `
+Supported Environment Variables:
+  CARTESI_DATABASE_CONNECTION                    Database connection string`,
 }
 
 func runGet(cmd *cobra.Command, args []string) {

@@ -23,6 +23,7 @@ require (
 	github.com/jackc/pgx/v5 v5.7.4
 	github.com/lmittmann/tint v1.0.7
 	github.com/oapi-codegen/runtime v1.1.1
+	github.com/spf13/pflag v1.0.6
 	github.com/spf13/viper v1.20.1
 	golang.org/x/sync v0.12.0
 	golang.org/x/text v0.23.0
@@ -98,7 +99,6 @@ require (
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/spf13/afero v1.14.0 // indirect
 	github.com/spf13/cast v1.7.1 // indirect
-	github.com/spf13/pflag v1.0.6 // indirect
 	github.com/stretchr/objx v0.5.2 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/supranational/blst v0.3.14 // indirect

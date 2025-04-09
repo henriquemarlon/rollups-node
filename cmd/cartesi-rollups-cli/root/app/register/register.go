@@ -30,6 +30,12 @@ var Cmd = &cobra.Command{
 	Short:   "Register an existing application on the node",
 	Example: examples,
 	Run:     run,
+	Long: `
+Supported Environment Variables:
+  CARTESI_DATABASE_CONNECTION                    Database connection string
+  CARTESI_BLOCKCHAIN_HTTP_ENDPOINT               Blockchain HTTP endpoint
+  CARTESI_CONTRACTS_INPUT_BOX_ADDRESS            Input Box contract address
+  CARTESI_FEATURE_MACHINE_HASH_CHECK_ENABLED     Enable machine hash check`,
 }
 
 const examples = `# Adds an application to Rollups Node:
@@ -43,10 +49,8 @@ var (
 	templateHash           string
 	epochLength            uint64
 	inputBoxBlockNumber    uint64
-	inputBoxAddress        string
 	inputBoxAddressFromEnv bool
 	dataAvailability       string
-	blockchainHttpEndpoint string
 	enableMachineHashCheck bool
 	disabled               bool
 	printAsJSON            bool
@@ -78,9 +82,6 @@ func init() {
 		"Application ABI encoded Data Availability. If not provided, it will be read from the InputBox Address",
 	)
 
-	Cmd.Flags().StringVar(&inputBoxAddress, "inputbox", "", "Input Box contract address")
-	cobra.CheckErr(viper.BindPFlag(config.CONTRACTS_INPUT_BOX_ADDRESS, Cmd.Flags().Lookup("inputbox")))
-
 	Cmd.Flags().BoolVar(&inputBoxAddressFromEnv, "inputbox-from-env", false, "Read Input Box contract address from environment")
 	Cmd.Flags().Uint64Var(&inputBoxBlockNumber, "inputbox-block-number", 0, "InputBox deployment block number")
 
@@ -88,12 +89,18 @@ func init() {
 
 	Cmd.Flags().BoolVarP(&printAsJSON, "print-json", "j", false, "Prints the application data as JSON")
 
-	Cmd.Flags().StringVar(&blockchainHttpEndpoint, "blockchain-http-endpoint", "", "Blockchain HTTP endpoint")
-	cobra.CheckErr(viper.BindPFlag(config.BLOCKCHAIN_HTTP_ENDPOINT, Cmd.Flags().Lookup("blockchain-http-endpoint")))
-
 	Cmd.Flags().BoolVar(&enableMachineHashCheck, "machine-hash-check", true,
 		"Enable or disable machine hash check (DO NOT DISABLE IN PRODUCTION)")
 	cobra.CheckErr(viper.BindPFlag(config.FEATURE_MACHINE_HASH_CHECK_ENABLED, Cmd.Flags().Lookup("machine-hash-check")))
+
+	origHelpFunc := Cmd.HelpFunc()
+	Cmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
+		command.Flags().Lookup("verbose").Hidden = false
+		command.Flags().Lookup("database-connection").Hidden = false
+		command.Flags().Lookup("blockchain-http-endpoint").Hidden = false
+		command.Flags().Lookup("inputbox").Hidden = false
+		origHelpFunc(command, strings)
+	})
 }
 
 func run(cmd *cobra.Command, args []string) {

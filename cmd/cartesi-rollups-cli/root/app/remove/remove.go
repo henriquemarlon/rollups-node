@@ -21,6 +21,9 @@ var Cmd = &cobra.Command{
 	Example: examples,
 	Args:    cobra.ExactArgs(1),
 	Run:     run,
+	Long: `
+Supported Environment Variables:
+  CARTESI_DATABASE_CONNECTION                    Database connection string`,
 }
 
 const examples = `# Remove application:
@@ -33,6 +36,13 @@ var force bool
 
 func init() {
 	Cmd.Flags().BoolVarP(&force, "force", "f", false, "Force removal without confirmation")
+
+	origHelpFunc := Cmd.HelpFunc()
+	Cmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
+		command.Flags().Lookup("verbose").Hidden = false
+		command.Flags().Lookup("database-connection").Hidden = false
+		origHelpFunc(command, strings)
+	})
 }
 
 func run(cmd *cobra.Command, args []string) {

@@ -25,6 +25,9 @@ var Cmd = &cobra.Command{
 	Args:    cobra.MinimumNArgs(1),
 	Example: examples,
 	Run:     run,
+	Long: `
+Supported Environment Variables:
+  CARTESI_INSPECT_ADDRESS                        Inspect API endpoint`,
 }
 
 const examples = `# Makes a request with "hi":
@@ -48,6 +51,12 @@ func init() {
 	Cmd.Flags().StringVar(&inspectEndpoint, "inspect-endpoint", "http://localhost:10012/",
 		"address used to connect to the inspect api")
 	cobra.CheckErr(viper.BindPFlag(config.INSPECT_ADDRESS, Cmd.Flags().Lookup("inspect-endpoint")))
+
+	origHelpFunc := Cmd.HelpFunc()
+	Cmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
+		command.Flags().Lookup("verbose").Hidden = false
+		origHelpFunc(command, strings)
+	})
 }
 
 func resolvePayload(args []string) ([]byte, error) {

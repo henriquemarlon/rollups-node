@@ -17,9 +17,12 @@ import (
 	validator_root "github.com/cartesi/rollups-node/cmd/cartesi-rollups-validator/root"
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
+	"github.com/spf13/pflag"
 )
 
 func main() {
+	// Workaround for hidden flags
+	cli_root.Cmd.PersistentFlags().VisitAll(func(f *pflag.Flag) { f.Hidden = false })
 	generateDocs("cli", cli_root.Cmd)
 	generateDocs("evm-reader", evmreader_root.Cmd)
 	generateDocs("advancer", advancer_root.Cmd)

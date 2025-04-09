@@ -20,6 +20,9 @@ var Cmd = &cobra.Command{
 	Example: examples,
 	Args:    cobra.RangeArgs(1, 2), // nolint: mnd
 	Run:     run,
+	Long: `
+Supported Environment Variables:
+  CARTESI_DATABASE_CONNECTION                    Database connection string`,
 }
 
 const examples = `# Read all reports:
@@ -38,6 +41,13 @@ var (
 func init() {
 	Cmd.Flags().Uint64Var(&inputIndex, "input-index", 0,
 		"filter reports by input index")
+
+	origHelpFunc := Cmd.HelpFunc()
+	Cmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
+		command.Flags().Lookup("verbose").Hidden = false
+		command.Flags().Lookup("database-connection").Hidden = false
+		origHelpFunc(command, strings)
+	})
 }
 
 func run(cmd *cobra.Command, args []string) {

@@ -17,12 +17,22 @@ var Cmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize the Database Schema",
 	Run:   run,
+	Long: `
+Supported Environment Variables:
+  CARTESI_DATABASE_CONNECTION                    Database connection string`,
 }
 
 var upgradeFlag bool
 
 func init() {
 	Cmd.Flags().BoolVar(&upgradeFlag, "upgrade", false, "Upgrade an existing database schema if one exists")
+
+	origHelpFunc := Cmd.HelpFunc()
+	Cmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
+		command.Flags().Lookup("verbose").Hidden = false
+		command.Flags().Lookup("database-connection").Hidden = false
+		origHelpFunc(command, strings)
+	})
 }
 
 func run(cmd *cobra.Command, args []string) {

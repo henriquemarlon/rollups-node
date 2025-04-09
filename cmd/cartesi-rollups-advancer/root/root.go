@@ -42,36 +42,37 @@ var Cmd = &cobra.Command{
 
 func init() {
 	Cmd.Flags().StringVar(&inspectAddress, "inspect-address", ":10012", "Inspect service address and port")
-	viper.BindPFlag(config.INSPECT_ADDRESS, Cmd.Flags().Lookup("inspect-address"))
+	cobra.CheckErr(viper.BindPFlag(config.INSPECT_ADDRESS, Cmd.Flags().Lookup("inspect-address")))
 
 	Cmd.Flags().StringVar(&telemetryAddress, "telemetry-address", ":10002", "Health check and metrics address and port")
-	viper.BindPFlag(config.TELEMETRY_ADDRESS, Cmd.Flags().Lookup("telemetry-address"))
+	cobra.CheckErr(viper.BindPFlag(config.TELEMETRY_ADDRESS, Cmd.Flags().Lookup("telemetry-address")))
 
 	Cmd.Flags().StringVar(&logLevel, "log-level", "info", "Log level: debug, info, warn or error")
-	viper.BindPFlag(config.LOG_LEVEL, Cmd.Flags().Lookup("log-level"))
+	cobra.CheckErr(viper.BindPFlag(config.LOG_LEVEL, Cmd.Flags().Lookup("log-level")))
 
 	Cmd.Flags().BoolVar(&logColor, "log-color", true, "Tint the logs (colored output)")
-	viper.BindPFlag(config.LOG_COLOR, Cmd.Flags().Lookup("log-color"))
+	cobra.CheckErr(viper.BindPFlag(config.LOG_COLOR, Cmd.Flags().Lookup("log-color")))
 
 	Cmd.Flags().StringVar(&databaseConnection, "database-connection", "",
 		"Database connection string in the URL format\n(eg.: 'postgres://user:password@hostname:port/database') ")
-	viper.BindPFlag(config.DATABASE_CONNECTION, Cmd.Flags().Lookup("database-connection"))
+	cobra.CheckErr(viper.BindPFlag(config.DATABASE_CONNECTION, Cmd.Flags().Lookup("database-connection")))
 
 	Cmd.Flags().StringVar(&pollInterval, "poll-interval", "7", "Poll interval")
-	viper.BindPFlag(config.ADVANCER_POLLING_INTERVAL, Cmd.Flags().Lookup("poll-interval"))
+	cobra.CheckErr(viper.BindPFlag(config.ADVANCER_POLLING_INTERVAL, Cmd.Flags().Lookup("poll-interval")))
 
 	Cmd.Flags().StringVar(&maxStartupTime, "max-startup-time", "15", "Maximum startup time in seconds")
-	viper.BindPFlag(config.MAX_STARTUP_TIME, Cmd.Flags().Lookup("max-startup-time"))
+	cobra.CheckErr(viper.BindPFlag(config.MAX_STARTUP_TIME, Cmd.Flags().Lookup("max-startup-time")))
 
 	Cmd.Flags().BoolVar(&enableInspect, "inspect-enabled", true, "Enable or disable the inspect service")
-	viper.BindPFlag(config.FEATURE_INSPECT_ENABLED, Cmd.Flags().Lookup("inspect-enabled"))
+	cobra.CheckErr(viper.BindPFlag(config.FEATURE_INSPECT_ENABLED, Cmd.Flags().Lookup("inspect-enabled")))
 
-	Cmd.Flags().BoolVar(&enableMachineHashCheck, "machine-hash-check", true, "Enable or disable machine hash check (DO NOT USE IN PRODUCTION)")
-	viper.BindPFlag(config.FEATURE_MACHINE_HASH_CHECK_ENABLED, Cmd.Flags().Lookup("machine-hash-check"))
+	Cmd.Flags().BoolVar(&enableMachineHashCheck, "machine-hash-check", true,
+		"Enable or disable machine hash check (DO NOT USE IN PRODUCTION)")
+	cobra.CheckErr(viper.BindPFlag(config.FEATURE_MACHINE_HASH_CHECK_ENABLED, Cmd.Flags().Lookup("machine-hash-check")))
 
 	Cmd.Flags().StringVar(&machinelogLevel, "machine-log-level", "info",
 		"Remote Machine log level: trace, debug, info, warning, error, fatal")
-	viper.BindPFlag(config.REMOTE_MACHINE_LOG_LEVEL, Cmd.Flags().Lookup("machine-log-level"))
+	cobra.CheckErr(viper.BindPFlag(config.REMOTE_MACHINE_LOG_LEVEL, Cmd.Flags().Lookup("machine-log-level")))
 
 	// TODO: validate on preRunE
 	Cmd.PreRunE = func(cmd *cobra.Command, args []string) error {

@@ -19,10 +19,22 @@ var Cmd = &cobra.Command{
 	Short:   "Lists all applications",
 	Example: examples,
 	Run:     run,
+	Long: `
+Supported Environment Variables:
+  CARTESI_DATABASE_CONNECTION                    Database connection string`,
 }
 
 const examples = `# List all registered applications:
 cartesi-rollups-cli app list`
+
+func init() {
+
+	origHelpFunc := Cmd.HelpFunc()
+	Cmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
+		command.Flags().Lookup("database-connection").Hidden = false
+		origHelpFunc(command, strings)
+	})
+}
 
 func run(cmd *cobra.Command, args []string) {
 	ctx := cmd.Context()

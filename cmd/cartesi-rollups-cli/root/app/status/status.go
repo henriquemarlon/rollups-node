@@ -21,6 +21,9 @@ var Cmd = &cobra.Command{
 	Example: examples,
 	Args:    cobra.RangeArgs(1, 2), // nolint: mnd
 	Run:     run,
+	Long: `
+Supported Environment Variables:
+  CARTESI_DATABASE_CONNECTION                    Database connection string`,
 }
 
 const examples = `# Get application status:
@@ -29,6 +32,15 @@ cartesi-rollups-cli app status echo-dapp
 # Set application status:
 cartesi-rollups-cli app status echo-dapp enabled
 cartesi-rollups-cli app status echo-dapp disabled`
+
+func init() {
+	origHelpFunc := Cmd.HelpFunc()
+	Cmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
+		command.Flags().Lookup("verbose").Hidden = false
+		command.Flags().Lookup("database-connection").Hidden = false
+		origHelpFunc(command, strings)
+	})
+}
 
 func run(cmd *cobra.Command, args []string) {
 	ctx := cmd.Context()

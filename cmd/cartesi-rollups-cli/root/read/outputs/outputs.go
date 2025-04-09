@@ -26,6 +26,9 @@ var Cmd = &cobra.Command{
 	Example: examples,
 	Args:    cobra.RangeArgs(1, 2), // nolint: mnd
 	Run:     run,
+	Long: `
+Supported Environment Variables:
+  CARTESI_DATABASE_CONNECTION                    Database connection string`,
 }
 
 const examples = `# Read all outputs:
@@ -51,6 +54,13 @@ func init() {
 
 	Cmd.Flags().BoolVarP(&decodeOutput, "decode", "d", false,
 		"prints the decoded Output RawData")
+
+	origHelpFunc := Cmd.HelpFunc()
+	Cmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
+		command.Flags().Lookup("verbose").Hidden = false
+		command.Flags().Lookup("database-connection").Hidden = false
+		origHelpFunc(command, strings)
+	})
 }
 
 type Notice struct {

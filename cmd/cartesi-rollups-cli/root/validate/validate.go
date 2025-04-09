@@ -13,7 +13,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 var Cmd = &cobra.Command{
@@ -22,6 +21,10 @@ var Cmd = &cobra.Command{
 	Example: examples,
 	Args:    cobra.ExactArgs(2), // nolint: mnd
 	Run:     run,
+	Long: `
+Supported Environment Variables:
+  CARTESI_DATABASE_CONNECTION                    Database connection string
+  CARTESI_BLOCKCHAIN_HTTP_ENDPOINT               Blockchain HTTP endpoint`,
 }
 
 const examples = `# Validates output with index 5:
@@ -30,18 +33,14 @@ cartesi-rollups-cli validate echo-dapp 5
 # Validates output with index 3 using application address:
 cartesi-rollups-cli validate 0x1234567890123456789012345678901234567890 3`
 
-var (
-	databaseConnection     string
-	blockchainHttpEndpoint string
-)
-
 func init() {
-	Cmd.Flags().StringVar(&databaseConnection, "database-connection", "",
-		"Database connection string in the URL format\n(eg.: 'postgres://user:password@hostname:port/database') ")
-	cobra.CheckErr(viper.BindPFlag(config.DATABASE_CONNECTION, Cmd.Flags().Lookup("database-connection")))
-
-	Cmd.Flags().StringVar(&blockchainHttpEndpoint, "blockchain-http-endpoint", "", "Blockchain HTTP endpoint")
-	cobra.CheckErr(viper.BindPFlag(config.BLOCKCHAIN_HTTP_ENDPOINT, Cmd.Flags().Lookup("blockchain-http-endpoint")))
+	origHelpFunc := Cmd.HelpFunc()
+	Cmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
+		command.Flags().Lookup("verbose").Hidden = false
+		command.Flags().Lookup("database-connection").Hidden = false
+		command.Flags().Lookup("blockchain-http-endpoint").Hidden = false
+		origHelpFunc(command, strings)
+	})
 }
 
 func run(cmd *cobra.Command, args []string) {

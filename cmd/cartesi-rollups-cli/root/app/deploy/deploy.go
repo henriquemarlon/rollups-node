@@ -35,28 +35,33 @@ var Cmd = &cobra.Command{
 	Short:   "Deploy an application and add it to the node",
 	Example: examples,
 	Run:     run,
+	Long: `
+Supported Environment Variables:
+  CARTESI_DATABASE_CONNECTION                    Database connection string
+  CARTESI_BLOCKCHAIN_HTTP_ENDPOINT               Blockchain HTTP endpoint
+  CARTESI_CONTRACTS_INPUT_BOX_ADDRESS            Input Box contract address
+  CARTESI_CONTRACTS_APPLICATION_FACTORY_ADDRESS  Application Factory address
+  CARTESI_CONTRACTS_AUTHORITY_FACTORY_ADDRESS    Authority Factory address`,
 }
 
 const examples = `# Adds an application to Rollups Node:
 cartesi-rollups-cli app deploy -n echo-dapp -a 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF -c 0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA -t applications/echo-dapp` //nolint:lll
 
 var (
-	name                   string
-	applicationOwner       string
-	authorityOwner         string
-	templatePath           string
-	templateHash           string
-	consensusAddr          string
-	inputBoxAddr           string
-	dataAvailability       string
-	appFactoryAddr         string
-	authorityFactoryAddr   string
-	blockchainHttpEndpoint string
-	salt                   string
-	epochLength            uint64
-	disabled               bool
-	printAsJSON            bool
-	noRegister             bool
+	name                 string
+	applicationOwner     string
+	authorityOwner       string
+	templatePath         string
+	templateHash         string
+	consensusAddr        string
+	dataAvailability     string
+	appFactoryAddr       string
+	authorityFactoryAddr string
+	salt                 string
+	epochLength          uint64
+	disabled             bool
+	printAsJSON          bool
+	noRegister           bool
 )
 
 func init() {
@@ -96,9 +101,6 @@ func init() {
 		"Consensus Epoch length. If consensus address is provided, the value will be read from the contract",
 	)
 
-	Cmd.Flags().StringVar(&inputBoxAddr, "inputbox", "", "Input Box contract address")
-	cobra.CheckErr(viper.BindPFlag(config.CONTRACTS_INPUT_BOX_ADDRESS, Cmd.Flags().Lookup("inputbox")))
-
 	Cmd.Flags().StringVar(&salt, "salt", "0000000000000000000000000000000000000000000000000000000000000000", "salt")
 
 	Cmd.Flags().BoolVarP(&disabled, "disabled", "d", false, "Sets the application state to disabled")
@@ -106,8 +108,14 @@ func init() {
 
 	Cmd.Flags().BoolVarP(&printAsJSON, "print-json", "j", false, "Prints the application data as JSON")
 
-	Cmd.Flags().StringVar(&blockchainHttpEndpoint, "blockchain-http-endpoint", "", "Blockchain HTTP endpoint")
-	cobra.CheckErr(viper.BindPFlag(config.BLOCKCHAIN_HTTP_ENDPOINT, Cmd.Flags().Lookup("blockchain-http-endpoint")))
+	origHelpFunc := Cmd.HelpFunc()
+	Cmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
+		command.Flags().Lookup("verbose").Hidden = false
+		command.Flags().Lookup("database-connection").Hidden = false
+		command.Flags().Lookup("blockchain-http-endpoint").Hidden = false
+		command.Flags().Lookup("inputbox").Hidden = false
+		origHelpFunc(command, strings)
+	})
 }
 
 func run(cmd *cobra.Command, args []string) {

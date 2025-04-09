@@ -11,6 +11,13 @@ import (
 )
 
 func main() {
+	helpTemplate := `{{with .Short}}{{. | trimTrailingWhitespaces}}
+
+{{end}}{{if or .Runnable .HasSubCommands}}{{.UsageString}}{{end}}{{.Long | trimTrailingWhitespaces}}
+`
+
+	root.Cmd.SetHelpTemplate(helpTemplate)
+
 	err := root.Cmd.Execute()
 	if err != nil {
 		os.Exit(1)

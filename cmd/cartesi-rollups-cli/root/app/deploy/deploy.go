@@ -155,7 +155,7 @@ func run(cmd *cobra.Command, args []string) {
 
 	var consensus common.Address
 	if cmd.Flags().Changed("consensus") {
-		consensus, err := config.ToAddressFromString(consensusAddr)
+		consensus, err = config.ToAddressFromString(consensusAddr)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed reading consensus address: %v\n", err)
 			os.Exit(1)

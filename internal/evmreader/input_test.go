@@ -7,6 +7,7 @@ import (
 	"time"
 
 	. "github.com/cartesi/rollups-node/internal/model"
+	"github.com/cartesi/rollups-node/pkg/contracts/iapplication"
 	"github.com/cartesi/rollups-node/pkg/contracts/iinputbox"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -85,10 +86,16 @@ func (s *EvmReaderSuite) TestItReadsInputsFromNewBlocksFilteredByDA() {
 	).Return(&header2, nil).Once()
 
 	inputBox := newMockInputBox()
-	s.contractFactory.Unset("NewInputSource")
-	s.contractFactory.On("NewInputSource",
+	applicationContract := &MockApplicationContract{}
+	applicationContract.On("RetrieveOutputExecutionEvents",
 		mock.Anything,
-	).Return(inputBox, nil)
+	).Return([]*iapplication.IApplicationOutputExecuted{}, nil)
+
+	s.contractFactory.Unset("CreateAdapters")
+	s.contractFactory.On("CreateAdapters",
+		mock.Anything,
+		mock.Anything,
+	).Return(applicationContract, inputBox, nil)
 
 	// Prepare sequence of inputs
 	inputBox.Unset("RetrieveInputs")
@@ -228,10 +235,17 @@ func (s *EvmReaderSuite) TestItUpdatesLastInputCheckBlockWhenThereIsNoInputs() {
 	).Return(&header2, nil).Once()
 
 	inputBox := newMockInputBox()
-	s.contractFactory.Unset("NewInputSource")
-	s.contractFactory.On("NewInputSource",
+	// Setup adapter factory
+	s.contractFactory.Unset("CreateAdapters")
+	applicationContract := &MockApplicationContract{}
+	applicationContract.On("RetrieveOutputExecutionEvents",
 		mock.Anything,
-	).Return(inputBox, nil)
+	).Return([]*iapplication.IApplicationOutputExecuted{}, nil)
+
+	s.contractFactory.On("CreateAdapters",
+		mock.Anything,
+		mock.Anything,
+	).Return(applicationContract, inputBox, nil)
 
 	// Prepare sequence of inputs
 	inputBox.Unset("RetrieveInputs")
@@ -305,10 +319,16 @@ func (s *EvmReaderSuite) TestItReadsMultipleInputsFromSingleNewBlock() {
 	).Return(&header2, nil).Once()
 
 	inputBox := newMockInputBox()
-	s.contractFactory.Unset("NewInputSource")
-	s.contractFactory.On("NewInputSource",
+	s.contractFactory.Unset("CreateAdapters")
+	applicationContract := &MockApplicationContract{}
+	applicationContract.On("RetrieveOutputExecutionEvents",
 		mock.Anything,
-	).Return(inputBox, nil)
+	).Return([]*iapplication.IApplicationOutputExecuted{}, nil)
+
+	s.contractFactory.On("CreateAdapters",
+		mock.Anything,
+		mock.Anything,
+	).Return(applicationContract, inputBox, nil)
 
 	// Prepare sequence of inputs
 	inputBox.Unset("RetrieveInputs")

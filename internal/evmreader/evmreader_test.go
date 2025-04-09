@@ -14,7 +14,7 @@ import (
 
 	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/repository"
-	appcontract "github.com/cartesi/rollups-node/pkg/contracts/iapplication"
+	"github.com/cartesi/rollups-node/pkg/contracts/iapplication"
 	"github.com/cartesi/rollups-node/pkg/contracts/iinputbox"
 	"github.com/cartesi/rollups-node/pkg/service"
 	"github.com/ethereum/go-ethereum"
@@ -73,7 +73,7 @@ type EvmReaderSuite struct {
 	wsClient        *MockEthClient
 	repository      *MockRepository
 	evmReader       *Service
-	contractFactory *MockEvmReaderContractFactory
+	contractFactory *MockAdapterFactory
 }
 
 func TestEvmReaderSuite(t *testing.T) {
@@ -108,16 +108,17 @@ func (s *EvmReaderSuite) TearDownSuite() {
 
 func (me *EvmReaderSuite) SetupTest() {
 	me.client = newMockEthClient()
+	me.client.On("ChainID", mock.Anything).Return(big.NewInt(1), nil)
 	me.wsClient = me.client
 	me.repository = newMockRepository()
-	me.contractFactory = newEmvReaderContractFactory()
+	me.contractFactory = newMockAdapterFactory()
 
 	me.evmReader = &Service{
 		client:             me.client,
 		wsClient:           me.wsClient,
 		repository:         me.repository,
 		defaultBlock:       DefaultBlock_Latest,
-		contractFactory:    me.contractFactory,
+		adapterFactory:     me.contractFactory,
 		hasEnabledApps:     true,
 		inputReaderEnabled: true,
 	}
@@ -283,6 +284,14 @@ func (m *MockEthClient) SubscribeNewHead(
 	return args.Get(0).(ethereum.Subscription), args.Error(1)
 }
 
+func (m *MockEthClient) ChainID(ctx context.Context) (*big.Int, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*big.Int), args.Error(1)
+}
+
 // Mock ethereum.Subscription
 type MockSubscription struct {
 	mock.Mock
@@ -316,6 +325,17 @@ func (f *FakeWSEhtClient) SubscribeNewHead(
 ) (ethereum.Subscription, error) {
 	f.ch = ch
 	return newMockSubscription(), nil
+}
+
+func (f *FakeWSEhtClient) HeaderByNumber(
+	ctx context.Context,
+	number *big.Int,
+) (*types.Header, error) {
+	return &header0, nil
+}
+
+func (f *FakeWSEhtClient) ChainID(ctx context.Context) (*big.Int, error) {
+	return big.NewInt(1), nil
 }
 
 func (f *FakeWSEhtClient) fireNewHead(header *types.Header) {
@@ -540,16 +560,16 @@ func (m *MockApplicationContract) Unset(methodName string) {
 
 func (m *MockApplicationContract) RetrieveOutputExecutionEvents(
 	opts *bind.FilterOpts,
-) ([]*appcontract.IApplicationOutputExecuted, error) {
+) ([]*iapplication.IApplicationOutputExecuted, error) {
 	args := m.Called(opts)
-	return args.Get(0).([]*appcontract.IApplicationOutputExecuted), args.Error(1)
+	return args.Get(0).([]*iapplication.IApplicationOutputExecuted), args.Error(1)
 }
 
-type MockEvmReaderContractFactory struct {
+type MockAdapterFactory struct {
 	mock.Mock
 }
 
-func (m *MockEvmReaderContractFactory) Unset(methodName string) {
+func (m *MockAdapterFactory) Unset(methodName string) {
 	for _, call := range m.ExpectedCalls {
 		if call.Method == methodName {
 			call.Unset()
@@ -557,26 +577,33 @@ func (m *MockEvmReaderContractFactory) Unset(methodName string) {
 	}
 }
 
-func (m *MockEvmReaderContractFactory) NewApplication(
-	common.Address,
-) (ApplicationContract, error) {
-	args := m.Called(context.Background())
-	return args.Get(0).(ApplicationContract), args.Error(1)
+func (m *MockAdapterFactory) CreateAdapters(
+	app *Application,
+	client EthClientInterface,
+) (ApplicationContractAdapter, InputSourceAdapter, error) {
+	args := m.Called(app, client)
+
+	// Safely handle nil values to prevent interface conversion panic
+	appContract, _ := args.Get(0).(ApplicationContractAdapter)
+	inputSource, _ := args.Get(1).(InputSourceAdapter)
+
+	// If we got nil values but no error was returned, return mock implementations
+	if appContract == nil && args.Error(2) == nil {
+		appContract = &MockApplicationContract{}
+	}
+
+	if inputSource == nil && args.Error(2) == nil {
+		inputSource = newMockInputBox()
+	}
+
+	return appContract, inputSource, args.Error(2)
 }
 
-func (m *MockEvmReaderContractFactory) NewInputSource(
-	common.Address,
-) (InputSource, error) {
-	args := m.Called(context.Background())
-	return args.Get(0).(InputSource), args.Error(1)
-}
-
-func newEmvReaderContractFactory() *MockEvmReaderContractFactory {
-
+func newMockAdapterFactory() *MockAdapterFactory {
 	applicationContract := &MockApplicationContract{}
 	applicationContract.On("RetrieveOutputExecutionEvents",
 		mock.Anything,
-	).Return([]*appcontract.IApplicationOutputExecuted{}, nil)
+	).Return([]*iapplication.IApplicationOutputExecuted{}, nil)
 
 	inputBox := newMockInputBox()
 	inputBox.On("RetrieveInputs",
@@ -585,13 +612,12 @@ func newEmvReaderContractFactory() *MockEvmReaderContractFactory {
 		mock.Anything,
 	).Return([]iinputbox.IInputBoxInputAdded{}, nil)
 
-	factory := &MockEvmReaderContractFactory{}
-	factory.On("NewApplication",
+	factory := &MockAdapterFactory{}
+	// Set up a default behavior that always returns valid non-nil interfaces
+	factory.On("CreateAdapters",
 		mock.Anything,
-	).Return(applicationContract, nil)
-	factory.On("NewInputSource",
 		mock.Anything,
-	).Return(inputBox, nil)
+	).Return(applicationContract, inputBox, nil)
 
 	return factory
 }

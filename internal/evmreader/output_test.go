@@ -82,12 +82,7 @@ func (s *EvmReaderSuite) TestOutputExecution() {
 	).Once().Return(nil)
 
 	inputBox := newMockInputBox()
-	s.contractFactory.Unset("NewInputSource")
-	s.contractFactory.On("NewInputSource",
-		mock.Anything,
-	).Return(inputBox, nil)
 
-	//No Inputs
 	inputBox.Unset("RetrieveInputs")
 	inputBox.On("RetrieveInputs",
 		mock.Anything,
@@ -140,26 +135,21 @@ func (s *EvmReaderSuite) TestReadOutputExecution() {
 	appAddress := common.HexToAddress("0x2E663fe9aE92275242406A185AA4fC8174339D3E")
 
 	// Contract Factory
-
 	applicationContract := &MockApplicationContract{}
 	inputBox := newMockInputBox()
 
-	contractFactory := newEmvReaderContractFactory()
-
-	contractFactory.Unset("NewApplication")
-	contractFactory.On("NewApplication",
+	// Setup adapter factory
+	adapterFactory := newMockAdapterFactory()
+	adapterFactory.Unset("CreateAdapters")
+	adapterFactory.On("CreateAdapters",
 		mock.Anything,
-	).Return(applicationContract, nil)
-
-	contractFactory.Unset("NewInputSource")
-	contractFactory.On("NewInputSource",
 		mock.Anything,
-	).Return(inputBox, nil)
+	).Return(applicationContract, inputBox, nil)
 
 	//New EVM Reader
 	wsClient := FakeWSEhtClient{}
 	s.evmReader.wsClient = &wsClient
-	s.evmReader.contractFactory = contractFactory
+	s.evmReader.adapterFactory = adapterFactory
 
 	// Prepare Output Executed Events
 	outputExecution0 := &appcontract.IApplicationOutputExecuted{
@@ -174,10 +164,6 @@ func (s *EvmReaderSuite) TestReadOutputExecution() {
 	applicationContract.On("RetrieveOutputExecutionEvents",
 		mock.Anything,
 	).Return(outputExecutionEvents, nil).Once()
-
-	applicationContract.On("GetConsensus",
-		mock.Anything,
-	).Return(common.HexToAddress("0xdeadbeef"), nil)
 
 	// Prepare repository
 	s.repository.Unset("ListApplications")
@@ -289,22 +275,16 @@ func (s *EvmReaderSuite) TestCheckOutputFails() {
 		appAddress := common.HexToAddress("0x2E663fe9aE92275242406A185AA4fC8174339D3E")
 
 		// Contract Factory
-
 		applicationContract := &MockApplicationContract{}
-
-		contractFactory := newEmvReaderContractFactory()
-
-		contractFactory.Unset("NewApplication")
-		contractFactory.On("NewApplication",
-			mock.Anything,
-		).Return(applicationContract, nil)
-
 		inputBox := newMockInputBox()
 
-		contractFactory.Unset("NewInputSource")
-		contractFactory.On("NewInputSource",
+		// Setup adapter factory
+		adapterFactory := newMockAdapterFactory()
+		adapterFactory.Unset("CreateAdapters")
+		adapterFactory.On("CreateAdapters",
 			mock.Anything,
-		).Return(inputBox, nil)
+			mock.Anything,
+		).Return(applicationContract, inputBox, nil)
 
 		//New EVM Reader
 		client := newMockEthClient()
@@ -315,7 +295,7 @@ func (s *EvmReaderSuite) TestCheckOutputFails() {
 			wsClient:           &wsClient,
 			repository:         repository,
 			defaultBlock:       DefaultBlock_Latest,
-			contractFactory:    contractFactory,
+			adapterFactory:     adapterFactory,
 			hasEnabledApps:     true,
 			inputReaderEnabled: true,
 		}
@@ -326,10 +306,6 @@ func (s *EvmReaderSuite) TestCheckOutputFails() {
 		applicationContract.On("RetrieveOutputExecutionEvents",
 			mock.Anything,
 		).Return([]*appcontract.IApplicationOutputExecuted{}, errors.New("No outputs for you"))
-
-		applicationContract.On("GetConsensus",
-			mock.Anything,
-		).Return(common.HexToAddress("0xdeadbeef"), nil)
 
 		// Prepare repository
 		repository.Unset("ListApplications")
@@ -415,22 +391,16 @@ func (s *EvmReaderSuite) TestCheckOutputFails() {
 		appAddress := common.HexToAddress("0x2E663fe9aE92275242406A185AA4fC8174339D3E")
 
 		// Contract Factory
-
 		applicationContract := &MockApplicationContract{}
-
-		contractFactory := newEmvReaderContractFactory()
-
-		contractFactory.Unset("NewApplication")
-		contractFactory.On("NewApplication",
-			mock.Anything,
-		).Return(applicationContract, nil)
-
 		inputBox := newMockInputBox()
 
-		contractFactory.Unset("NewInputSource")
-		contractFactory.On("NewInputSource",
+		// Setup adapter factory
+		adapterFactory := newMockAdapterFactory()
+		adapterFactory.Unset("CreateAdapters")
+		adapterFactory.On("CreateAdapters",
 			mock.Anything,
-		).Return(inputBox, nil)
+			mock.Anything,
+		).Return(applicationContract, inputBox, nil)
 
 		//New EVM Reader
 		client := newMockEthClient()
@@ -439,7 +409,7 @@ func (s *EvmReaderSuite) TestCheckOutputFails() {
 		s.evmReader.client = client
 		s.evmReader.wsClient = &wsClient
 		s.evmReader.repository = repository
-		s.evmReader.contractFactory = contractFactory
+		s.evmReader.adapterFactory = adapterFactory
 
 		// Prepare Output Executed Events
 		outputExecution0 := &appcontract.IApplicationOutputExecuted{
@@ -454,10 +424,6 @@ func (s *EvmReaderSuite) TestCheckOutputFails() {
 		applicationContract.On("RetrieveOutputExecutionEvents",
 			mock.Anything,
 		).Return(outputExecutionEvents, nil).Once()
-
-		applicationContract.On("GetConsensus",
-			mock.Anything,
-		).Return(common.HexToAddress("0xdeadbeef"), nil)
 
 		// Prepare repository
 		repository.Unset("ListApplications")
@@ -552,22 +518,16 @@ func (s *EvmReaderSuite) TestCheckOutputFails() {
 		appAddress := common.HexToAddress("0x2E663fe9aE92275242406A185AA4fC8174339D3E")
 
 		// Contract Factory
-
 		applicationContract := &MockApplicationContract{}
-
-		contractFactory := newEmvReaderContractFactory()
-
-		contractFactory.Unset("NewApplication")
-		contractFactory.On("NewApplication",
-			mock.Anything,
-		).Return(applicationContract, nil)
-
 		inputBox := newMockInputBox()
 
-		contractFactory.Unset("NewInputSource")
-		contractFactory.On("NewInputSource",
+		// Setup adapter factory
+		adapterFactory := newMockAdapterFactory()
+		adapterFactory.Unset("CreateAdapters")
+		adapterFactory.On("CreateAdapters",
 			mock.Anything,
-		).Return(inputBox, nil)
+			mock.Anything,
+		).Return(applicationContract, inputBox, nil)
 
 		//New EVM Reader
 		client := newMockEthClient()
@@ -576,7 +536,7 @@ func (s *EvmReaderSuite) TestCheckOutputFails() {
 		s.evmReader.client = client
 		s.evmReader.wsClient = &wsClient
 		s.evmReader.repository = repository
-		s.evmReader.contractFactory = contractFactory
+		s.evmReader.adapterFactory = adapterFactory
 
 		// Prepare Output Executed Events
 		outputExecution0 := &appcontract.IApplicationOutputExecuted{
@@ -591,10 +551,6 @@ func (s *EvmReaderSuite) TestCheckOutputFails() {
 		applicationContract.On("RetrieveOutputExecutionEvents",
 			mock.Anything,
 		).Return(outputExecutionEvents, nil).Once()
-
-		applicationContract.On("GetConsensus",
-			mock.Anything,
-		).Return(common.HexToAddress("0xdeadbeef"), nil)
 
 		// Prepare repository
 		repository.Unset("ListApplications")

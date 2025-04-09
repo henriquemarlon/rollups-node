@@ -10,6 +10,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cartesi/rollups-node/internal/config"
+	"github.com/cartesi/rollups-node/internal/jsonrpc"
+	"github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/repository"
 	"github.com/cartesi/rollups-node/internal/repository/factory"
 )
@@ -31,16 +33,28 @@ cartesi-rollups-cli read reports echo-dapp
 # Read specific report by index:
 cartesi-rollups-cli read reports echo-dapp 42
 
-# Read all reports filtering by input index:
-cartesi-rollups-cli read reports echo-dapp --input-index=23`
+# Read reports filtered by epoch index:
+cartesi-rollups-cli read reports echo-dapp --epoch-index 0x3
+
+# Read reports with pagination:
+cartesi-rollups-cli read reports echo-dapp --limit 10 --offset 5`
 
 var (
+	epochIndex uint64
 	inputIndex uint64
+	limit      uint64
+	offset     uint64
 )
 
 func init() {
+	Cmd.Flags().Uint64Var(&epochIndex, "epoch-index", 0,
+		"Filter reports by epoch index (hex encoded)")
 	Cmd.Flags().Uint64Var(&inputIndex, "input-index", 0,
-		"filter reports by input index")
+		"Filter reports by input index (hex encoded)")
+	Cmd.Flags().Uint64Var(&limit, "limit", 50, // nolint: mnd
+		"Maximum number of reports to return")
+	Cmd.Flags().Uint64Var(&offset, "offset", 0,
+		"Starting point for the list of reports")
 
 	origHelpFunc := Cmd.HelpFunc()
 	Cmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
@@ -48,6 +62,15 @@ func init() {
 		command.Flags().Lookup("database-connection").Hidden = false
 		origHelpFunc(command, strings)
 	})
+
+	Cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		if limit > jsonrpc.LIST_ITEM_LIMIT {
+			return fmt.Errorf("limit cannot exceed %d", jsonrpc.LIST_ITEM_LIMIT)
+		} else if limit == 0 {
+			limit = jsonrpc.LIST_ITEM_LIMIT
+		}
+		return nil
+	}
 }
 
 func run(cmd *cobra.Command, args []string) {
@@ -73,20 +96,61 @@ func run(cmd *cobra.Command, args []string) {
 
 		report, err := repo.GetReport(ctx, nameOrAddress, reportIndex)
 		cobra.CheckErr(err)
-		result, err = json.MarshalIndent(report, "", "    ")
-		cobra.CheckErr(err)
-	} else {
-		// List reports with optional input index filter
-		f := repository.ReportFilter{}
-		if cmd.Flags().Changed("input-index") {
-			inputIndexPtr := &inputIndex
-			f.InputIndex = inputIndexPtr
+
+		// Format response to match JSON-RPC API
+		response := struct {
+			Data *model.Report `json:"data"`
+		}{
+			Data: report,
 		}
 
-		p := repository.Pagination{}
-		reports, _, err := repo.ListReports(ctx, nameOrAddress, f, p)
+		result, err = json.MarshalIndent(response, "", "    ")
 		cobra.CheckErr(err)
-		result, err = json.MarshalIndent(reports, "", "    ")
+	} else {
+		// Create filter based on flags
+		filter := repository.ReportFilter{}
+
+		// Add epoch index filter if provided
+		if cmd.Flags().Changed("epoch-index") {
+			filter.EpochIndex = &epochIndex
+		}
+
+		// Add input index filter if provided
+		if cmd.Flags().Changed("input-index") {
+			filter.InputIndex = &inputIndex
+		}
+
+		// Limit is validated in PreRunE
+
+		// List reports with filters
+		reports, total, err := repo.ListReports(ctx, nameOrAddress, filter, repository.Pagination{
+			Limit:  limit,
+			Offset: offset,
+		})
+		cobra.CheckErr(err)
+
+		// Format response to match JSON-RPC API
+		response := struct {
+			Data       []*model.Report `json:"data"`
+			Pagination struct {
+				TotalCount uint64 `json:"total_count"`
+				Limit      uint64 `json:"limit"`
+				Offset     uint64 `json:"offset"`
+			} `json:"pagination"`
+		}{
+			Data: reports,
+			Pagination: struct {
+				TotalCount uint64 `json:"total_count"`
+				Limit      uint64 `json:"limit"`
+				Offset     uint64 `json:"offset"`
+			}{
+				TotalCount: total,
+				Limit:      limit,
+				Offset:     offset,
+			},
+		}
+
+		result, err = json.MarshalIndent(response, "", "    ")
 		cobra.CheckErr(err)
 	}
 

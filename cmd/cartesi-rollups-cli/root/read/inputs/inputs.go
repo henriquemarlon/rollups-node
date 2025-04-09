@@ -4,18 +4,14 @@
 package inputs
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"math/big"
 
 	"github.com/cartesi/rollups-node/internal/config"
-	"github.com/cartesi/rollups-node/internal/model"
+	"github.com/cartesi/rollups-node/internal/jsonrpc"
 	"github.com/cartesi/rollups-node/internal/repository"
 	"github.com/cartesi/rollups-node/internal/repository/factory"
 	"github.com/cartesi/rollups-node/pkg/contracts/inputs"
-	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/common"
 
 	"github.com/spf13/cobra"
 )
@@ -34,19 +30,34 @@ Supported Environment Variables:
 const examples = `# Read all inputs:
 cartesi-rollups-cli read inputs echo-dapp
 
-# Read specific input by index:
+# Read a specific input by index:
 cartesi-rollups-cli read inputs echo-dapp 42
 
-# Read with decoded input data:
-cartesi-rollups-cli read inputs echo-dapp 42 --decode`
+# Read inputs filtered byt epoch index:
+cartesi-rollups-cli read inputs echo-dapp --epoch-index 0x3
+
+# Read inputs filtered by sender address:
+cartesi-rollups-cli read inputs echo-dapp --sender 0x0123456789abcdef0123456789abcdef0123456789abcdef
+
+# Read inputs with pagination:
+cartesi-rollups-cli read inputs echo-dapp --epoch-index 0x3 --limit 20 --offset 0`
 
 var (
-	decodeInput bool
+	epochIndex uint64
+	sender     string
+	limit      uint64
+	offset     uint64
 )
 
 func init() {
-	Cmd.Flags().BoolVarP(&decodeInput, "decode", "d", false,
-		"Prints the decoded input RawData")
+	Cmd.Flags().Uint64Var(&epochIndex, "epoch-index", 0,
+		"Filter inputs by epoch index (decimal or hex encoded)")
+	Cmd.Flags().StringVar(&sender, "sender", "",
+		"Filter inputs by sender address (hex encoded)")
+	Cmd.Flags().Uint64Var(&limit, "limit", 50, // nolint: mnd
+		"Maximum number of inputs to return")
+	Cmd.Flags().Uint64Var(&offset, "offset", 0,
+		"Starting point for the list of inputs")
 
 	origHelpFunc := Cmd.HelpFunc()
 	Cmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
@@ -54,38 +65,15 @@ func init() {
 		command.Flags().Lookup("database-connection").Hidden = false
 		origHelpFunc(command, strings)
 	})
-}
 
-type EvmAdvance struct {
-	ChainId        string `json:"chainId"`
-	AppContract    string `json:"appContract"`
-	MsgSender      string `json:"msgSender"`
-	BlockNumber    string `json:"blockNumber"`
-	BlockTimestamp string `json:"blockTimestamp"`
-	PrevRandao     string `json:"prevRandao"`
-	Index          string `json:"index"`
-	Payload        string `json:"payload"`
-}
-
-func decodeInputData(input *model.Input, parsedAbi *abi.ABI) (EvmAdvance, error) {
-	decoded := make(map[string]any)
-	err := parsedAbi.Methods["EvmAdvance"].Inputs.UnpackIntoMap(decoded, input.RawData[4:])
-	if err != nil {
-		return EvmAdvance{}, err
+	Cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		if limit > jsonrpc.LIST_ITEM_LIMIT {
+			return fmt.Errorf("limit cannot exceed %d", jsonrpc.LIST_ITEM_LIMIT)
+		} else if limit == 0 {
+			limit = jsonrpc.LIST_ITEM_LIMIT
+		}
+		return nil
 	}
-
-	params := EvmAdvance{
-		ChainId:        decoded["chainId"].(*big.Int).String(),
-		AppContract:    decoded["appContract"].(common.Address).Hex(),
-		MsgSender:      decoded["msgSender"].(common.Address).Hex(),
-		BlockNumber:    decoded["blockNumber"].(*big.Int).String(),
-		BlockTimestamp: decoded["blockTimestamp"].(*big.Int).String(),
-		PrevRandao:     decoded["prevRandao"].(*big.Int).String(),
-		Index:          decoded["index"].(*big.Int).String(),
-		Payload:        "0x" + hex.EncodeToString(decoded["payload"].([]byte)),
-	}
-
-	return params, nil
 }
 
 func run(cmd *cobra.Command, args []string) {
@@ -101,29 +89,67 @@ func run(cmd *cobra.Command, args []string) {
 	cobra.CheckErr(err)
 	defer repo.Close()
 
+	parsedAbi, err := inputs.InputsMetaData.GetAbi()
+	cobra.CheckErr(err)
+
 	var result []byte
 	if len(args) == 1 {
-		// List all inputs
-		inputList, _, err := repo.ListInputs(ctx, nameOrAddress, repository.InputFilter{}, repository.Pagination{})
+		// Create filter based on flags
+		filter := repository.InputFilter{}
+
+		// Add epoch index filter if provided
+		if cmd.Flags().Changed("epoch-index") {
+			filter.EpochIndex = &epochIndex
+		}
+
+		// Add sender filter if provided
+		if sender != "" {
+			senderAddr, err := config.ToAddressFromString(sender)
+			if err != nil {
+				cobra.CheckErr(fmt.Errorf("invalid sender address: %w", err))
+			}
+			filter.Sender = &senderAddr
+		}
+
+		// Limit is validated in PreRunE
+
+		// List all inputs with filters
+		inputList, total, err := repo.ListInputs(ctx, nameOrAddress, filter, repository.Pagination{
+			Limit:  limit,
+			Offset: offset,
+		})
 		cobra.CheckErr(err)
 
-		if decodeInput {
-			parsedAbi, err := inputs.InputsMetaData.GetAbi()
-			cobra.CheckErr(err)
-
-			var decodedInputs []EvmAdvance
-			for _, input := range inputList {
-				params, err := decodeInputData(input, parsedAbi)
-				cobra.CheckErr(err)
-				decodedInputs = append(decodedInputs, params)
-			}
-
-			result, err = json.MarshalIndent(decodedInputs, "", "  ")
-			cobra.CheckErr(err)
-		} else {
-			result, err = json.MarshalIndent(inputList, "", "    ")
-			cobra.CheckErr(err)
+		// Create decoded inputs
+		var decodedInputs []*jsonrpc.DecodedInput
+		for _, input := range inputList {
+			decoded, _ := jsonrpc.DecodeInput(input, parsedAbi)
+			decodedInputs = append(decodedInputs, decoded)
 		}
+
+		// Format response to match JSON-RPC API
+		response := struct {
+			Data       []*jsonrpc.DecodedInput `json:"data"`
+			Pagination struct {
+				TotalCount uint64 `json:"total_count"`
+				Limit      uint64 `json:"limit"`
+				Offset     uint64 `json:"offset"`
+			} `json:"pagination"`
+		}{
+			Data: decodedInputs,
+			Pagination: struct {
+				TotalCount uint64 `json:"total_count"`
+				Limit      uint64 `json:"limit"`
+				Offset     uint64 `json:"offset"`
+			}{
+				TotalCount: total,
+				Limit:      limit,
+				Offset:     offset,
+			},
+		}
+
+		result, err = json.MarshalIndent(response, "", "    ")
+		cobra.CheckErr(err)
 	} else {
 		// Get specific input by index
 		inputIndex, err := config.ToUint64FromDecimalOrHexString(args[1])
@@ -134,19 +160,18 @@ func run(cmd *cobra.Command, args []string) {
 		input, err := repo.GetInput(ctx, nameOrAddress, inputIndex)
 		cobra.CheckErr(err)
 
-		if decodeInput {
-			parsedAbi, err := inputs.InputsMetaData.GetAbi()
-			cobra.CheckErr(err)
+		// Create decoded input
+		decoded, _ := jsonrpc.DecodeInput(input, parsedAbi)
 
-			params, err := decodeInputData(input, parsedAbi)
-			cobra.CheckErr(err)
-
-			result, err = json.MarshalIndent(params, "", "  ")
-			cobra.CheckErr(err)
-		} else {
-			result, err = json.MarshalIndent(input, "", "    ")
-			cobra.CheckErr(err)
+		// Format response to match JSON-RPC API
+		response := struct {
+			Data *jsonrpc.DecodedInput `json:"data"`
+		}{
+			Data: decoded,
 		}
+
+		result, err = json.MarshalIndent(response, "", "    ")
+		cobra.CheckErr(err)
 	}
 
 	fmt.Println(string(result))

@@ -268,15 +268,15 @@ func (s *Service) handleListEpochs(w http.ResponseWriter, r *http.Request, req R
 
 func parseIndex(indexString *string, field string) (uint64, error) {
 	if indexString == nil {
-		return 0, fmt.Errorf("Missing required %s parameter", field)
+		return 0, fmt.Errorf("missing required %s parameter", field)
 	}
 	if len(*indexString) < 3 || (!strings.HasPrefix(*indexString, "0x") && !strings.HasPrefix(*indexString, "0X")) {
-		return 0, fmt.Errorf("Invalid %s: expected hex encoded value", field)
+		return 0, fmt.Errorf("invalid %s: expected hex encoded value", field)
 	}
 	str := (*indexString)[2:]
 	index, err := strconv.ParseUint(str, 16, 64)
 	if err != nil {
-		return 0, fmt.Errorf("Invalid %s: %v", field, "error parsing")
+		return 0, fmt.Errorf("invalid %s: %v", field, "error parsing")
 	}
 	return index, nil
 }
@@ -410,7 +410,7 @@ func (s *Service) handleListInputs(w http.ResponseWriter, r *http.Request, req R
 
 	var resultInputs []*DecodedInput
 	for _, in := range inputs {
-		decoded, err := decodeInput(in, s.inputABI)
+		decoded, err := DecodeInput(in, s.inputABI)
 		if err != nil {
 			s.Logger.Error("Unable to decode Input", "app", params.Application, "index", in.Index, "err", err)
 		}
@@ -474,7 +474,7 @@ func (s *Service) handleGetInput(w http.ResponseWriter, r *http.Request, req RPC
 		return
 	}
 
-	decoded, err := decodeInput(input, s.inputABI)
+	decoded, err := DecodeInput(input, s.inputABI)
 	if err != nil {
 		s.Logger.Error("Unable to decode Input", "app", params.Application, "index", input.Index, "err", err)
 	}
@@ -523,11 +523,11 @@ func (s *Service) handleGetProcessedInputCount(w http.ResponseWriter, r *http.Re
 	writeRPCResult(w, req.ID, result)
 }
 
-func parseOutputType(s string) ([]byte, error) {
+func ParseOutputType(s string) ([]byte, error) {
 	if strings.HasPrefix(s, "0x") || strings.HasPrefix(s, "0X") {
 		s = s[2:]
 	}
-	if len(s) != 8 {
+	if len(s) != 8 { // nolint: mnd
 		return []byte{}, fmt.Errorf("invalid output type: expected exactly 4 bytes")
 	}
 	// Decode the hex string into bytes.
@@ -582,7 +582,7 @@ func (s *Service) handleListOutputs(w http.ResponseWriter, r *http.Request, req 
 
 	// Add output type filter if provided
 	if params.OutputType != nil {
-		outputType, err := parseOutputType(*params.OutputType)
+		outputType, err := ParseOutputType(*params.OutputType)
 		if err != nil {
 			writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, fmt.Sprintf("Invalid output type: %v", err), nil)
 			return
@@ -612,7 +612,7 @@ func (s *Service) handleListOutputs(w http.ResponseWriter, r *http.Request, req 
 
 	var resultOutputs []*DecodedOutput
 	for _, out := range outputs {
-		decoded, err := decodeOutput(out, s.outputABI)
+		decoded, err := DecodeOutput(out, s.outputABI)
 		if err != nil {
 			s.Logger.Error("Unable to decode Output", "app", params.Application, "index", out.Index, "err", err)
 		}
@@ -676,7 +676,7 @@ func (s *Service) handleGetOutput(w http.ResponseWriter, r *http.Request, req RP
 		return
 	}
 
-	decoded, err := decodeOutput(output, s.outputABI)
+	decoded, err := DecodeOutput(output, s.outputABI)
 	if err != nil {
 		s.Logger.Error("Unable to decode Output", "app", params.Application, "index", output.Index, "err", err)
 	}

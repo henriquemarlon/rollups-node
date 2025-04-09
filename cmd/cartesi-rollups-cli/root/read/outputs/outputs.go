@@ -4,17 +4,13 @@
 package outputs
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"math/big"
 
-	"github.com/ethereum/go-ethereum/accounts/abi"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/spf13/cobra"
 
 	"github.com/cartesi/rollups-node/internal/config"
-	"github.com/cartesi/rollups-node/internal/model"
+	"github.com/cartesi/rollups-node/internal/jsonrpc"
 	"github.com/cartesi/rollups-node/internal/repository"
 	"github.com/cartesi/rollups-node/internal/repository/factory"
 	"github.com/cartesi/rollups-node/pkg/contracts/outputs"
@@ -37,23 +33,37 @@ cartesi-rollups-cli read outputs echo-dapp
 # Read specific output by index:
 cartesi-rollups-cli read outputs echo-dapp 42
 
-# Read all outputs filtering by input index:
-cartesi-rollups-cli read outputs echo-dapp --input-index=23
+# Read outputs filtered by epoch index and input index:
+cartesi-rollups-cli read outputs echo-dapp --epoch-index 0x3
 
-# Read outputs with decoded data:
-cartesi-rollups-cli read outputs echo-dapp --decode`
+# Read outputs filtered by output type and voucher address:
+cartesi-rollups-cli read outputs echo-dapp --output-type 0x237a816f --voucher-address 0x0123456789abcdef0123456789abcdef0123456789abcdef
+
+# Read outputs with pagination:
+cartesi-rollups-cli read outputs echo-dapp --limit 20 --offset 0`
 
 var (
-	inputIndex   uint64
-	decodeOutput bool
+	epochIndex     uint64
+	inputIndex     uint64
+	outputType     string
+	voucherAddress string
+	limit          uint64
+	offset         uint64
 )
 
 func init() {
+	Cmd.Flags().Uint64Var(&epochIndex, "epoch-index", 0,
+		"Filter outputs by epoch index (decimal or hex encoded)")
 	Cmd.Flags().Uint64Var(&inputIndex, "input-index", 0,
-		"filter outputs by input index")
-
-	Cmd.Flags().BoolVarP(&decodeOutput, "decode", "d", false,
-		"prints the decoded Output RawData")
+		"Filter outputs by input index (decimal or hex encoded)")
+	Cmd.Flags().StringVar(&outputType, "output-type", "",
+		"Filter outputs by output type (first 4 bytes of raw data hex encoded)")
+	Cmd.Flags().StringVar(&voucherAddress, "voucher-address", "",
+		"Filter outputs by voucher address (hex encoded)")
+	Cmd.Flags().Uint64Var(&limit, "limit", 50, // nolint: mnd
+		"Maximum number of outputs to return")
+	Cmd.Flags().Uint64Var(&offset, "offset", 0,
+		"Starting point for the list of outputs")
 
 	origHelpFunc := Cmd.HelpFunc()
 	Cmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
@@ -61,83 +71,14 @@ func init() {
 		command.Flags().Lookup("database-connection").Hidden = false
 		origHelpFunc(command, strings)
 	})
-}
 
-type Notice struct {
-	Type    string `json:"type"`
-	Payload string `json:"payload"`
-}
-
-type Voucher struct {
-	Type        string `json:"type"`
-	Destination string `json:"destination"`
-	Value       string `json:"value"`
-	Payload     string `json:"payload"`
-}
-
-type DelegateCallVoucher struct {
-	Type        string `json:"type"`
-	Destination string `json:"destination"`
-	Payload     string `json:"payload"`
-}
-
-func decodeOutputData(output *model.Output, parsedAbi *abi.ABI) (any, error) {
-	if len(output.RawData) < 4 { // nolint: mnd
-		return nil, fmt.Errorf("raw data too short")
-	}
-
-	method, err := parsedAbi.MethodById(output.RawData[:4])
-	if err != nil {
-		return nil, err
-	}
-
-	decoded := make(map[string]any)
-	if err := method.Inputs.UnpackIntoMap(decoded, output.RawData[4:]); err != nil {
-		return nil, fmt.Errorf("failed to unpack %s: %w", method.Name, err)
-	}
-
-	switch method.Name {
-	case "Notice":
-		payload, ok := decoded["payload"].([]byte)
-		if !ok {
-			return nil, fmt.Errorf("unable to decode Notice payload")
+	Cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
+		if limit > jsonrpc.LIST_ITEM_LIMIT {
+			return fmt.Errorf("limit cannot exceed %d", jsonrpc.LIST_ITEM_LIMIT)
+		} else if limit == 0 {
+			limit = jsonrpc.LIST_ITEM_LIMIT
 		}
-		return Notice{
-			Type:    "Notice",
-			Payload: "0x" + hex.EncodeToString(payload),
-		}, nil
-
-	case "Voucher":
-		dest, ok1 := decoded["destination"].(common.Address)
-		value, ok2 := decoded["value"].(*big.Int)
-		payload, ok3 := decoded["payload"].([]byte)
-		if !ok1 || !ok2 || !ok3 {
-			return nil, fmt.Errorf("unable to decode Voucher parameters")
-		}
-		return Voucher{
-			Type:        "Voucher",
-			Destination: dest.Hex(),
-			Value:       value.String(),
-			Payload:     "0x" + hex.EncodeToString(payload),
-		}, nil
-
-	case "DelegateCallVoucher":
-		dest, ok1 := decoded["destination"].(common.Address)
-		payload, ok2 := decoded["payload"].([]byte)
-		if !ok1 || !ok2 {
-			return nil, fmt.Errorf("unable to decode DelegateCallVoucher parameters")
-		}
-		return DelegateCallVoucher{
-			Type:        "DelegateCallVoucher",
-			Destination: dest.Hex(),
-			Payload:     "0x" + hex.EncodeToString(payload),
-		}, nil
-
-	default:
-		return map[string]string{
-			"type":    method.Name,
-			"rawData": "0x" + hex.EncodeToString(output.RawData),
-		}, nil
+		return nil
 	}
 }
 
@@ -154,6 +95,9 @@ func run(cmd *cobra.Command, args []string) {
 	cobra.CheckErr(err)
 	defer repo.Close()
 
+	parsedAbi, err := outputs.OutputsMetaData.GetAbi()
+	cobra.CheckErr(err)
+
 	var result []byte
 	if len(args) == 2 { // nolint: mnd
 		// Get a specific output by index
@@ -165,56 +109,89 @@ func run(cmd *cobra.Command, args []string) {
 		output, err := repo.GetOutput(ctx, nameOrAddress, outputIndex)
 		cobra.CheckErr(err)
 
-		if decodeOutput {
-			parsedAbi, err := outputs.OutputsMetaData.GetAbi()
-			cobra.CheckErr(err)
+		// Create decoded output
+		decoded, _ := jsonrpc.DecodeOutput(output, parsedAbi)
 
-			decoded, err := decodeOutputData(output, parsedAbi)
-			cobra.CheckErr(err)
-
-			result, err = json.MarshalIndent(decoded, "", "    ")
-			cobra.CheckErr(err)
-		} else {
-			result, err = json.MarshalIndent(output, "", "    ")
-			cobra.CheckErr(err)
+		// Format response to match JSON-RPC API
+		response := struct {
+			Data *jsonrpc.DecodedOutput `json:"data"`
+		}{
+			Data: decoded,
 		}
+
+		result, err = json.MarshalIndent(response, "", "    ")
+		cobra.CheckErr(err)
 	} else {
-		// List outputs with optional input index filter
-		f := repository.OutputFilter{}
-		if cmd.Flags().Changed("input-index") {
-			inputIndexPtr := &inputIndex
-			f.InputIndex = inputIndexPtr
+		// Create filter based on flags
+		filter := repository.OutputFilter{}
+
+		// Add epoch index filter if provided
+		if cmd.Flags().Changed("epoch-index") {
+			filter.EpochIndex = &epochIndex
 		}
 
-		p := repository.Pagination{}
-		outputList, _, err := repo.ListOutputs(ctx, nameOrAddress, f, p)
+		// Add input index filter if provided
+		if cmd.Flags().Changed("input-index") {
+			filter.InputIndex = &inputIndex
+		}
+
+		// Add output type filter if provided
+		if cmd.Flags().Changed("output-type") {
+			outputTypeBytes, err := jsonrpc.ParseOutputType(outputType)
+			if err != nil {
+				cobra.CheckErr(fmt.Errorf("invalid output type: %w", err))
+			}
+			filter.OutputType = &outputTypeBytes
+		}
+
+		// Add voucher address filter if provided
+		if cmd.Flags().Changed("voucher-address") {
+			voucherAddr, err := config.ToAddressFromString(voucherAddress)
+			if err != nil {
+				cobra.CheckErr(fmt.Errorf("invalid voucher address: %w", err))
+			}
+			filter.VoucherAddress = &voucherAddr
+		}
+
+		// Limit is validated in PreRunE
+
+		// List outputs with filters
+		outputList, total, err := repo.ListOutputs(ctx, nameOrAddress, filter, repository.Pagination{
+			Limit:  limit,
+			Offset: offset,
+		})
 		cobra.CheckErr(err)
 
-		if decodeOutput {
-			parsedAbi, err := outputs.OutputsMetaData.GetAbi()
-			cobra.CheckErr(err)
-
-			var decodedOutputs []any
-			for _, output := range outputList {
-				decoded, err := decodeOutputData(output, parsedAbi)
-				if err != nil {
-					// If decoding fails, include the error with the raw data.
-					decoded = map[string]string{
-						"type":    "unknown",
-						"rawData": "0x" + hex.EncodeToString(output.RawData),
-						"error":   err.Error(),
-					}
-				}
-				decodedOutputs = append(decodedOutputs, decoded)
-			}
-
-			// Marshal the decoded outputs as indented JSON.
-			result, err = json.MarshalIndent(decodedOutputs, "", "  ")
-			cobra.CheckErr(err)
-		} else {
-			result, err = json.MarshalIndent(outputList, "", "    ")
-			cobra.CheckErr(err)
+		// Create decoded outputs
+		var decodedOutputs []*jsonrpc.DecodedOutput
+		for _, output := range outputList {
+			decoded, _ := jsonrpc.DecodeOutput(output, parsedAbi)
+			decodedOutputs = append(decodedOutputs, decoded)
 		}
+
+		// Format response to match JSON-RPC API
+		response := struct {
+			Data       []*jsonrpc.DecodedOutput `json:"data"`
+			Pagination struct {
+				TotalCount uint64 `json:"total_count"`
+				Limit      uint64 `json:"limit"`
+				Offset     uint64 `json:"offset"`
+			} `json:"pagination"`
+		}{
+			Data: decodedOutputs,
+			Pagination: struct {
+				TotalCount uint64 `json:"total_count"`
+				Limit      uint64 `json:"limit"`
+				Offset     uint64 `json:"offset"`
+			}{
+				TotalCount: total,
+				Limit:      limit,
+				Offset:     offset,
+			},
+		}
+
+		result, err = json.MarshalIndent(response, "", "    ")
+		cobra.CheckErr(err)
 	}
 
 	fmt.Println(string(result))

@@ -244,7 +244,7 @@ type DecodedInput struct {
 	DecodedData *EvmAdvance `json:"decoded_data"`
 }
 
-func decodeInput(input *model.Input, parsedAbi *abi.ABI) (*DecodedInput, error) {
+func DecodeInput(input *model.Input, parsedAbi *abi.ABI) (*DecodedInput, error) {
 	decoded := make(map[string]any)
 	err := parsedAbi.Methods["EvmAdvance"].Inputs.UnpackIntoMap(decoded, input.RawData[4:])
 	if err != nil {
@@ -320,7 +320,7 @@ type DecodedOutput struct {
 	DecodedData any `json:"decoded_data"`
 }
 
-func decodeOutput(output *model.Output, parsedAbi *abi.ABI) (*DecodedOutput, error) {
+func DecodeOutput(output *model.Output, parsedAbi *abi.ABI) (*DecodedOutput, error) {
 	decodedOutput := &DecodedOutput{Output: output}
 	if len(output.RawData) < 4 {
 		return decodedOutput, fmt.Errorf("raw data too short")

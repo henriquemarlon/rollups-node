@@ -123,15 +123,42 @@ func (s *Service) Stop(bool) []error {
 
 func (s *Service) Tick() []error {
 	errs := []error{}
+
+	// gather epochs pairs with open claims, either:
+	// - computed but not yet submitted
+	acceptedOrSubmittedEpochs, computedEpochs, computedApps, errSubmitted := s.repository.SelectSubmittedClaimPairsPerApp(s.Context)
+	if errSubmitted != nil {
+		errs = append(errs, errSubmitted)
+		return errs
+	}
+
+	// - submitted but not yet accepted.
+	acceptedEpochs, submittedEpochs, submittedApps, errAccepted := s.repository.SelectAcceptedClaimPairsPerApp(s.Context)
+	if errAccepted != nil {
+		errs = append(errs, errAccepted)
+		return errs
+	}
+
+	s.Logger.Debug("Processing claims for epochs",
+		"computed", len(computedEpochs),
+		"submitted", len(submittedEpochs),
+	)
+
+	// return early if there is nothing to do
+	if len(computedEpochs) == 0 && len(submittedEpochs) == 0 {
+		return nil
+	}
+
+	// we have claims to check
+	// get the latest/safe/finalized, etc. block
 	endBlock, err := s.blockchain.getBlockNumber(s.Context)
 	if err != nil {
 		errs = append(errs, err)
 		return errs
 	}
 
-	errs = append(errs, s.submitClaimsAndUpdateDatabase(endBlock)...)
-	errs = append(errs, s.acceptClaimsAndUpdateDatabase(endBlock)...)
-
+	errs = append(errs, s.submitClaimsAndUpdateDatabase(acceptedOrSubmittedEpochs, computedEpochs, computedApps, endBlock)...)
+	errs = append(errs, s.acceptClaimsAndUpdateDatabase(acceptedEpochs, submittedEpochs, submittedApps, endBlock)...)
 	return errs
 }
 

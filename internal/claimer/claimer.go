@@ -101,13 +101,14 @@ type iclaimerRepository interface {
 }
 
 /* transition claims from computed to submitted */
-func (s *Service) submitClaimsAndUpdateDatabase(endBlock *big.Int) []error {
+func (s *Service) submitClaimsAndUpdateDatabase(
+	acceptedOrSubmittedEpochs map[int64]*model.Epoch,
+	computedEpochs map[int64]*model.Epoch,
+	apps map[int64]*model.Application,
+	endBlock *big.Int,
+) []error {
 	errs := []error{}
-	acceptedOrSubmittedEpochs, computedEpochs, apps, err := s.repository.SelectSubmittedClaimPairsPerApp(s.Context)
-	if err != nil {
-		errs = append(errs, err)
-		return errs
-	}
+	var err error
 
 	// check claims in flight
 	for key, txHash := range s.claimsInFlight {
@@ -317,13 +318,14 @@ func (s *Service) submitClaimsAndUpdateDatabase(endBlock *big.Int) []error {
 }
 
 /* transition claims from submitted to accepted */
-func (s *Service) acceptClaimsAndUpdateDatabase(endBlock *big.Int) []error {
+func (s *Service) acceptClaimsAndUpdateDatabase(
+	acceptedEpochs map[int64]*model.Epoch,
+	submittedEpochs map[int64]*model.Epoch,
+	apps map[int64]*model.Application,
+	endBlock *big.Int,
+) []error {
 	errs := []error{}
-	acceptedEpochs, submittedEpochs, apps, err := s.repository.SelectAcceptedClaimPairsPerApp(s.Context)
-	if err != nil {
-		errs = append(errs, err)
-		return errs
-	}
+	var err error
 
 	// check submitted claims
 	for key, submittedEpoch := range submittedEpochs {

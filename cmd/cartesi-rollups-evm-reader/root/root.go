@@ -5,6 +5,7 @@ package root
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/internal/evmreader"
@@ -12,6 +13,8 @@ import (
 	"github.com/cartesi/rollups-node/internal/version"
 	"github.com/cartesi/rollups-node/pkg/service"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/hashicorp/go-retryablehttp"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -81,6 +84,19 @@ func init() {
 	}
 }
 
+func createEthClient(ctx context.Context, endpoint string, logger *slog.Logger) (*ethclient.Client, error) {
+	rclient := retryablehttp.NewClient()
+	rclient.Logger = logger
+	clientOption := rpc.WithHTTPClient(rclient.StandardClient())
+
+	rpcClient, err := rpc.DialOptions(ctx, endpoint, clientOption)
+	if err != nil {
+		return nil, err
+	}
+
+	return ethclient.NewClient(rpcClient), nil
+}
+
 func run(cmd *cobra.Command, args []string) {
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.MaxStartupTime)
 	defer cancel()
@@ -98,7 +114,8 @@ func run(cmd *cobra.Command, args []string) {
 	}
 
 	var err error
-	createInfo.EthClient, err = ethclient.DialContext(ctx, cfg.BlockchainHttpEndpoint.String())
+	logger := service.NewLogger(cfg.LogLevel, cfg.LogColor).With("service", serviceName)
+	createInfo.EthClient, err = createEthClient(ctx, cfg.BlockchainHttpEndpoint.String(), logger)
 	cobra.CheckErr(err)
 
 	createInfo.EthWsClient, err = ethclient.DialContext(ctx, cfg.BlockchainWsEndpoint.String())

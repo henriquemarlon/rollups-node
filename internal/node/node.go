@@ -48,7 +48,7 @@ func Create(ctx context.Context, c *CreateInfo) (*Service, error) {
 	}
 
 	s := &Service{}
-	c.CreateInfo.Impl = s
+	c.Impl = s
 
 	err = service.Create(ctx, &c.CreateInfo, &s.Service)
 	if err != nil {

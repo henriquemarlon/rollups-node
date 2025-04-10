@@ -140,8 +140,7 @@ func Create(ctx context.Context, c *CreateInfo, s *Service) error {
 
 	// log
 	if s.Logger == nil {
-		s.Logger = NewLogger(c.LogLevel, c.LogColor)
-		s.Logger = s.Logger.With("service", s.Name)
+		s.Logger = NewLogger(c.LogLevel, c.LogColor).With("service", s.Name)
 	}
 
 	// context and cancelation

@@ -13,6 +13,8 @@ import (
 	"github.com/cartesi/rollups-node/pkg/service"
 
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/hashicorp/go-retryablehttp"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -98,9 +100,13 @@ func run(cmd *cobra.Command, args []string) {
 		Config: *cfg,
 	}
 
-	var err error
-	createInfo.EthConn, err = ethclient.DialContext(ctx, cfg.BlockchainHttpEndpoint.String())
+	rclient := retryablehttp.NewClient()
+	rclient.Logger = service.NewLogger(cfg.LogLevel, cfg.LogColor).With("service", serviceName)
+
+	clientOption := rpc.WithHTTPClient(rclient.StandardClient())
+	rpcClient, err := rpc.DialOptions(ctx, cfg.BlockchainHttpEndpoint.String(), clientOption)
 	cobra.CheckErr(err)
+	createInfo.EthConn = ethclient.NewClient(rpcClient)
 
 	createInfo.Repository, err = factory.NewRepositoryFromConnectionString(ctx, cfg.DatabaseConnection.String())
 	cobra.CheckErr(err)
@@ -109,5 +115,6 @@ func run(cmd *cobra.Command, args []string) {
 	claimerService, err := claimer.Create(ctx, &createInfo)
 	cobra.CheckErr(err)
 
-	cobra.CheckErr(claimerService.Serve())
+	err = claimerService.Serve()
+	cobra.CheckErr(err)
 }

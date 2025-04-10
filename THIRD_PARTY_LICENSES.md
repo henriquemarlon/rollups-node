@@ -241,11 +241,23 @@
 * Version: v1.1.0
 * License: [MPL-2.0](https://github.com/hashicorp/errwrap/blob/v1.1.0/LICENSE)
 
+## github.com/hashicorp/go-cleanhttp
+
+* Name: github.com/hashicorp/go-cleanhttp
+* Version: v0.5.2
+* License: [MPL-2.0](https://github.com/hashicorp/go-cleanhttp/blob/v0.5.2/LICENSE)
+
 ## github.com/hashicorp/go-multierror
 
 * Name: github.com/hashicorp/go-multierror
 * Version: v1.1.1
 * License: [MPL-2.0](https://github.com/hashicorp/go-multierror/blob/v1.1.1/LICENSE)
+
+## github.com/hashicorp/go-retryablehttp
+
+* Name: github.com/hashicorp/go-retryablehttp
+* Version: v0.7.7
+* License: [MPL-2.0](https://github.com/hashicorp/go-retryablehttp/blob/v0.7.7/LICENSE)
 
 ## github.com/holiman/uint256
 

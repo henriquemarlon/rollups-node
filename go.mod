@@ -19,6 +19,7 @@ require (
 	github.com/deepmap/oapi-codegen/v2 v2.2.0
 	github.com/go-jet/jet/v2 v2.12.0
 	github.com/golang-migrate/migrate/v4 v4.18.2
+	github.com/hashicorp/go-retryablehttp v0.7.7
 	github.com/jackc/pgtype v1.14.4
 	github.com/jackc/pgx/v5 v5.7.4
 	github.com/lmittmann/tint v1.0.7
@@ -67,6 +68,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
+	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/holiman/uint256 v1.3.2 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect

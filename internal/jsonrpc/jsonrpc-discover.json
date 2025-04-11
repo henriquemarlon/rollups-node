@@ -677,7 +677,7 @@
 				"type": "object",
 				"properties": {
 					"chain_id": {
-						"type": "string"
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"application_contract": {
 						"$ref": "#/components/schemas/EthereumAddress"
@@ -692,7 +692,7 @@
 						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"prev_randao": {
-						"type": "string"
+						"$ref": "#/components/schemas/ByteArray"
 					},
 					"index": {
 						"$ref": "#/components/schemas/UnsignedInteger"
@@ -778,11 +778,8 @@
 			"Notice": {
 				"type": "object",
 				"properties": {
-					"index": {
-						"$ref": "#/components/schemas/UnsignedInteger"
-					},
 					"type": {
-						"type": "string"
+						"$ref": "#/components/schemas/FunctionSelector"
 					},
 					"payload": {
 						"$ref": "#/components/schemas/ByteArray"
@@ -792,11 +789,8 @@
 			"Voucher": {
 				"type": "object",
 				"properties": {
-					"index": {
-						"$ref": "#/components/schemas/UnsignedInteger"
-					},
 					"type": {
-						"type": "string"
+						"$ref": "#/components/schemas/FunctionSelector"
 					},
 					"destination": {
 						"$ref": "#/components/schemas/EthereumAddress"
@@ -812,11 +806,8 @@
 			"DelegateCallVoucher": {
 				"type": "object",
 				"properties": {
-					"index": {
-						"$ref": "#/components/schemas/UnsignedInteger"
-					},
 					"type": {
-						"type": "string"
+						"$ref": "#/components/schemas/FunctionSelector"
 					},
 					"destination": {
 						"$ref": "#/components/schemas/EthereumAddress"
@@ -935,32 +926,32 @@
 						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"advance_inc_deadline": {
-						"type": "string",
-						"format": "duration"
+						"description": "Duration in nanoseconds",
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"advance_max_deadline": {
-						"type": "string",
-						"format": "duration"
+						"description": "Duration in nanoseconds",
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"inspect_inc_deadline": {
-						"type": "string",
-						"format": "duration"
+						"description": "Duration in nanoseconds",
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"inspect_max_deadline": {
-						"type": "string",
-						"format": "duration"
+						"description": "Duration in nanoseconds",
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"load_deadline": {
-						"type": "string",
-						"format": "duration"
+						"description": "Duration in nanoseconds",
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"store_deadline": {
-						"type": "string",
-						"format": "duration"
+						"description": "Duration in nanoseconds",
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"fast_deadline": {
-						"type": "string",
-						"format": "duration"
+						"description": "Duration in nanoseconds",
+						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"max_concurrent_inspects": {
 						"type": "integer"

@@ -26,7 +26,7 @@ type Application struct {
 	EpochLength          uint64                   `json:"epoch_length"`
 	DataAvailability     DataAvailabilitySelector `json:"data_availability"`
 	State                ApplicationState         `json:"state"`
-	Reason               *string                  `json:"reason,omitempty"`
+	Reason               *string                  `json:"reason"`
 	IInputBoxBlock       uint64                   `json:"iinputbox_block"`
 	LastInputCheckBlock  uint64                   `json:"last_input_check_block"`
 	LastOutputCheckBlock uint64                   `json:"last_output_check_block"`

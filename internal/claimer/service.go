@@ -22,7 +22,7 @@ import (
 type CreateInfo struct {
 	service.CreateInfo
 
-	Config config.Config
+	Config config.ClaimerConfig
 
 	EthConn    *ethclient.Client
 	Repository repository.Repository
@@ -166,7 +166,7 @@ func setupPersistentConfig(
 	ctx context.Context,
 	logger *slog.Logger,
 	repo iclaimerRepository,
-	c *config.Config,
+	c *config.ClaimerConfig,
 ) (*PersistentConfig, error) {
 	config, err := repository.LoadNodeConfig[PersistentConfig](ctx, repo, ClaimerConfigKey)
 	if config == nil && err == nil {

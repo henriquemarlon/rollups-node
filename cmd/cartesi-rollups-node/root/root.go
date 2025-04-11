@@ -42,7 +42,7 @@ var (
 	inspectAddress         string
 	telemetryAddress       string
 	machinelogLevel        string
-	cfg                    *config.Config
+	cfg                    *config.NodeConfig
 )
 
 var Cmd = &cobra.Command{
@@ -118,7 +118,7 @@ func init() {
 	// TODO: validate on preRunE
 	Cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		var err error
-		cfg, err = config.Load()
+		cfg, err = config.LoadNodeConfig()
 		if err != nil {
 			return err
 		}
@@ -129,6 +129,9 @@ func init() {
 func createEthClient(ctx context.Context, endpoint string, logger *slog.Logger) (*ethclient.Client, error) {
 	rclient := retryablehttp.NewClient()
 	rclient.Logger = logger
+	rclient.RetryMax = int(cfg.BlockchainHttpMaxRetries)
+	rclient.RetryWaitMin = cfg.BlockchainHttpRetryMinWait
+	rclient.RetryWaitMax = cfg.BlockchainHttpRetryMaxWait
 	clientOption := rpc.WithHTTPClient(rclient.StandardClient())
 
 	rpcClient, err := rpc.DialOptions(ctx, endpoint, clientOption)

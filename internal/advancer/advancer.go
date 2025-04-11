@@ -46,7 +46,7 @@ type Service struct {
 // CreateInfo contains the configuration for creating an advancer service
 type CreateInfo struct {
 	service.CreateInfo
-	Config     config.Config
+	Config     config.AdvancerConfig
 	Repository repository.Repository
 }
 

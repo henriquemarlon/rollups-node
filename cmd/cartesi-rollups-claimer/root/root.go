@@ -31,7 +31,7 @@ var (
 	maxStartupTime         string
 	enableSubmission       bool
 	telemetryAddress       string
-	cfg                    *config.Config
+	cfg                    *config.ClaimerConfig
 )
 
 var Cmd = &cobra.Command{
@@ -75,7 +75,7 @@ func init() {
 	// TODO: validate on preRunE
 	Cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		var err error
-		cfg, err = config.Load()
+		cfg, err = config.LoadClaimerConfig()
 		if err != nil {
 			return err
 		}
@@ -102,6 +102,9 @@ func run(cmd *cobra.Command, args []string) {
 
 	rclient := retryablehttp.NewClient()
 	rclient.Logger = service.NewLogger(cfg.LogLevel, cfg.LogColor).With("service", serviceName)
+	rclient.RetryMax = int(cfg.BlockchainHttpMaxRetries)
+	rclient.RetryWaitMin = cfg.BlockchainHttpRetryMinWait
+	rclient.RetryWaitMax = cfg.BlockchainHttpRetryMaxWait
 
 	clientOption := rpc.WithHTTPClient(rclient.StandardClient())
 	rpcClient, err := rpc.DialOptions(ctx, cfg.BlockchainHttpEndpoint.String(), clientOption)

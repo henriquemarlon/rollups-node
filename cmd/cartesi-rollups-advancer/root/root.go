@@ -29,7 +29,7 @@ var (
 	machinelogLevel        string
 	enableMachineHashCheck bool
 	enableInspect          bool
-	cfg                    *config.Config
+	cfg                    *config.AdvancerConfig
 )
 
 var Cmd = &cobra.Command{
@@ -77,7 +77,7 @@ func init() {
 	// TODO: validate on preRunE
 	Cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		var err error
-		cfg, err = config.Load()
+		cfg, err = config.LoadAdvancerConfig()
 		if err != nil {
 			return err
 		}

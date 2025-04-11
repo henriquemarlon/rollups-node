@@ -25,7 +25,7 @@ var (
 	pollInterval       string
 	maxStartupTime     string
 	telemetryAddress   string
-	cfg                *config.Config
+	cfg                *config.ValidatorConfig
 )
 
 var Cmd = &cobra.Command{
@@ -59,7 +59,7 @@ func init() {
 	// TODO: validate on preRunE
 	Cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		var err error
-		cfg, err = config.Load()
+		cfg, err = config.LoadValidatorConfig()
 		if err != nil {
 			return err
 		}

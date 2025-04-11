@@ -35,7 +35,7 @@ type Service struct {
 type CreateInfo struct {
 	service.CreateInfo
 
-	Config config.Config
+	Config config.JsonrpcConfig
 
 	Repository repository.Repository
 }

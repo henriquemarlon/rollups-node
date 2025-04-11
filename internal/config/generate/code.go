@@ -7,11 +7,13 @@ import (
 	"bytes"
 	"go/format"
 	"os"
+	"sort"
 	"strings"
 	"text/template"
 
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
+	"slices"
 )
 
 // Template function map
@@ -57,6 +59,35 @@ var funcMap = template.FuncMap{
 	"mapstructure": func(s string) string {
 		return "`mapstructure:\"" + s + "\"`"
 	},
+	// isUsedBy checks if a variable is used by a specific service
+	"isUsedBy": func(env Env, service string) bool {
+		return slices.Contains(env.UsedBy, service)
+	},
+	// getServices extracts all unique service names from the environment variables
+	"getServices": func(envs []Env) []string {
+		serviceMap := make(map[string]bool)
+		for _, env := range envs {
+			for _, service := range env.UsedBy {
+				if service != "cli" {
+					serviceMap[service] = true
+				}
+			}
+		}
+
+		services := make([]string, 0, len(serviceMap))
+		for service := range serviceMap {
+			services = append(services, service)
+		}
+		sort.Strings(services)
+		return services
+	},
+	// capitalize the first letter of a string
+	"capitalize": func(s string) string {
+		if s == "" {
+			return ""
+		}
+		return strings.ToUpper(s[:1]) + s[1:]
+	},
 }
 
 // generateCodeFile renders the template with the given Env slice and writes it to the specified file.
@@ -70,7 +101,7 @@ func generateCodeFile(path string, envs []Env) {
 	if err != nil {
 		panic(err)
 	}
-	if err := os.WriteFile(path, code, 0644); err != nil {
+	if err := os.WriteFile(path, code, 0644); err != nil { // nolint: mnd
 		panic(err)
 	}
 }
@@ -93,8 +124,8 @@ import (
 var ErrNotDefined = fmt.Errorf("variable not defined")
 
 func init() {
-    // Automatically bind environment variables.
-    viper.AutomaticEnv()
+	// Automatically bind environment variables.
+	viper.AutomaticEnv()
 }
 
 const (
@@ -102,20 +133,6 @@ const (
 	{{ toConstName .Name }} = "{{ .Name }}"
 {{ end -}}
 )
-
-// Config holds all configuration values.
-type Config struct {
-{{ range . }}
-{{ if not .Omit -}}
-{{ if .Description -}}
-{{ range $line := splitLines .Description -}}
-	// {{ $line }}
-{{ end -}}
-{{ end -}}
-	{{ toFieldName .Name }} {{ .GoType }} {{ mapstructure .Name }}
-{{ end -}}
-{{ end }}
-}
 
 func SetDefaults() {
 	// Set defaults based on the TOML definitions.
@@ -126,9 +143,25 @@ func SetDefaults() {
 {{ end }}
 }
 
-// Load reads configuration from environment variables, a config file, and defaults.
+{{ $services := getServices . -}}
+{{ range $service := $services }}
+// {{ capitalize $service }}Config holds configuration values for the {{ $service }} service.
+type {{ capitalize $service }}Config struct {
+{{ range $ }}
+{{ if and (isUsedBy . $service) (not .Omit) -}}
+{{ if .Description -}}
+{{ range $line := splitLines .Description -}}
+	// {{ $line }}
+{{ end -}}
+{{ end -}}
+	{{ toFieldName .Name }} {{ .GoType }} {{ mapstructure .Name }}
+{{ end -}}
+{{ end }}
+}
+
+// Load{{ capitalize $service }}Config reads configuration from environment variables, a config file, and defaults.
 // Priority: command line flags > environment variables > config file > defaults.
-func Load() (*Config, error) {
+func Load{{ capitalize $service }}Config() (*{{ capitalize $service }}Config, error) {
 	SetDefaults()
 
 	// Load config file if specified via --config flag.
@@ -139,20 +172,38 @@ func Load() (*Config, error) {
 		}
 	}
 
-	var cfg Config
+	var cfg {{ capitalize $service }}Config
 	var err error
-	// For each env, perform conversion using the appropriate conversion function.
-{{ range . }}
-{{ if not .Omit -}}
+
+{{ range $ }}
+{{ if and (isUsedBy . $service) (not .Omit) -}}
 	cfg.{{ toFieldName .Name }}, err = Get{{ toFieldName .Name }}()
 	if err != nil && err != ErrNotDefined {
-		return nil, err
+		return nil, fmt.Errorf("failed to get {{ .Name }}: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("{{ .Name }} is required for the {{ $service }} service: %w", err)
 	}
 {{ end -}}
-{{ end -}}
+{{ end }}
 
 	return &cfg, nil
 }
+{{ end }}
+
+{{ range $service := $services }}
+{{ if ne $service "node" }}
+// To{{ capitalize $service }}Config converts a NodeConfig to a {{ capitalize $service }}Config.
+func (c *NodeConfig) To{{ capitalize $service }}Config() *{{ capitalize $service }}Config {
+	return &{{ capitalize $service }}Config{
+{{ range $ -}}
+{{ if and (isUsedBy . $service) (isUsedBy . "node") (not .Omit) -}}
+		{{ toFieldName .Name }}: c.{{ toFieldName .Name }},
+{{ end -}}
+{{ end }}
+	}
+}
+{{ end }}
+{{ end }}
 
 {{ range . }}
 // Get{{ toFieldName .Name }} returns the value for the environment variable {{ .Name }}.
@@ -168,5 +219,4 @@ func Get{{ toFieldName .Name }}() ({{ .GoType }}, error) {
 	return notDefined{{ .GoType }}(), fmt.Errorf("%s: %w", {{ toConstName .Name }}, ErrNotDefined)
 }
 {{ end }}
-
 `

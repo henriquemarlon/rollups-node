@@ -24,7 +24,7 @@ import (
 type CreateInfo struct {
 	service.CreateInfo
 
-	Config config.Config
+	Config config.NodeConfig
 
 	ClaimerClient  *ethclient.Client
 	ReaderClient   *ethclient.Client
@@ -104,7 +104,7 @@ func createServices(ctx context.Context, c *CreateInfo, s *Service) error {
 			err := ctx.Err()
 			s.Logger.Error("Failed to create services. Time limit exceeded",
 				"err", err)
-			return fmt.Errorf("Failed to create services. Time limit exceeded")
+			return fmt.Errorf("failed to create services. Time limit exceeded")
 		}
 	}
 	return nil
@@ -158,7 +158,7 @@ func newEVMReader(ctx context.Context, c *CreateInfo, s *Service) service.IServi
 		EthClient:   c.ReaderClient,
 		EthWsClient: c.ReaderWSClient,
 		Repository:  c.Repository,
-		Config:      c.Config,
+		Config:      *c.Config.ToEvmreaderConfig(),
 	}
 
 	readerService, err := evmreader.Create(ctx, &readerArgs)
@@ -181,7 +181,7 @@ func newAdvancer(ctx context.Context, c *CreateInfo, s *Service) service.IServic
 			ServeMux:             s.ServeMux,
 		},
 		Repository: c.Repository,
-		Config:     c.Config,
+		Config:     *c.Config.ToAdvancerConfig(),
 	}
 
 	advancerService, err := advancer.Create(ctx, &advancerArgs)
@@ -204,7 +204,7 @@ func newValidator(ctx context.Context, c *CreateInfo, s *Service) service.IServi
 			ServeMux:             s.ServeMux,
 		},
 		Repository: c.Repository,
-		Config:     c.Config,
+		Config:     *c.Config.ToValidatorConfig(),
 	}
 
 	validatorService, err := validator.Create(ctx, &validatorArgs)
@@ -228,7 +228,7 @@ func newClaimer(ctx context.Context, c *CreateInfo, s *Service) service.IService
 		},
 		EthConn:    c.ClaimerClient,
 		Repository: c.Repository,
-		Config:     c.Config,
+		Config:     *c.Config.ToClaimerConfig(),
 	}
 
 	claimerService, err := claimer.Create(ctx, &claimerArgs)
@@ -250,7 +250,7 @@ func newJsonrpc(ctx context.Context, c *CreateInfo, s *Service) service.IService
 			ServeMux:             s.ServeMux,
 		},
 		Repository: c.Repository,
-		Config:     c.Config,
+		Config:     *c.Config.ToJsonrpcConfig(),
 	}
 
 	jsonrpcService, err := jsonrpc.Create(ctx, &jsonrpcArgs)

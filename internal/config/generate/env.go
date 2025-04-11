@@ -22,6 +22,10 @@ type Env struct {
 
 	// If defined omit the field from the generated Config struct
 	Omit bool `toml:"omit"`
+
+	// List of services that use this environment variable.
+	// Possible values: "advancer", "claimer", "cli", "evm-reader", "jsonrpc-api", "node", "validator"
+	UsedBy []string `toml:"used-by"`
 }
 
 // Validates whether the fields of the environment variables were initialized correctly

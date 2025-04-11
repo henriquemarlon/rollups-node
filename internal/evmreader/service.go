@@ -16,7 +16,7 @@ import (
 type CreateInfo struct {
 	service.CreateInfo
 
-	Config config.Config
+	Config config.EvmreaderConfig
 
 	Repository repository.Repository
 
@@ -142,7 +142,7 @@ func (s *Service) String() string {
 
 func (s *Service) setupPersistentConfig(
 	ctx context.Context,
-	c *config.Config,
+	c *config.EvmreaderConfig,
 ) (*PersistentConfig, error) {
 	config, err := repository.LoadNodeConfig[PersistentConfig](ctx, s.repository, EvmReaderConfigKey)
 	if config == nil && err == nil {

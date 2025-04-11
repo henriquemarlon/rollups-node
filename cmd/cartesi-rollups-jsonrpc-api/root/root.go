@@ -25,7 +25,7 @@ var (
 	maxStartupTime     string
 	telemetryAddress   string
 	jsonrpcApiAddress  string
-	cfg                *config.Config
+	cfg                *config.JsonrpcConfig
 )
 
 var Cmd = &cobra.Command{
@@ -59,7 +59,7 @@ func init() {
 	// TODO: validate on preRunE
 	Cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		var err error
-		cfg, err = config.Load()
+		cfg, err = config.LoadJsonrpcConfig()
 		if err != nil {
 			return err
 		}

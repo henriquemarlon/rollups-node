@@ -51,103 +51,14 @@ const (
 	LOG_LEVEL                                         = "CARTESI_LOG_LEVEL"
 	REMOTE_MACHINE_LOG_LEVEL                          = "CARTESI_REMOTE_MACHINE_LOG_LEVEL"
 	ADVANCER_POLLING_INTERVAL                         = "CARTESI_ADVANCER_POLLING_INTERVAL"
+	BLOCKCHAIN_HTTP_MAX_RETRIES                       = "CARTESI_BLOCKCHAIN_HTTP_MAX_RETRIES"
+	BLOCKCHAIN_HTTP_RETRY_MAX_WAIT                    = "CARTESI_BLOCKCHAIN_HTTP_RETRY_MAX_WAIT"
+	BLOCKCHAIN_HTTP_RETRY_MIN_WAIT                    = "CARTESI_BLOCKCHAIN_HTTP_RETRY_MIN_WAIT"
 	CLAIMER_POLLING_INTERVAL                          = "CARTESI_CLAIMER_POLLING_INTERVAL"
-	EVM_READER_RETRY_POLICY_MAX_DELAY                 = "CARTESI_EVM_READER_RETRY_POLICY_MAX_DELAY"
-	EVM_READER_RETRY_POLICY_MAX_RETRIES               = "CARTESI_EVM_READER_RETRY_POLICY_MAX_RETRIES"
 	MAX_STARTUP_TIME                                  = "CARTESI_MAX_STARTUP_TIME"
 	VALIDATOR_POLLING_INTERVAL                        = "CARTESI_VALIDATOR_POLLING_INTERVAL"
 	SNAPSHOT_DIR                                      = "CARTESI_SNAPSHOT_DIR"
 )
-
-// Config holds all configuration values.
-type Config struct {
-
-	// The default block to be used by EVM Reader and Claimer when requesting new blocks.
-	// One of 'latest', 'pending', 'safe', 'finalized'
-	BlockchainDefaultBlock DefaultBlock `mapstructure:"CARTESI_BLOCKCHAIN_DEFAULT_BLOCK"`
-
-	// HTTP endpoint for the blockchain RPC provider. [Required: evm-reader and claimer]
-	BlockchainHttpEndpoint URL `mapstructure:"CARTESI_BLOCKCHAIN_HTTP_ENDPOINT"`
-
-	// An unique identifier representing a blockchain network. [Required: evm-reader and claimer]
-	BlockchainId uint64 `mapstructure:"CARTESI_BLOCKCHAIN_ID"`
-
-	// If set to true the node will send transactions using the legacy gas fee model
-	// (instead of EIP-1559).
-	BlockchainLegacyEnabled bool `mapstructure:"CARTESI_BLOCKCHAIN_LEGACY_ENABLED"`
-
-	// Block subscription timeout in seconds.
-	BlockchainSubscriptionTimeout uint64 `mapstructure:"CARTESI_BLOCKCHAIN_SUBSCRIPTION_TIMEOUT"`
-
-	// WebSocket endpoint for the blockchain RPC provider. [Required: evm-reader]
-	BlockchainWsEndpoint URL `mapstructure:"CARTESI_BLOCKCHAIN_WS_ENDPOINT"`
-
-	// Postgres endpoint in the 'postgres://user:password@hostname:port/database' format (URL).
-	//
-	// If not set, or set to empty string, will defer the behaviour to the PG driver.
-	// See [this](https://www.postgresql.org/docs/current/libpq-envars.html) for more information.
-	//
-	// It is also possible to set the endpoint without a password and load it from Postgres' passfile.
-	// See [this](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNECT-PASSFILE)
-	// for more information. [Required: all]
-	DatabaseConnection URL `mapstructure:"CARTESI_DATABASE_CONNECTION"`
-
-	// If set to false, the node will not submit claims (reader mode).
-	FeatureClaimSubmissionEnabled bool `mapstructure:"CARTESI_FEATURE_CLAIM_SUBMISSION_ENABLED"`
-
-	// If set to false, the node will not read inputs from the blockchain.
-	FeatureInputReaderEnabled bool `mapstructure:"CARTESI_FEATURE_INPUT_READER_ENABLED"`
-
-	// If set to false, the node will not start the inspect service.
-	FeatureInspectEnabled bool `mapstructure:"CARTESI_FEATURE_INSPECT_ENABLED"`
-
-	// If set to false, the node will not start the jsonrpc api service.
-	FeatureJsonrpcApiEnabled bool `mapstructure:"CARTESI_FEATURE_JSONRPC_API_ENABLED"`
-
-	// If set to false, the node will *not* check whether the Cartesi machine hash from
-	// the snapshot matches the hash in the Application contract.
-	FeatureMachineHashCheckEnabled bool `mapstructure:"CARTESI_FEATURE_MACHINE_HASH_CHECK_ENABLED"`
-
-	// HTTP address for inspect.
-	InspectAddress string `mapstructure:"CARTESI_INSPECT_ADDRESS"`
-
-	// HTTP address for the jsonrpc api.
-	JsonrpcApiAddress string `mapstructure:"CARTESI_JSONRPC_API_ADDRESS"`
-
-	// HTTP address for telemetry service.
-	TelemetryAddress string `mapstructure:"CARTESI_TELEMETRY_ADDRESS"`
-
-	// If set to true, the node will add colors to its log output.
-	LogColor bool `mapstructure:"CARTESI_LOG_COLOR"`
-
-	// One of "debug", "info", "warn", "error".
-	LogLevel LogLevel `mapstructure:"CARTESI_LOG_LEVEL"`
-
-	// Remote Cartesi Machine server log level.
-	// One of "trace", "debug", "info", "warning", "error", "fatal".
-	RemoteMachineLogLevel MachineLogLevel `mapstructure:"CARTESI_REMOTE_MACHINE_LOG_LEVEL"`
-
-	// How many seconds the node will wait before querying the database for new inputs.
-	AdvancerPollingInterval Duration `mapstructure:"CARTESI_ADVANCER_POLLING_INTERVAL"`
-
-	// How many seconds the node will wait before querying the database for new claims.
-	ClaimerPollingInterval Duration `mapstructure:"CARTESI_CLAIMER_POLLING_INTERVAL"`
-
-	// How many seconds the retry policy will wait between retries.
-	EvmReaderRetryPolicyMaxDelay Duration `mapstructure:"CARTESI_EVM_READER_RETRY_POLICY_MAX_DELAY"`
-
-	// How many times some functions should be retried after an error.
-	EvmReaderRetryPolicyMaxRetries uint64 `mapstructure:"CARTESI_EVM_READER_RETRY_POLICY_MAX_RETRIES"`
-
-	// How many seconds the node expects services take initializing before aborting.
-	MaxStartupTime Duration `mapstructure:"CARTESI_MAX_STARTUP_TIME"`
-
-	// How many seconds the node will wait before trying to finish epochs for all applications.
-	ValidatorPollingInterval Duration `mapstructure:"CARTESI_VALIDATOR_POLLING_INTERVAL"`
-
-	// Path to the directory where the snapshots will be written.
-	SnapshotDir string `mapstructure:"CARTESI_SNAPSHOT_DIR"`
-}
 
 func SetDefaults() {
 	// Set defaults based on the TOML definitions.
@@ -214,11 +125,13 @@ func SetDefaults() {
 
 	viper.SetDefault(ADVANCER_POLLING_INTERVAL, "3")
 
+	viper.SetDefault(BLOCKCHAIN_HTTP_MAX_RETRIES, "4")
+
+	viper.SetDefault(BLOCKCHAIN_HTTP_RETRY_MAX_WAIT, "60")
+
+	viper.SetDefault(BLOCKCHAIN_HTTP_RETRY_MIN_WAIT, "1")
+
 	viper.SetDefault(CLAIMER_POLLING_INTERVAL, "3")
-
-	viper.SetDefault(EVM_READER_RETRY_POLICY_MAX_DELAY, "3")
-
-	viper.SetDefault(EVM_READER_RETRY_POLICY_MAX_RETRIES, "3")
 
 	viper.SetDefault(MAX_STARTUP_TIME, "15")
 
@@ -228,9 +141,55 @@ func SetDefaults() {
 
 }
 
-// Load reads configuration from environment variables, a config file, and defaults.
+// AdvancerConfig holds configuration values for the advancer service.
+type AdvancerConfig struct {
+
+	// Postgres endpoint in the 'postgres://user:password@hostname:port/database' format (URL).
+	//
+	// If not set, or set to empty string, will defer the behaviour to the PG driver.
+	// See [this](https://www.postgresql.org/docs/current/libpq-envars.html) for more information.
+	//
+	// It is also possible to set the endpoint without a password and load it from Postgres' passfile.
+	// See [this](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNECT-PASSFILE)
+	// for more information.
+	DatabaseConnection URL `mapstructure:"CARTESI_DATABASE_CONNECTION"`
+
+	// If set to false, the node will not start the inspect service.
+	FeatureInspectEnabled bool `mapstructure:"CARTESI_FEATURE_INSPECT_ENABLED"`
+
+	// If set to false, the node will *not* check whether the Cartesi machine hash from
+	// the snapshot matches the hash in the Application contract.
+	FeatureMachineHashCheckEnabled bool `mapstructure:"CARTESI_FEATURE_MACHINE_HASH_CHECK_ENABLED"`
+
+	// HTTP address for inspect.
+	InspectAddress string `mapstructure:"CARTESI_INSPECT_ADDRESS"`
+
+	// HTTP address for telemetry service.
+	TelemetryAddress string `mapstructure:"CARTESI_TELEMETRY_ADDRESS"`
+
+	// If set to true, the node will add colors to its log output.
+	LogColor bool `mapstructure:"CARTESI_LOG_COLOR"`
+
+	// One of "debug", "info", "warn", "error".
+	LogLevel LogLevel `mapstructure:"CARTESI_LOG_LEVEL"`
+
+	// Remote Cartesi Machine server log level.
+	// One of "trace", "debug", "info", "warning", "error", "fatal".
+	RemoteMachineLogLevel MachineLogLevel `mapstructure:"CARTESI_REMOTE_MACHINE_LOG_LEVEL"`
+
+	// How many seconds the node will wait before querying the database for new inputs.
+	AdvancerPollingInterval Duration `mapstructure:"CARTESI_ADVANCER_POLLING_INTERVAL"`
+
+	// How many seconds the node expects services take initializing before aborting.
+	MaxStartupTime Duration `mapstructure:"CARTESI_MAX_STARTUP_TIME"`
+
+	// Path to the directory where the snapshots will be written.
+	SnapshotDir string `mapstructure:"CARTESI_SNAPSHOT_DIR"`
+}
+
+// LoadAdvancerConfig reads configuration from environment variables, a config file, and defaults.
 // Priority: command line flags > environment variables > config file > defaults.
-func Load() (*Config, error) {
+func LoadAdvancerConfig() (*AdvancerConfig, error) {
 	SetDefaults()
 
 	// Load config file if specified via --config flag.
@@ -241,135 +200,985 @@ func Load() (*Config, error) {
 		}
 	}
 
-	var cfg Config
+	var cfg AdvancerConfig
 	var err error
-	// For each env, perform conversion using the appropriate conversion function.
-
-	cfg.BlockchainDefaultBlock, err = GetBlockchainDefaultBlock()
-	if err != nil && err != ErrNotDefined {
-		return nil, err
-	}
-
-	cfg.BlockchainHttpEndpoint, err = GetBlockchainHttpEndpoint()
-	if err != nil && err != ErrNotDefined {
-		return nil, err
-	}
-
-	cfg.BlockchainId, err = GetBlockchainId()
-	if err != nil && err != ErrNotDefined {
-		return nil, err
-	}
-
-	cfg.BlockchainLegacyEnabled, err = GetBlockchainLegacyEnabled()
-	if err != nil && err != ErrNotDefined {
-		return nil, err
-	}
-
-	cfg.BlockchainSubscriptionTimeout, err = GetBlockchainSubscriptionTimeout()
-	if err != nil && err != ErrNotDefined {
-		return nil, err
-	}
-
-	cfg.BlockchainWsEndpoint, err = GetBlockchainWsEndpoint()
-	if err != nil && err != ErrNotDefined {
-		return nil, err
-	}
 
 	cfg.DatabaseConnection, err = GetDatabaseConnection()
 	if err != nil && err != ErrNotDefined {
-		return nil, err
-	}
-
-	cfg.FeatureClaimSubmissionEnabled, err = GetFeatureClaimSubmissionEnabled()
-	if err != nil && err != ErrNotDefined {
-		return nil, err
-	}
-
-	cfg.FeatureInputReaderEnabled, err = GetFeatureInputReaderEnabled()
-	if err != nil && err != ErrNotDefined {
-		return nil, err
+		return nil, fmt.Errorf("failed to get CARTESI_DATABASE_CONNECTION: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_DATABASE_CONNECTION is required for the advancer service: %w", err)
 	}
 
 	cfg.FeatureInspectEnabled, err = GetFeatureInspectEnabled()
 	if err != nil && err != ErrNotDefined {
-		return nil, err
-	}
-
-	cfg.FeatureJsonrpcApiEnabled, err = GetFeatureJsonrpcApiEnabled()
-	if err != nil && err != ErrNotDefined {
-		return nil, err
+		return nil, fmt.Errorf("failed to get CARTESI_FEATURE_INSPECT_ENABLED: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_FEATURE_INSPECT_ENABLED is required for the advancer service: %w", err)
 	}
 
 	cfg.FeatureMachineHashCheckEnabled, err = GetFeatureMachineHashCheckEnabled()
 	if err != nil && err != ErrNotDefined {
-		return nil, err
+		return nil, fmt.Errorf("failed to get CARTESI_FEATURE_MACHINE_HASH_CHECK_ENABLED: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_FEATURE_MACHINE_HASH_CHECK_ENABLED is required for the advancer service: %w", err)
 	}
 
 	cfg.InspectAddress, err = GetInspectAddress()
 	if err != nil && err != ErrNotDefined {
-		return nil, err
-	}
-
-	cfg.JsonrpcApiAddress, err = GetJsonrpcApiAddress()
-	if err != nil && err != ErrNotDefined {
-		return nil, err
+		return nil, fmt.Errorf("failed to get CARTESI_INSPECT_ADDRESS: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_INSPECT_ADDRESS is required for the advancer service: %w", err)
 	}
 
 	cfg.TelemetryAddress, err = GetTelemetryAddress()
 	if err != nil && err != ErrNotDefined {
-		return nil, err
+		return nil, fmt.Errorf("failed to get CARTESI_TELEMETRY_ADDRESS: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_TELEMETRY_ADDRESS is required for the advancer service: %w", err)
 	}
 
 	cfg.LogColor, err = GetLogColor()
 	if err != nil && err != ErrNotDefined {
-		return nil, err
+		return nil, fmt.Errorf("failed to get CARTESI_LOG_COLOR: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_LOG_COLOR is required for the advancer service: %w", err)
 	}
 
 	cfg.LogLevel, err = GetLogLevel()
 	if err != nil && err != ErrNotDefined {
-		return nil, err
+		return nil, fmt.Errorf("failed to get CARTESI_LOG_LEVEL: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_LOG_LEVEL is required for the advancer service: %w", err)
 	}
 
 	cfg.RemoteMachineLogLevel, err = GetRemoteMachineLogLevel()
 	if err != nil && err != ErrNotDefined {
-		return nil, err
+		return nil, fmt.Errorf("failed to get CARTESI_REMOTE_MACHINE_LOG_LEVEL: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_REMOTE_MACHINE_LOG_LEVEL is required for the advancer service: %w", err)
 	}
 
 	cfg.AdvancerPollingInterval, err = GetAdvancerPollingInterval()
 	if err != nil && err != ErrNotDefined {
-		return nil, err
-	}
-
-	cfg.ClaimerPollingInterval, err = GetClaimerPollingInterval()
-	if err != nil && err != ErrNotDefined {
-		return nil, err
-	}
-
-	cfg.EvmReaderRetryPolicyMaxDelay, err = GetEvmReaderRetryPolicyMaxDelay()
-	if err != nil && err != ErrNotDefined {
-		return nil, err
-	}
-
-	cfg.EvmReaderRetryPolicyMaxRetries, err = GetEvmReaderRetryPolicyMaxRetries()
-	if err != nil && err != ErrNotDefined {
-		return nil, err
+		return nil, fmt.Errorf("failed to get CARTESI_ADVANCER_POLLING_INTERVAL: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_ADVANCER_POLLING_INTERVAL is required for the advancer service: %w", err)
 	}
 
 	cfg.MaxStartupTime, err = GetMaxStartupTime()
 	if err != nil && err != ErrNotDefined {
-		return nil, err
-	}
-
-	cfg.ValidatorPollingInterval, err = GetValidatorPollingInterval()
-	if err != nil && err != ErrNotDefined {
-		return nil, err
+		return nil, fmt.Errorf("failed to get CARTESI_MAX_STARTUP_TIME: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_MAX_STARTUP_TIME is required for the advancer service: %w", err)
 	}
 
 	cfg.SnapshotDir, err = GetSnapshotDir()
 	if err != nil && err != ErrNotDefined {
-		return nil, err
+		return nil, fmt.Errorf("failed to get CARTESI_SNAPSHOT_DIR: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_SNAPSHOT_DIR is required for the advancer service: %w", err)
 	}
+
 	return &cfg, nil
+}
+
+// ClaimerConfig holds configuration values for the claimer service.
+type ClaimerConfig struct {
+
+	// The default block to be used by EVM Reader and Claimer when requesting new blocks.
+	// One of 'latest', 'pending', 'safe', 'finalized'
+	BlockchainDefaultBlock DefaultBlock `mapstructure:"CARTESI_BLOCKCHAIN_DEFAULT_BLOCK"`
+
+	// HTTP endpoint for the blockchain RPC provider.
+	BlockchainHttpEndpoint URL `mapstructure:"CARTESI_BLOCKCHAIN_HTTP_ENDPOINT"`
+
+	// An unique identifier representing a blockchain network.
+	BlockchainId uint64 `mapstructure:"CARTESI_BLOCKCHAIN_ID"`
+
+	// If set to true the node will send transactions using the legacy gas fee model
+	// (instead of EIP-1559).
+	BlockchainLegacyEnabled bool `mapstructure:"CARTESI_BLOCKCHAIN_LEGACY_ENABLED"`
+
+	// Postgres endpoint in the 'postgres://user:password@hostname:port/database' format (URL).
+	//
+	// If not set, or set to empty string, will defer the behaviour to the PG driver.
+	// See [this](https://www.postgresql.org/docs/current/libpq-envars.html) for more information.
+	//
+	// It is also possible to set the endpoint without a password and load it from Postgres' passfile.
+	// See [this](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNECT-PASSFILE)
+	// for more information.
+	DatabaseConnection URL `mapstructure:"CARTESI_DATABASE_CONNECTION"`
+
+	// If set to false, the node will not submit claims (reader mode).
+	FeatureClaimSubmissionEnabled bool `mapstructure:"CARTESI_FEATURE_CLAIM_SUBMISSION_ENABLED"`
+
+	// HTTP address for telemetry service.
+	TelemetryAddress string `mapstructure:"CARTESI_TELEMETRY_ADDRESS"`
+
+	// If set to true, the node will add colors to its log output.
+	LogColor bool `mapstructure:"CARTESI_LOG_COLOR"`
+
+	// One of "debug", "info", "warn", "error".
+	LogLevel LogLevel `mapstructure:"CARTESI_LOG_LEVEL"`
+
+	// Maximum number of retry attempts for HTTP blockchain requests after encountering an error.
+	BlockchainHttpMaxRetries uint64 `mapstructure:"CARTESI_BLOCKCHAIN_HTTP_MAX_RETRIES"`
+
+	// Maximum wait time in seconds for the exponential backoff retry policy. The delay between retries for HTTP blockchain requests will never exceed this value, regardless of the backoff calculation.
+	BlockchainHttpRetryMaxWait Duration `mapstructure:"CARTESI_BLOCKCHAIN_HTTP_RETRY_MAX_WAIT"`
+
+	// Minimum wait time in seconds for the exponential backoff retry policy. This is the initial delay before the first retry for HTTP blockchain requests.
+	BlockchainHttpRetryMinWait Duration `mapstructure:"CARTESI_BLOCKCHAIN_HTTP_RETRY_MIN_WAIT"`
+
+	// How many seconds the node will wait before querying the database for new claims.
+	ClaimerPollingInterval Duration `mapstructure:"CARTESI_CLAIMER_POLLING_INTERVAL"`
+
+	// How many seconds the node expects services take initializing before aborting.
+	MaxStartupTime Duration `mapstructure:"CARTESI_MAX_STARTUP_TIME"`
+}
+
+// LoadClaimerConfig reads configuration from environment variables, a config file, and defaults.
+// Priority: command line flags > environment variables > config file > defaults.
+func LoadClaimerConfig() (*ClaimerConfig, error) {
+	SetDefaults()
+
+	// Load config file if specified via --config flag.
+	if cfgFile := viper.GetString("config"); cfgFile != "" {
+		viper.SetConfigFile(cfgFile)
+		if err := viper.ReadInConfig(); err != nil {
+			return nil, fmt.Errorf("error reading config file: %w", err)
+		}
+	}
+
+	var cfg ClaimerConfig
+	var err error
+
+	cfg.BlockchainDefaultBlock, err = GetBlockchainDefaultBlock()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_BLOCKCHAIN_DEFAULT_BLOCK: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_BLOCKCHAIN_DEFAULT_BLOCK is required for the claimer service: %w", err)
+	}
+
+	cfg.BlockchainHttpEndpoint, err = GetBlockchainHttpEndpoint()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_BLOCKCHAIN_HTTP_ENDPOINT: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_BLOCKCHAIN_HTTP_ENDPOINT is required for the claimer service: %w", err)
+	}
+
+	cfg.BlockchainId, err = GetBlockchainId()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_BLOCKCHAIN_ID: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_BLOCKCHAIN_ID is required for the claimer service: %w", err)
+	}
+
+	cfg.BlockchainLegacyEnabled, err = GetBlockchainLegacyEnabled()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_BLOCKCHAIN_LEGACY_ENABLED: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_BLOCKCHAIN_LEGACY_ENABLED is required for the claimer service: %w", err)
+	}
+
+	cfg.DatabaseConnection, err = GetDatabaseConnection()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_DATABASE_CONNECTION: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_DATABASE_CONNECTION is required for the claimer service: %w", err)
+	}
+
+	cfg.FeatureClaimSubmissionEnabled, err = GetFeatureClaimSubmissionEnabled()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_FEATURE_CLAIM_SUBMISSION_ENABLED: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_FEATURE_CLAIM_SUBMISSION_ENABLED is required for the claimer service: %w", err)
+	}
+
+	cfg.TelemetryAddress, err = GetTelemetryAddress()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_TELEMETRY_ADDRESS: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_TELEMETRY_ADDRESS is required for the claimer service: %w", err)
+	}
+
+	cfg.LogColor, err = GetLogColor()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_LOG_COLOR: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_LOG_COLOR is required for the claimer service: %w", err)
+	}
+
+	cfg.LogLevel, err = GetLogLevel()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_LOG_LEVEL: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_LOG_LEVEL is required for the claimer service: %w", err)
+	}
+
+	cfg.BlockchainHttpMaxRetries, err = GetBlockchainHttpMaxRetries()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_BLOCKCHAIN_HTTP_MAX_RETRIES: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_BLOCKCHAIN_HTTP_MAX_RETRIES is required for the claimer service: %w", err)
+	}
+
+	cfg.BlockchainHttpRetryMaxWait, err = GetBlockchainHttpRetryMaxWait()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_BLOCKCHAIN_HTTP_RETRY_MAX_WAIT: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_BLOCKCHAIN_HTTP_RETRY_MAX_WAIT is required for the claimer service: %w", err)
+	}
+
+	cfg.BlockchainHttpRetryMinWait, err = GetBlockchainHttpRetryMinWait()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_BLOCKCHAIN_HTTP_RETRY_MIN_WAIT: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_BLOCKCHAIN_HTTP_RETRY_MIN_WAIT is required for the claimer service: %w", err)
+	}
+
+	cfg.ClaimerPollingInterval, err = GetClaimerPollingInterval()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_CLAIMER_POLLING_INTERVAL: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_CLAIMER_POLLING_INTERVAL is required for the claimer service: %w", err)
+	}
+
+	cfg.MaxStartupTime, err = GetMaxStartupTime()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_MAX_STARTUP_TIME: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_MAX_STARTUP_TIME is required for the claimer service: %w", err)
+	}
+
+	return &cfg, nil
+}
+
+// EvmreaderConfig holds configuration values for the evmreader service.
+type EvmreaderConfig struct {
+
+	// The default block to be used by EVM Reader and Claimer when requesting new blocks.
+	// One of 'latest', 'pending', 'safe', 'finalized'
+	BlockchainDefaultBlock DefaultBlock `mapstructure:"CARTESI_BLOCKCHAIN_DEFAULT_BLOCK"`
+
+	// HTTP endpoint for the blockchain RPC provider.
+	BlockchainHttpEndpoint URL `mapstructure:"CARTESI_BLOCKCHAIN_HTTP_ENDPOINT"`
+
+	// An unique identifier representing a blockchain network.
+	BlockchainId uint64 `mapstructure:"CARTESI_BLOCKCHAIN_ID"`
+
+	// Block subscription timeout in seconds.
+	BlockchainSubscriptionTimeout uint64 `mapstructure:"CARTESI_BLOCKCHAIN_SUBSCRIPTION_TIMEOUT"`
+
+	// WebSocket endpoint for the blockchain RPC provider.
+	BlockchainWsEndpoint URL `mapstructure:"CARTESI_BLOCKCHAIN_WS_ENDPOINT"`
+
+	// Postgres endpoint in the 'postgres://user:password@hostname:port/database' format (URL).
+	//
+	// If not set, or set to empty string, will defer the behaviour to the PG driver.
+	// See [this](https://www.postgresql.org/docs/current/libpq-envars.html) for more information.
+	//
+	// It is also possible to set the endpoint without a password and load it from Postgres' passfile.
+	// See [this](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNECT-PASSFILE)
+	// for more information.
+	DatabaseConnection URL `mapstructure:"CARTESI_DATABASE_CONNECTION"`
+
+	// If set to false, the node will not read inputs from the blockchain.
+	FeatureInputReaderEnabled bool `mapstructure:"CARTESI_FEATURE_INPUT_READER_ENABLED"`
+
+	// HTTP address for telemetry service.
+	TelemetryAddress string `mapstructure:"CARTESI_TELEMETRY_ADDRESS"`
+
+	// If set to true, the node will add colors to its log output.
+	LogColor bool `mapstructure:"CARTESI_LOG_COLOR"`
+
+	// One of "debug", "info", "warn", "error".
+	LogLevel LogLevel `mapstructure:"CARTESI_LOG_LEVEL"`
+
+	// Maximum number of retry attempts for HTTP blockchain requests after encountering an error.
+	BlockchainHttpMaxRetries uint64 `mapstructure:"CARTESI_BLOCKCHAIN_HTTP_MAX_RETRIES"`
+
+	// Maximum wait time in seconds for the exponential backoff retry policy. The delay between retries for HTTP blockchain requests will never exceed this value, regardless of the backoff calculation.
+	BlockchainHttpRetryMaxWait Duration `mapstructure:"CARTESI_BLOCKCHAIN_HTTP_RETRY_MAX_WAIT"`
+
+	// Minimum wait time in seconds for the exponential backoff retry policy. This is the initial delay before the first retry for HTTP blockchain requests.
+	BlockchainHttpRetryMinWait Duration `mapstructure:"CARTESI_BLOCKCHAIN_HTTP_RETRY_MIN_WAIT"`
+
+	// How many seconds the node expects services take initializing before aborting.
+	MaxStartupTime Duration `mapstructure:"CARTESI_MAX_STARTUP_TIME"`
+}
+
+// LoadEvmreaderConfig reads configuration from environment variables, a config file, and defaults.
+// Priority: command line flags > environment variables > config file > defaults.
+func LoadEvmreaderConfig() (*EvmreaderConfig, error) {
+	SetDefaults()
+
+	// Load config file if specified via --config flag.
+	if cfgFile := viper.GetString("config"); cfgFile != "" {
+		viper.SetConfigFile(cfgFile)
+		if err := viper.ReadInConfig(); err != nil {
+			return nil, fmt.Errorf("error reading config file: %w", err)
+		}
+	}
+
+	var cfg EvmreaderConfig
+	var err error
+
+	cfg.BlockchainDefaultBlock, err = GetBlockchainDefaultBlock()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_BLOCKCHAIN_DEFAULT_BLOCK: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_BLOCKCHAIN_DEFAULT_BLOCK is required for the evmreader service: %w", err)
+	}
+
+	cfg.BlockchainHttpEndpoint, err = GetBlockchainHttpEndpoint()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_BLOCKCHAIN_HTTP_ENDPOINT: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_BLOCKCHAIN_HTTP_ENDPOINT is required for the evmreader service: %w", err)
+	}
+
+	cfg.BlockchainId, err = GetBlockchainId()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_BLOCKCHAIN_ID: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_BLOCKCHAIN_ID is required for the evmreader service: %w", err)
+	}
+
+	cfg.BlockchainSubscriptionTimeout, err = GetBlockchainSubscriptionTimeout()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_BLOCKCHAIN_SUBSCRIPTION_TIMEOUT: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_BLOCKCHAIN_SUBSCRIPTION_TIMEOUT is required for the evmreader service: %w", err)
+	}
+
+	cfg.BlockchainWsEndpoint, err = GetBlockchainWsEndpoint()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_BLOCKCHAIN_WS_ENDPOINT: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_BLOCKCHAIN_WS_ENDPOINT is required for the evmreader service: %w", err)
+	}
+
+	cfg.DatabaseConnection, err = GetDatabaseConnection()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_DATABASE_CONNECTION: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_DATABASE_CONNECTION is required for the evmreader service: %w", err)
+	}
+
+	cfg.FeatureInputReaderEnabled, err = GetFeatureInputReaderEnabled()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_FEATURE_INPUT_READER_ENABLED: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_FEATURE_INPUT_READER_ENABLED is required for the evmreader service: %w", err)
+	}
+
+	cfg.TelemetryAddress, err = GetTelemetryAddress()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_TELEMETRY_ADDRESS: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_TELEMETRY_ADDRESS is required for the evmreader service: %w", err)
+	}
+
+	cfg.LogColor, err = GetLogColor()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_LOG_COLOR: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_LOG_COLOR is required for the evmreader service: %w", err)
+	}
+
+	cfg.LogLevel, err = GetLogLevel()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_LOG_LEVEL: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_LOG_LEVEL is required for the evmreader service: %w", err)
+	}
+
+	cfg.BlockchainHttpMaxRetries, err = GetBlockchainHttpMaxRetries()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_BLOCKCHAIN_HTTP_MAX_RETRIES: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_BLOCKCHAIN_HTTP_MAX_RETRIES is required for the evmreader service: %w", err)
+	}
+
+	cfg.BlockchainHttpRetryMaxWait, err = GetBlockchainHttpRetryMaxWait()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_BLOCKCHAIN_HTTP_RETRY_MAX_WAIT: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_BLOCKCHAIN_HTTP_RETRY_MAX_WAIT is required for the evmreader service: %w", err)
+	}
+
+	cfg.BlockchainHttpRetryMinWait, err = GetBlockchainHttpRetryMinWait()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_BLOCKCHAIN_HTTP_RETRY_MIN_WAIT: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_BLOCKCHAIN_HTTP_RETRY_MIN_WAIT is required for the evmreader service: %w", err)
+	}
+
+	cfg.MaxStartupTime, err = GetMaxStartupTime()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_MAX_STARTUP_TIME: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_MAX_STARTUP_TIME is required for the evmreader service: %w", err)
+	}
+
+	return &cfg, nil
+}
+
+// JsonrpcConfig holds configuration values for the jsonrpc service.
+type JsonrpcConfig struct {
+
+	// Postgres endpoint in the 'postgres://user:password@hostname:port/database' format (URL).
+	//
+	// If not set, or set to empty string, will defer the behaviour to the PG driver.
+	// See [this](https://www.postgresql.org/docs/current/libpq-envars.html) for more information.
+	//
+	// It is also possible to set the endpoint without a password and load it from Postgres' passfile.
+	// See [this](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNECT-PASSFILE)
+	// for more information.
+	DatabaseConnection URL `mapstructure:"CARTESI_DATABASE_CONNECTION"`
+
+	// HTTP address for the jsonrpc api.
+	JsonrpcApiAddress string `mapstructure:"CARTESI_JSONRPC_API_ADDRESS"`
+
+	// HTTP address for telemetry service.
+	TelemetryAddress string `mapstructure:"CARTESI_TELEMETRY_ADDRESS"`
+
+	// If set to true, the node will add colors to its log output.
+	LogColor bool `mapstructure:"CARTESI_LOG_COLOR"`
+
+	// One of "debug", "info", "warn", "error".
+	LogLevel LogLevel `mapstructure:"CARTESI_LOG_LEVEL"`
+
+	// How many seconds the node expects services take initializing before aborting.
+	MaxStartupTime Duration `mapstructure:"CARTESI_MAX_STARTUP_TIME"`
+}
+
+// LoadJsonrpcConfig reads configuration from environment variables, a config file, and defaults.
+// Priority: command line flags > environment variables > config file > defaults.
+func LoadJsonrpcConfig() (*JsonrpcConfig, error) {
+	SetDefaults()
+
+	// Load config file if specified via --config flag.
+	if cfgFile := viper.GetString("config"); cfgFile != "" {
+		viper.SetConfigFile(cfgFile)
+		if err := viper.ReadInConfig(); err != nil {
+			return nil, fmt.Errorf("error reading config file: %w", err)
+		}
+	}
+
+	var cfg JsonrpcConfig
+	var err error
+
+	cfg.DatabaseConnection, err = GetDatabaseConnection()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_DATABASE_CONNECTION: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_DATABASE_CONNECTION is required for the jsonrpc service: %w", err)
+	}
+
+	cfg.JsonrpcApiAddress, err = GetJsonrpcApiAddress()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_JSONRPC_API_ADDRESS: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_JSONRPC_API_ADDRESS is required for the jsonrpc service: %w", err)
+	}
+
+	cfg.TelemetryAddress, err = GetTelemetryAddress()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_TELEMETRY_ADDRESS: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_TELEMETRY_ADDRESS is required for the jsonrpc service: %w", err)
+	}
+
+	cfg.LogColor, err = GetLogColor()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_LOG_COLOR: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_LOG_COLOR is required for the jsonrpc service: %w", err)
+	}
+
+	cfg.LogLevel, err = GetLogLevel()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_LOG_LEVEL: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_LOG_LEVEL is required for the jsonrpc service: %w", err)
+	}
+
+	cfg.MaxStartupTime, err = GetMaxStartupTime()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_MAX_STARTUP_TIME: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_MAX_STARTUP_TIME is required for the jsonrpc service: %w", err)
+	}
+
+	return &cfg, nil
+}
+
+// NodeConfig holds configuration values for the node service.
+type NodeConfig struct {
+
+	// The default block to be used by EVM Reader and Claimer when requesting new blocks.
+	// One of 'latest', 'pending', 'safe', 'finalized'
+	BlockchainDefaultBlock DefaultBlock `mapstructure:"CARTESI_BLOCKCHAIN_DEFAULT_BLOCK"`
+
+	// HTTP endpoint for the blockchain RPC provider.
+	BlockchainHttpEndpoint URL `mapstructure:"CARTESI_BLOCKCHAIN_HTTP_ENDPOINT"`
+
+	// An unique identifier representing a blockchain network.
+	BlockchainId uint64 `mapstructure:"CARTESI_BLOCKCHAIN_ID"`
+
+	// If set to true the node will send transactions using the legacy gas fee model
+	// (instead of EIP-1559).
+	BlockchainLegacyEnabled bool `mapstructure:"CARTESI_BLOCKCHAIN_LEGACY_ENABLED"`
+
+	// Block subscription timeout in seconds.
+	BlockchainSubscriptionTimeout uint64 `mapstructure:"CARTESI_BLOCKCHAIN_SUBSCRIPTION_TIMEOUT"`
+
+	// WebSocket endpoint for the blockchain RPC provider.
+	BlockchainWsEndpoint URL `mapstructure:"CARTESI_BLOCKCHAIN_WS_ENDPOINT"`
+
+	// Postgres endpoint in the 'postgres://user:password@hostname:port/database' format (URL).
+	//
+	// If not set, or set to empty string, will defer the behaviour to the PG driver.
+	// See [this](https://www.postgresql.org/docs/current/libpq-envars.html) for more information.
+	//
+	// It is also possible to set the endpoint without a password and load it from Postgres' passfile.
+	// See [this](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNECT-PASSFILE)
+	// for more information.
+	DatabaseConnection URL `mapstructure:"CARTESI_DATABASE_CONNECTION"`
+
+	// If set to false, the node will not submit claims (reader mode).
+	FeatureClaimSubmissionEnabled bool `mapstructure:"CARTESI_FEATURE_CLAIM_SUBMISSION_ENABLED"`
+
+	// If set to false, the node will not read inputs from the blockchain.
+	FeatureInputReaderEnabled bool `mapstructure:"CARTESI_FEATURE_INPUT_READER_ENABLED"`
+
+	// If set to false, the node will not start the inspect service.
+	FeatureInspectEnabled bool `mapstructure:"CARTESI_FEATURE_INSPECT_ENABLED"`
+
+	// If set to false, the node will not start the jsonrpc api service.
+	FeatureJsonrpcApiEnabled bool `mapstructure:"CARTESI_FEATURE_JSONRPC_API_ENABLED"`
+
+	// If set to false, the node will *not* check whether the Cartesi machine hash from
+	// the snapshot matches the hash in the Application contract.
+	FeatureMachineHashCheckEnabled bool `mapstructure:"CARTESI_FEATURE_MACHINE_HASH_CHECK_ENABLED"`
+
+	// HTTP address for inspect.
+	InspectAddress string `mapstructure:"CARTESI_INSPECT_ADDRESS"`
+
+	// HTTP address for the jsonrpc api.
+	JsonrpcApiAddress string `mapstructure:"CARTESI_JSONRPC_API_ADDRESS"`
+
+	// HTTP address for telemetry service.
+	TelemetryAddress string `mapstructure:"CARTESI_TELEMETRY_ADDRESS"`
+
+	// If set to true, the node will add colors to its log output.
+	LogColor bool `mapstructure:"CARTESI_LOG_COLOR"`
+
+	// One of "debug", "info", "warn", "error".
+	LogLevel LogLevel `mapstructure:"CARTESI_LOG_LEVEL"`
+
+	// Remote Cartesi Machine server log level.
+	// One of "trace", "debug", "info", "warning", "error", "fatal".
+	RemoteMachineLogLevel MachineLogLevel `mapstructure:"CARTESI_REMOTE_MACHINE_LOG_LEVEL"`
+
+	// How many seconds the node will wait before querying the database for new inputs.
+	AdvancerPollingInterval Duration `mapstructure:"CARTESI_ADVANCER_POLLING_INTERVAL"`
+
+	// Maximum number of retry attempts for HTTP blockchain requests after encountering an error.
+	BlockchainHttpMaxRetries uint64 `mapstructure:"CARTESI_BLOCKCHAIN_HTTP_MAX_RETRIES"`
+
+	// Maximum wait time in seconds for the exponential backoff retry policy. The delay between retries for HTTP blockchain requests will never exceed this value, regardless of the backoff calculation.
+	BlockchainHttpRetryMaxWait Duration `mapstructure:"CARTESI_BLOCKCHAIN_HTTP_RETRY_MAX_WAIT"`
+
+	// Minimum wait time in seconds for the exponential backoff retry policy. This is the initial delay before the first retry for HTTP blockchain requests.
+	BlockchainHttpRetryMinWait Duration `mapstructure:"CARTESI_BLOCKCHAIN_HTTP_RETRY_MIN_WAIT"`
+
+	// How many seconds the node will wait before querying the database for new claims.
+	ClaimerPollingInterval Duration `mapstructure:"CARTESI_CLAIMER_POLLING_INTERVAL"`
+
+	// How many seconds the node expects services take initializing before aborting.
+	MaxStartupTime Duration `mapstructure:"CARTESI_MAX_STARTUP_TIME"`
+
+	// How many seconds the node will wait before trying to finish epochs for all applications.
+	ValidatorPollingInterval Duration `mapstructure:"CARTESI_VALIDATOR_POLLING_INTERVAL"`
+
+	// Path to the directory where the snapshots will be written.
+	SnapshotDir string `mapstructure:"CARTESI_SNAPSHOT_DIR"`
+}
+
+// LoadNodeConfig reads configuration from environment variables, a config file, and defaults.
+// Priority: command line flags > environment variables > config file > defaults.
+func LoadNodeConfig() (*NodeConfig, error) {
+	SetDefaults()
+
+	// Load config file if specified via --config flag.
+	if cfgFile := viper.GetString("config"); cfgFile != "" {
+		viper.SetConfigFile(cfgFile)
+		if err := viper.ReadInConfig(); err != nil {
+			return nil, fmt.Errorf("error reading config file: %w", err)
+		}
+	}
+
+	var cfg NodeConfig
+	var err error
+
+	cfg.BlockchainDefaultBlock, err = GetBlockchainDefaultBlock()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_BLOCKCHAIN_DEFAULT_BLOCK: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_BLOCKCHAIN_DEFAULT_BLOCK is required for the node service: %w", err)
+	}
+
+	cfg.BlockchainHttpEndpoint, err = GetBlockchainHttpEndpoint()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_BLOCKCHAIN_HTTP_ENDPOINT: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_BLOCKCHAIN_HTTP_ENDPOINT is required for the node service: %w", err)
+	}
+
+	cfg.BlockchainId, err = GetBlockchainId()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_BLOCKCHAIN_ID: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_BLOCKCHAIN_ID is required for the node service: %w", err)
+	}
+
+	cfg.BlockchainLegacyEnabled, err = GetBlockchainLegacyEnabled()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_BLOCKCHAIN_LEGACY_ENABLED: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_BLOCKCHAIN_LEGACY_ENABLED is required for the node service: %w", err)
+	}
+
+	cfg.BlockchainSubscriptionTimeout, err = GetBlockchainSubscriptionTimeout()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_BLOCKCHAIN_SUBSCRIPTION_TIMEOUT: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_BLOCKCHAIN_SUBSCRIPTION_TIMEOUT is required for the node service: %w", err)
+	}
+
+	cfg.BlockchainWsEndpoint, err = GetBlockchainWsEndpoint()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_BLOCKCHAIN_WS_ENDPOINT: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_BLOCKCHAIN_WS_ENDPOINT is required for the node service: %w", err)
+	}
+
+	cfg.DatabaseConnection, err = GetDatabaseConnection()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_DATABASE_CONNECTION: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_DATABASE_CONNECTION is required for the node service: %w", err)
+	}
+
+	cfg.FeatureClaimSubmissionEnabled, err = GetFeatureClaimSubmissionEnabled()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_FEATURE_CLAIM_SUBMISSION_ENABLED: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_FEATURE_CLAIM_SUBMISSION_ENABLED is required for the node service: %w", err)
+	}
+
+	cfg.FeatureInputReaderEnabled, err = GetFeatureInputReaderEnabled()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_FEATURE_INPUT_READER_ENABLED: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_FEATURE_INPUT_READER_ENABLED is required for the node service: %w", err)
+	}
+
+	cfg.FeatureInspectEnabled, err = GetFeatureInspectEnabled()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_FEATURE_INSPECT_ENABLED: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_FEATURE_INSPECT_ENABLED is required for the node service: %w", err)
+	}
+
+	cfg.FeatureJsonrpcApiEnabled, err = GetFeatureJsonrpcApiEnabled()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_FEATURE_JSONRPC_API_ENABLED: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_FEATURE_JSONRPC_API_ENABLED is required for the node service: %w", err)
+	}
+
+	cfg.FeatureMachineHashCheckEnabled, err = GetFeatureMachineHashCheckEnabled()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_FEATURE_MACHINE_HASH_CHECK_ENABLED: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_FEATURE_MACHINE_HASH_CHECK_ENABLED is required for the node service: %w", err)
+	}
+
+	cfg.InspectAddress, err = GetInspectAddress()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_INSPECT_ADDRESS: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_INSPECT_ADDRESS is required for the node service: %w", err)
+	}
+
+	cfg.JsonrpcApiAddress, err = GetJsonrpcApiAddress()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_JSONRPC_API_ADDRESS: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_JSONRPC_API_ADDRESS is required for the node service: %w", err)
+	}
+
+	cfg.TelemetryAddress, err = GetTelemetryAddress()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_TELEMETRY_ADDRESS: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_TELEMETRY_ADDRESS is required for the node service: %w", err)
+	}
+
+	cfg.LogColor, err = GetLogColor()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_LOG_COLOR: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_LOG_COLOR is required for the node service: %w", err)
+	}
+
+	cfg.LogLevel, err = GetLogLevel()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_LOG_LEVEL: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_LOG_LEVEL is required for the node service: %w", err)
+	}
+
+	cfg.RemoteMachineLogLevel, err = GetRemoteMachineLogLevel()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_REMOTE_MACHINE_LOG_LEVEL: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_REMOTE_MACHINE_LOG_LEVEL is required for the node service: %w", err)
+	}
+
+	cfg.AdvancerPollingInterval, err = GetAdvancerPollingInterval()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_ADVANCER_POLLING_INTERVAL: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_ADVANCER_POLLING_INTERVAL is required for the node service: %w", err)
+	}
+
+	cfg.BlockchainHttpMaxRetries, err = GetBlockchainHttpMaxRetries()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_BLOCKCHAIN_HTTP_MAX_RETRIES: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_BLOCKCHAIN_HTTP_MAX_RETRIES is required for the node service: %w", err)
+	}
+
+	cfg.BlockchainHttpRetryMaxWait, err = GetBlockchainHttpRetryMaxWait()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_BLOCKCHAIN_HTTP_RETRY_MAX_WAIT: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_BLOCKCHAIN_HTTP_RETRY_MAX_WAIT is required for the node service: %w", err)
+	}
+
+	cfg.BlockchainHttpRetryMinWait, err = GetBlockchainHttpRetryMinWait()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_BLOCKCHAIN_HTTP_RETRY_MIN_WAIT: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_BLOCKCHAIN_HTTP_RETRY_MIN_WAIT is required for the node service: %w", err)
+	}
+
+	cfg.ClaimerPollingInterval, err = GetClaimerPollingInterval()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_CLAIMER_POLLING_INTERVAL: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_CLAIMER_POLLING_INTERVAL is required for the node service: %w", err)
+	}
+
+	cfg.MaxStartupTime, err = GetMaxStartupTime()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_MAX_STARTUP_TIME: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_MAX_STARTUP_TIME is required for the node service: %w", err)
+	}
+
+	cfg.ValidatorPollingInterval, err = GetValidatorPollingInterval()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_VALIDATOR_POLLING_INTERVAL: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_VALIDATOR_POLLING_INTERVAL is required for the node service: %w", err)
+	}
+
+	cfg.SnapshotDir, err = GetSnapshotDir()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_SNAPSHOT_DIR: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_SNAPSHOT_DIR is required for the node service: %w", err)
+	}
+
+	return &cfg, nil
+}
+
+// ValidatorConfig holds configuration values for the validator service.
+type ValidatorConfig struct {
+
+	// Postgres endpoint in the 'postgres://user:password@hostname:port/database' format (URL).
+	//
+	// If not set, or set to empty string, will defer the behaviour to the PG driver.
+	// See [this](https://www.postgresql.org/docs/current/libpq-envars.html) for more information.
+	//
+	// It is also possible to set the endpoint without a password and load it from Postgres' passfile.
+	// See [this](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNECT-PASSFILE)
+	// for more information.
+	DatabaseConnection URL `mapstructure:"CARTESI_DATABASE_CONNECTION"`
+
+	// HTTP address for telemetry service.
+	TelemetryAddress string `mapstructure:"CARTESI_TELEMETRY_ADDRESS"`
+
+	// If set to true, the node will add colors to its log output.
+	LogColor bool `mapstructure:"CARTESI_LOG_COLOR"`
+
+	// One of "debug", "info", "warn", "error".
+	LogLevel LogLevel `mapstructure:"CARTESI_LOG_LEVEL"`
+
+	// How many seconds the node expects services take initializing before aborting.
+	MaxStartupTime Duration `mapstructure:"CARTESI_MAX_STARTUP_TIME"`
+
+	// How many seconds the node will wait before trying to finish epochs for all applications.
+	ValidatorPollingInterval Duration `mapstructure:"CARTESI_VALIDATOR_POLLING_INTERVAL"`
+}
+
+// LoadValidatorConfig reads configuration from environment variables, a config file, and defaults.
+// Priority: command line flags > environment variables > config file > defaults.
+func LoadValidatorConfig() (*ValidatorConfig, error) {
+	SetDefaults()
+
+	// Load config file if specified via --config flag.
+	if cfgFile := viper.GetString("config"); cfgFile != "" {
+		viper.SetConfigFile(cfgFile)
+		if err := viper.ReadInConfig(); err != nil {
+			return nil, fmt.Errorf("error reading config file: %w", err)
+		}
+	}
+
+	var cfg ValidatorConfig
+	var err error
+
+	cfg.DatabaseConnection, err = GetDatabaseConnection()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_DATABASE_CONNECTION: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_DATABASE_CONNECTION is required for the validator service: %w", err)
+	}
+
+	cfg.TelemetryAddress, err = GetTelemetryAddress()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_TELEMETRY_ADDRESS: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_TELEMETRY_ADDRESS is required for the validator service: %w", err)
+	}
+
+	cfg.LogColor, err = GetLogColor()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_LOG_COLOR: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_LOG_COLOR is required for the validator service: %w", err)
+	}
+
+	cfg.LogLevel, err = GetLogLevel()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_LOG_LEVEL: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_LOG_LEVEL is required for the validator service: %w", err)
+	}
+
+	cfg.MaxStartupTime, err = GetMaxStartupTime()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_MAX_STARTUP_TIME: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_MAX_STARTUP_TIME is required for the validator service: %w", err)
+	}
+
+	cfg.ValidatorPollingInterval, err = GetValidatorPollingInterval()
+	if err != nil && err != ErrNotDefined {
+		return nil, fmt.Errorf("failed to get CARTESI_VALIDATOR_POLLING_INTERVAL: %w", err)
+	} else if err == ErrNotDefined {
+		return nil, fmt.Errorf("CARTESI_VALIDATOR_POLLING_INTERVAL is required for the validator service: %w", err)
+	}
+
+	return &cfg, nil
+}
+
+// ToAdvancerConfig converts a NodeConfig to a AdvancerConfig.
+func (c *NodeConfig) ToAdvancerConfig() *AdvancerConfig {
+	return &AdvancerConfig{
+		DatabaseConnection:             c.DatabaseConnection,
+		FeatureInspectEnabled:          c.FeatureInspectEnabled,
+		FeatureMachineHashCheckEnabled: c.FeatureMachineHashCheckEnabled,
+		InspectAddress:                 c.InspectAddress,
+		TelemetryAddress:               c.TelemetryAddress,
+		LogColor:                       c.LogColor,
+		LogLevel:                       c.LogLevel,
+		RemoteMachineLogLevel:          c.RemoteMachineLogLevel,
+		AdvancerPollingInterval:        c.AdvancerPollingInterval,
+		MaxStartupTime:                 c.MaxStartupTime,
+		SnapshotDir:                    c.SnapshotDir,
+	}
+}
+
+// ToClaimerConfig converts a NodeConfig to a ClaimerConfig.
+func (c *NodeConfig) ToClaimerConfig() *ClaimerConfig {
+	return &ClaimerConfig{
+		BlockchainDefaultBlock:        c.BlockchainDefaultBlock,
+		BlockchainHttpEndpoint:        c.BlockchainHttpEndpoint,
+		BlockchainId:                  c.BlockchainId,
+		BlockchainLegacyEnabled:       c.BlockchainLegacyEnabled,
+		DatabaseConnection:            c.DatabaseConnection,
+		FeatureClaimSubmissionEnabled: c.FeatureClaimSubmissionEnabled,
+		TelemetryAddress:              c.TelemetryAddress,
+		LogColor:                      c.LogColor,
+		LogLevel:                      c.LogLevel,
+		BlockchainHttpMaxRetries:      c.BlockchainHttpMaxRetries,
+		BlockchainHttpRetryMaxWait:    c.BlockchainHttpRetryMaxWait,
+		BlockchainHttpRetryMinWait:    c.BlockchainHttpRetryMinWait,
+		ClaimerPollingInterval:        c.ClaimerPollingInterval,
+		MaxStartupTime:                c.MaxStartupTime,
+	}
+}
+
+// ToEvmreaderConfig converts a NodeConfig to a EvmreaderConfig.
+func (c *NodeConfig) ToEvmreaderConfig() *EvmreaderConfig {
+	return &EvmreaderConfig{
+		BlockchainDefaultBlock:        c.BlockchainDefaultBlock,
+		BlockchainHttpEndpoint:        c.BlockchainHttpEndpoint,
+		BlockchainId:                  c.BlockchainId,
+		BlockchainSubscriptionTimeout: c.BlockchainSubscriptionTimeout,
+		BlockchainWsEndpoint:          c.BlockchainWsEndpoint,
+		DatabaseConnection:            c.DatabaseConnection,
+		FeatureInputReaderEnabled:     c.FeatureInputReaderEnabled,
+		TelemetryAddress:              c.TelemetryAddress,
+		LogColor:                      c.LogColor,
+		LogLevel:                      c.LogLevel,
+		BlockchainHttpMaxRetries:      c.BlockchainHttpMaxRetries,
+		BlockchainHttpRetryMaxWait:    c.BlockchainHttpRetryMaxWait,
+		BlockchainHttpRetryMinWait:    c.BlockchainHttpRetryMinWait,
+		MaxStartupTime:                c.MaxStartupTime,
+	}
+}
+
+// ToJsonrpcConfig converts a NodeConfig to a JsonrpcConfig.
+func (c *NodeConfig) ToJsonrpcConfig() *JsonrpcConfig {
+	return &JsonrpcConfig{
+		DatabaseConnection: c.DatabaseConnection,
+		JsonrpcApiAddress:  c.JsonrpcApiAddress,
+		TelemetryAddress:   c.TelemetryAddress,
+		LogColor:           c.LogColor,
+		LogLevel:           c.LogLevel,
+		MaxStartupTime:     c.MaxStartupTime,
+	}
+}
+
+// ToValidatorConfig converts a NodeConfig to a ValidatorConfig.
+func (c *NodeConfig) ToValidatorConfig() *ValidatorConfig {
+	return &ValidatorConfig{
+		DatabaseConnection:       c.DatabaseConnection,
+		TelemetryAddress:         c.TelemetryAddress,
+		LogColor:                 c.LogColor,
+		LogLevel:                 c.LogLevel,
+		MaxStartupTime:           c.MaxStartupTime,
+		ValidatorPollingInterval: c.ValidatorPollingInterval,
+	}
 }
 
 // GetAuthAwsKmsKeyId returns the value for the environment variable CARTESI_AUTH_AWS_KMS_KEY_ID.
@@ -775,6 +1584,45 @@ func GetAdvancerPollingInterval() (Duration, error) {
 	return notDefinedDuration(), fmt.Errorf("%s: %w", ADVANCER_POLLING_INTERVAL, ErrNotDefined)
 }
 
+// GetBlockchainHttpMaxRetries returns the value for the environment variable CARTESI_BLOCKCHAIN_HTTP_MAX_RETRIES.
+func GetBlockchainHttpMaxRetries() (uint64, error) {
+	s := viper.GetString(BLOCKCHAIN_HTTP_MAX_RETRIES)
+	if s != "" {
+		v, err := toUint64(s)
+		if err != nil {
+			return v, fmt.Errorf("failed to parse %s: %w", BLOCKCHAIN_HTTP_MAX_RETRIES, err)
+		}
+		return v, nil
+	}
+	return notDefineduint64(), fmt.Errorf("%s: %w", BLOCKCHAIN_HTTP_MAX_RETRIES, ErrNotDefined)
+}
+
+// GetBlockchainHttpRetryMaxWait returns the value for the environment variable CARTESI_BLOCKCHAIN_HTTP_RETRY_MAX_WAIT.
+func GetBlockchainHttpRetryMaxWait() (Duration, error) {
+	s := viper.GetString(BLOCKCHAIN_HTTP_RETRY_MAX_WAIT)
+	if s != "" {
+		v, err := toDuration(s)
+		if err != nil {
+			return v, fmt.Errorf("failed to parse %s: %w", BLOCKCHAIN_HTTP_RETRY_MAX_WAIT, err)
+		}
+		return v, nil
+	}
+	return notDefinedDuration(), fmt.Errorf("%s: %w", BLOCKCHAIN_HTTP_RETRY_MAX_WAIT, ErrNotDefined)
+}
+
+// GetBlockchainHttpRetryMinWait returns the value for the environment variable CARTESI_BLOCKCHAIN_HTTP_RETRY_MIN_WAIT.
+func GetBlockchainHttpRetryMinWait() (Duration, error) {
+	s := viper.GetString(BLOCKCHAIN_HTTP_RETRY_MIN_WAIT)
+	if s != "" {
+		v, err := toDuration(s)
+		if err != nil {
+			return v, fmt.Errorf("failed to parse %s: %w", BLOCKCHAIN_HTTP_RETRY_MIN_WAIT, err)
+		}
+		return v, nil
+	}
+	return notDefinedDuration(), fmt.Errorf("%s: %w", BLOCKCHAIN_HTTP_RETRY_MIN_WAIT, ErrNotDefined)
+}
+
 // GetClaimerPollingInterval returns the value for the environment variable CARTESI_CLAIMER_POLLING_INTERVAL.
 func GetClaimerPollingInterval() (Duration, error) {
 	s := viper.GetString(CLAIMER_POLLING_INTERVAL)
@@ -786,32 +1634,6 @@ func GetClaimerPollingInterval() (Duration, error) {
 		return v, nil
 	}
 	return notDefinedDuration(), fmt.Errorf("%s: %w", CLAIMER_POLLING_INTERVAL, ErrNotDefined)
-}
-
-// GetEvmReaderRetryPolicyMaxDelay returns the value for the environment variable CARTESI_EVM_READER_RETRY_POLICY_MAX_DELAY.
-func GetEvmReaderRetryPolicyMaxDelay() (Duration, error) {
-	s := viper.GetString(EVM_READER_RETRY_POLICY_MAX_DELAY)
-	if s != "" {
-		v, err := toDuration(s)
-		if err != nil {
-			return v, fmt.Errorf("failed to parse %s: %w", EVM_READER_RETRY_POLICY_MAX_DELAY, err)
-		}
-		return v, nil
-	}
-	return notDefinedDuration(), fmt.Errorf("%s: %w", EVM_READER_RETRY_POLICY_MAX_DELAY, ErrNotDefined)
-}
-
-// GetEvmReaderRetryPolicyMaxRetries returns the value for the environment variable CARTESI_EVM_READER_RETRY_POLICY_MAX_RETRIES.
-func GetEvmReaderRetryPolicyMaxRetries() (uint64, error) {
-	s := viper.GetString(EVM_READER_RETRY_POLICY_MAX_RETRIES)
-	if s != "" {
-		v, err := toUint64(s)
-		if err != nil {
-			return v, fmt.Errorf("failed to parse %s: %w", EVM_READER_RETRY_POLICY_MAX_RETRIES, err)
-		}
-		return v, nil
-	}
-	return notDefineduint64(), fmt.Errorf("%s: %w", EVM_READER_RETRY_POLICY_MAX_RETRIES, ErrNotDefined)
 }
 
 // GetMaxStartupTime returns the value for the environment variable CARTESI_MAX_STARTUP_TIME.

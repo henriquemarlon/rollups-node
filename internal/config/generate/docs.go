@@ -59,5 +59,8 @@ This file documents the configuration options.
 {{- if .Default}}
 * **Default:** {{.Default | quote | backtick}}
 {{- end}}
+{{- if .UsedBy}}
+* **Used by:** {{range $i, $e := .UsedBy}}{{if $i}}, {{end}}{{$e}}{{end}}
+{{- end}}
 {{- end}}
 `

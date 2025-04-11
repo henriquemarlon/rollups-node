@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/pkg/emulator"
 )
 
@@ -38,6 +39,7 @@ func Load(ctx context.Context,
 	path string,
 	address string,
 	config *emulator.MachineRuntimeConfig,
+	executionParameters *model.ExecutionParameters,
 ) (CartesiMachine, error) {
 	machine := &cartesiMachine{address: address}
 
@@ -52,7 +54,7 @@ func Load(ctx context.Context,
 	}
 
 	// Connect to the machine server
-	server, err := emulator.ConnectServer(address)
+	server, err := emulator.ConnectServer(address, executionParameters.FastDeadline)
 	if err != nil {
 		err = fmt.Errorf("could not connect to the remote machine: %w", err)
 		return nil, errCartesiMachine(err)

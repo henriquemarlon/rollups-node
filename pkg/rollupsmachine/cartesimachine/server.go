@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 
+	"github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/services/linewriter"
 	"github.com/cartesi/rollups-node/pkg/emulator"
 )
@@ -74,7 +75,7 @@ func StartServer(logger *slog.Logger, verbosity MachineLogLevel, port uint32, st
 	}
 
 	// Creates the command.
-	cmd := exec.Command("jsonrpc-remote-cartesi-machine", args...)
+	cmd := exec.Command("cartesi-jsonrpc-machine", args...)
 
 	// Redirects stdout and stderr.
 	interceptor := portInterceptor{
@@ -103,13 +104,13 @@ func StartServer(logger *slog.Logger, verbosity MachineLogLevel, port uint32, st
 }
 
 // StopServer shuts down the JSON RPC remote cartesi machine server hosted at address.
-func StopServer(address string, logger *slog.Logger) error {
+func StopServer(address string, logger *slog.Logger, executionParameters *model.ExecutionParameters) error {
 	if logger == nil {
 		return ErrNilLogger
 	}
 
 	logger.Info("Stopping server at", "address", address)
-	remote, err := emulator.ConnectServer(address)
+	remote, err := emulator.ConnectServer(address, executionParameters.FastDeadline)
 	if err != nil {
 		return err
 	}

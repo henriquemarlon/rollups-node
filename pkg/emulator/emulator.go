@@ -12,28 +12,29 @@ package emulator
 import "C"
 
 import (
+	"time"
 	"unsafe"
 )
 
-func ConnectServer(address string) (*RemoteMachine, error) {
+func ConnectServer(address string, timeout time.Duration) (*RemoteMachine, error) {
 	cAddr := C.CString(address)
 	defer C.free(unsafe.Pointer(cAddr))
 
 	var cm *C.cm_machine
-	if err := newError(C.cm_jsonrpc_connect_server(cAddr, &cm)); err != nil {
+	if err := newError(C.cm_jsonrpc_connect_server(cAddr, C.int64_t(timeout.Milliseconds()), &cm)); err != nil {
 		return nil, err
 	}
 	return &RemoteMachine{Machine: Machine{ptr: cm}}, nil
 }
 
-func SpawnServer(address string) (*RemoteMachine, string, uint32, error) {
+func SpawnServer(address string, timeout time.Duration) (*RemoteMachine, string, uint32, error) {
 	cAddr := C.CString(address)
 	defer C.free(unsafe.Pointer(cAddr))
 
 	var cm *C.cm_machine
 	var boundAddr *C.char
 	var pid C.uint32_t
-	code := C.cm_jsonrpc_spawn_server(cAddr, &cm, &boundAddr, &pid)
+	code := C.cm_jsonrpc_spawn_server(cAddr, C.int64_t(timeout.Milliseconds()), &cm, &boundAddr, &pid)
 	if err := newError(code); err != nil {
 		return nil, "", 0, err
 	}

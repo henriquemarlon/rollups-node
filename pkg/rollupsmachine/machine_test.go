@@ -10,7 +10,9 @@ import (
 	"log/slog"
 	"os"
 	"testing"
+	"time"
 
+	"github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/pkg/emulator"
 	"github.com/cartesi/rollups-node/pkg/rollupsmachine/cartesimachine"
 	"github.com/cartesi/rollups-node/pkg/service"
@@ -56,9 +58,10 @@ type NewSuite struct {
 	suite.Suite
 	address string
 
-	acceptSnapshot *snapshot.Snapshot
-	rejectSnapshot *snapshot.Snapshot
-	logger         *slog.Logger
+	acceptSnapshot      *snapshot.Snapshot
+	rejectSnapshot      *snapshot.Snapshot
+	logger              *slog.Logger
+	executionParameters *model.ExecutionParameters
 }
 
 func (s *NewSuite) SetupSuite() {
@@ -79,6 +82,7 @@ func (s *NewSuite) SetupSuite() {
 	require.Equal(emulator.BreakReasonYieldedManually, s.rejectSnapshot.BreakReason)
 
 	s.logger = service.NewLogger(slog.LevelDebug, true)
+	s.executionParameters = newExecutionParameters()
 }
 
 func (s *NewSuite) TearDownSuite() {
@@ -93,7 +97,7 @@ func (s *NewSuite) SetupTest() {
 }
 
 func (s *NewSuite) TearDownTest() {
-	err := cartesimachine.StopServer(s.address, s.logger)
+	err := cartesimachine.StopServer(s.address, s.logger, s.executionParameters)
 	s.Require().Nil(err)
 }
 
@@ -103,7 +107,7 @@ func (s *NewSuite) TestOkAccept() {
 
 	config := &emulator.MachineRuntimeConfig{}
 	path := s.acceptSnapshot.Path()
-	cartesiMachine, err := cartesimachine.Load(ctx, path, s.address, config)
+	cartesiMachine, err := cartesimachine.Load(ctx, path, s.address, config, s.executionParameters)
 	require.NotNil(cartesiMachine)
 	require.Nil(err, "%v", err)
 
@@ -118,7 +122,7 @@ func (s *NewSuite) TestOkReject() {
 
 	config := &emulator.MachineRuntimeConfig{}
 	path := s.rejectSnapshot.Path()
-	cartesiMachine, err := cartesimachine.Load(ctx, path, s.address, config)
+	cartesiMachine, err := cartesimachine.Load(ctx, path, s.address, config, s.executionParameters)
 	require.NotNil(cartesiMachine)
 	require.Nil(err)
 
@@ -133,7 +137,7 @@ func (s *NewSuite) TestInvalidAddress() {
 
 	config := &emulator.MachineRuntimeConfig{}
 	path := s.acceptSnapshot.Path()
-	cartesiMachine, err := cartesimachine.Load(ctx, path, "invalid address", config)
+	cartesiMachine, err := cartesimachine.Load(ctx, path, "invalid address", config, s.executionParameters)
 	require.Nil(cartesiMachine)
 	require.NotNil(err)
 
@@ -146,7 +150,7 @@ func (s *NewSuite) TestInvalidPath() {
 	ctx := context.Background()
 
 	config := &emulator.MachineRuntimeConfig{}
-	cartesiMachine, err := cartesimachine.Load(ctx, "invalid path", s.address, config)
+	cartesiMachine, err := cartesimachine.Load(ctx, "invalid path", s.address, config, s.executionParameters)
 	require.Nil(cartesiMachine)
 	require.NotNil(err)
 
@@ -161,6 +165,7 @@ type ForkSuite struct{ suite.Suite }
 func (s *ForkSuite) TestOk() {
 	require := s.Require()
 	ctx := context.Background()
+	executionParameters := newExecutionParameters()
 
 	// Creates the snapshot.
 	script := "while true; do rollup accept; done"
@@ -179,7 +184,8 @@ func (s *ForkSuite) TestOk() {
 		ctx,
 		snapshot.Path(),
 		address,
-		&emulator.MachineRuntimeConfig{})
+		&emulator.MachineRuntimeConfig{},
+		executionParameters)
 	require.NotNil(cartesiMachine)
 	require.Nil(err)
 
@@ -240,10 +246,11 @@ func (s *AdvanceSuite) SetupTest() {
 func (s *AdvanceSuite) TestEchoLoop() {
 	require := s.Require()
 	ctx := context.Background()
+	executionParameters := newExecutionParameters()
 
 	// Loads the machine.
 	config := &emulator.MachineRuntimeConfig{}
-	cartesiMachine, err := cartesimachine.Load(ctx, s.snapshotEcho.Path(), s.address, config)
+	cartesiMachine, err := cartesimachine.Load(ctx, s.snapshotEcho.Path(), s.address, config, executionParameters)
 	require.NotNil(cartesiMachine)
 	require.Nil(err)
 
@@ -275,9 +282,16 @@ func (s *AdvanceSuite) TestEchoLoop() {
 	}
 }
 
+func newExecutionParameters() *model.ExecutionParameters {
+	return &model.ExecutionParameters{
+		FastDeadline: 5 * time.Second,
+	}
+}
+
 func (s *AdvanceSuite) TestAcceptRejectException() {
 	require := s.Require()
 	ctx := context.Background()
+	executionParameters := newExecutionParameters()
 
 	// Creates the snapshot.
 	script := `rollup accept
@@ -291,7 +305,7 @@ func (s *AdvanceSuite) TestAcceptRejectException() {
 
 	// Loads the machine.
 	config := &emulator.MachineRuntimeConfig{}
-	cartesiMachine, err := cartesimachine.Load(ctx, snapshot.Path(), s.address, config)
+	cartesiMachine, err := cartesimachine.Load(ctx, snapshot.Path(), s.address, config, executionParameters)
 	require.NotNil(cartesiMachine)
 	require.Nil(err)
 
@@ -332,6 +346,7 @@ func (s *AdvanceSuite) TestAcceptRejectException() {
 func (s *AdvanceSuite) TestHalted() {
 	require := s.Require()
 	ctx := context.Background()
+	executionParameters := newExecutionParameters()
 
 	// Creates the snapshot.
 	script := `rollup accept; echo "Done"`
@@ -342,7 +357,7 @@ func (s *AdvanceSuite) TestHalted() {
 
 	// Loads the machine.
 	config := &emulator.MachineRuntimeConfig{}
-	cartesiMachine, err := cartesimachine.Load(ctx, snapshot.Path(), s.address, config)
+	cartesiMachine, err := cartesimachine.Load(ctx, snapshot.Path(), s.address, config, executionParameters)
 	require.NotNil(cartesiMachine)
 	require.Nil(err)
 
@@ -396,10 +411,11 @@ func (s *InspectSuite) SetupTest() {
 func (s *InspectSuite) TestEchoLoop() {
 	require := s.Require()
 	ctx := context.Background()
+	executionParameters := newExecutionParameters()
 
 	// Loads the machine.
 	config := &emulator.MachineRuntimeConfig{}
-	cartesiMachine, err := cartesimachine.Load(ctx, s.snapshotEcho.Path(), s.address, config)
+	cartesiMachine, err := cartesimachine.Load(ctx, s.snapshotEcho.Path(), s.address, config, executionParameters)
 	require.NotNil(cartesiMachine)
 	require.Nil(err)
 

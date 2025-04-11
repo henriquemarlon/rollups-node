@@ -8,12 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"sync"
 	"time"
 
 	"github.com/cartesi/rollups-node/internal/manager/pmutex"
 	. "github.com/cartesi/rollups-node/internal/model"
+	"github.com/cartesi/rollups-node/pkg/emulator"
 	"github.com/cartesi/rollups-node/pkg/rollupsmachine"
 	"github.com/cartesi/rollups-node/pkg/rollupsmachine/cartesimachine"
 	"github.com/ethereum/go-ethereum/common"
@@ -386,10 +386,16 @@ func (f *DefaultMachineRuntimeFactory) CreateMachineRuntime(
 		"template-path", app.TemplateURI)
 
 	// Start the machine server
-	address, err := cartesimachine.StartServer(logger, verbosity, 0, os.Stdout, os.Stderr)
+	// TODO(mpolitzer): this needs a refactoring to:
+	// - store the `server` state itself (no need to reconnect via address).
+	// - store the server `pid` may be needed to kill misbehaving servers.
+	// - fit the call in the right abstraction layer `emulator` vs `cartesimachine`.
+	server, address, pid, err := emulator.SpawnServer("127.0.0.1:0", app.ExecutionParameters.FastDeadline)
 	if err != nil {
 		return nil, err
 	}
+	_ = server
+	_ = pid
 
 	// Load the machine template
 	logger.Info("Loading machine on server",
@@ -399,9 +405,9 @@ func (f *DefaultMachineRuntimeFactory) CreateMachineRuntime(
 		"template-path", app.TemplateURI)
 
 	// Create the machine from the template
-	machine, err := cartesimachine.Load(ctx, app.TemplateURI, address, nil)
+	machine, err := cartesimachine.Load(ctx, app.TemplateURI, address, nil, &app.ExecutionParameters)
 	if err != nil {
-		return nil, errors.Join(err, cartesimachine.StopServer(address, logger))
+		return nil, errors.Join(err, cartesimachine.StopServer(address, logger, &app.ExecutionParameters))
 	}
 
 	logger.Debug("Machine loaded on server",
@@ -418,7 +424,7 @@ func (f *DefaultMachineRuntimeFactory) CreateMachineRuntime(
 
 		machineHash, err := machine.ReadHash(ctx)
 		if err != nil {
-			return nil, errors.Join(err, cartesimachine.StopServer(address, logger))
+			return nil, errors.Join(err, cartesimachine.StopServer(address, logger, &app.ExecutionParameters))
 		}
 
 		if machineHash != app.TemplateHash {

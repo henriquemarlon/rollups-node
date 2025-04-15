@@ -532,7 +532,3 @@ func claimAcceptedEventMatches(application *model.Application, epoch *model.Epoc
 		*epoch.ClaimHash == event.OutputsMerkleRoot &&
 		epoch.LastBlock == event.LastProcessedBlockNumber.Uint64()
 }
-
-func (s *Service) String() string {
-	return s.Name
-}

@@ -858,3 +858,75 @@ func TestConsensusAddressChangedOnAcceptedClaims(t *testing.T) {
 	errs := m.acceptClaimsAndUpdateDatabase(makeEpochMap(), makeEpochMap(currEpoch), makeApplicationMap(app), endBlock)
 	assert.Equal(t, len(errs), 1)
 }
+
+// FirstBlock > LastBlock
+func TestCheckEpochConstraintFirstBlockFailed(t *testing.T) {
+	e := &model.Epoch{
+		FirstBlock: 1,
+		LastBlock:  0,
+	}
+	assert.NotNil(t, checkEpochConstraint(e))
+}
+
+// claimHash == nil, when status == claimSubmitted
+func TestCheckEpochConstraintClaimHashFailed(t *testing.T) {
+	e := &model.Epoch{
+		Status:    model.EpochStatus_ClaimSubmitted,
+		ClaimHash: nil,
+	}
+	assert.NotNil(t, checkEpochConstraint(e))
+}
+
+// ClaimTransactionHash == nil, when status == claimSubmitted
+func TestCheckEpochConstraintClaimTransactionHashFailed(t *testing.T) {
+	e := &model.Epoch{
+		Status:               model.EpochStatus_ClaimSubmitted,
+		ClaimHash:            &common.Hash{},
+		ClaimTransactionHash: nil,
+	}
+	assert.NotNil(t, checkEpochConstraint(e))
+}
+
+// FirstBlock > LastBlock for `p`
+func TestCheckEpochSequenceConstraintForPFailed(t *testing.T) {
+	p := &model.Epoch{
+		FirstBlock: 1,
+		LastBlock:  0,
+	}
+	e := &model.Epoch{}
+	assert.NotNil(t, checkEpochSequenceConstraint(p, e))
+}
+
+// FirstBlock > LastBlock for `e`
+func TestCheckEpochSequenceConstraintForEFailed(t *testing.T) {
+	p := &model.Epoch{}
+	e := &model.Epoch{
+		FirstBlock: 1,
+		LastBlock:  0,
+	}
+	assert.NotNil(t, checkEpochSequenceConstraint(p, e))
+}
+
+// p.FirstBlock > e.FirstBlock
+func TestCheckEpochSequenceConstraintFirstBlockFailed(t *testing.T) {
+	p := &model.Epoch{
+		FirstBlock: 1,
+		LastBlock:  2,
+	}
+	e := &model.Epoch{
+		FirstBlock: p.FirstBlock - 1,
+		LastBlock:  2,
+	}
+	assert.NotNil(t, checkEpochSequenceConstraint(p, e))
+}
+
+// p.LastBlock > e.LastBlock
+func TestCheckEpochSequenceConstraintIndexFailed(t *testing.T) {
+	p := &model.Epoch{
+		Index: 1,
+	}
+	e := &model.Epoch{
+		Index: 0,
+	}
+	assert.NotNil(t, checkEpochSequenceConstraint(p, e))
+}

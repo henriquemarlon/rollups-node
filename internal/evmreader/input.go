@@ -27,7 +27,7 @@ func (r *Service) checkForNewInputs(
 
 	appsByInputBox := map[common.Address][]appContracts{}
 	for _, app := range applications {
-		if app.application.DataAvailability != DataAvailability_InputBox {
+		if !app.application.HasDataAvailabilitySelector(DataAvailability_InputBox) {
 			continue
 		}
 		key := app.application.IInputBoxAddress

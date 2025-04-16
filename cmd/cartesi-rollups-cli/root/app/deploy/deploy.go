@@ -181,9 +181,6 @@ func run(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	var daSelector model.DataAvailabilitySelector
-	copy(daSelector[:], encodedDA[:model.DATA_AVAILABILITY_SELECTOR_SIZE])
-
 	var owner common.Address
 	if cmd.Flags().Changed("application-owner") {
 		owner = common.HexToAddress(applicationOwner)
@@ -206,7 +203,7 @@ func run(cmd *cobra.Command, args []string) {
 		TemplateURI:          templatePath,
 		TemplateHash:         common.HexToHash(templateHash),
 		EpochLength:          epochLength,
-		DataAvailability:     daSelector,
+		DataAvailability:     encodedDA,
 		State:                applicationState,
 		IInputBoxBlock:       inputBoxBlock.Uint64(),
 		LastInputCheckBlock:  0,

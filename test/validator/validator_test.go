@@ -88,6 +88,7 @@ func (s *ValidatorRepositoryIntegrationSuite) TestItReturnsPristineClaim() {
 			IConsensusAddress:   common.BytesToAddress([]byte("beadbeef")),
 			TemplateHash:        common.BytesToHash([]byte("template")),
 			TemplateURI:         "/template/path",
+			DataAvailability:    model.DataAvailability_InputBox[:],
 			EpochLength:         10,
 			State:               model.ApplicationState_Enabled,
 		}
@@ -153,6 +154,7 @@ func (s *ValidatorRepositoryIntegrationSuite) TestItReturnsPreviousClaim() {
 			IConsensusAddress:   common.BytesToAddress([]byte("beadbeef")),
 			TemplateHash:        common.BytesToHash([]byte("template")),
 			TemplateURI:         "/template/path",
+			DataAvailability:    model.DataAvailability_InputBox[:],
 			EpochLength:         10,
 			State:               model.ApplicationState_Enabled,
 		}
@@ -255,6 +257,7 @@ func (s *ValidatorRepositoryIntegrationSuite) TestItReturnsANewClaimAndProofs() 
 			IConsensusAddress:   common.BytesToAddress([]byte("beadbeef")),
 			TemplateHash:        common.BytesToHash([]byte("template")),
 			TemplateURI:         "/template/path",
+			DataAvailability:    model.DataAvailability_InputBox[:],
 			EpochLength:         10,
 			State:               model.ApplicationState_Enabled,
 		}
@@ -341,6 +344,7 @@ func (s *ValidatorRepositoryIntegrationSuite) TestItReturnsANewClaimAndProofs() 
 			IConsensusAddress:   common.BytesToAddress([]byte("beadbeef")),
 			TemplateHash:        common.BytesToHash([]byte("template")),
 			TemplateURI:         "/template/path",
+			DataAvailability:    model.DataAvailability_InputBox[:],
 			EpochLength:         10,
 			State:               model.ApplicationState_Enabled,
 		}

@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	ErrApplicationNotFound = fmt.Errorf("Application not found")
+	ErrApplicationNotFound = fmt.Errorf("application not found")
 )
 
 type Pagination struct {

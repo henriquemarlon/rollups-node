@@ -6,7 +6,7 @@ BEGIN;
 CREATE DOMAIN "ethereum_address" AS BYTEA CHECK (octet_length(VALUE) = 20);
 CREATE DOMAIN "uint64" AS NUMERIC(20, 0) CHECK (VALUE >= 0 AND VALUE <= 18446744073709551615);
 CREATE DOMAIN "hash" AS BYTEA CHECK (octet_length(VALUE) = 32);
-CREATE DOMAIN "data_availability_selector" AS BYTEA CHECK (octet_length(VALUE) = 4);
+CREATE DOMAIN "data_availability" AS BYTEA CHECK (octet_length(VALUE) >= 4);
 
 CREATE TYPE "ApplicationState" AS ENUM ('ENABLED', 'DISABLED', 'INOPERABLE');
 
@@ -73,7 +73,7 @@ CREATE TABLE "application"
     "template_hash" hash NOT NULL,
     "template_uri" VARCHAR(4096) NOT NULL,
     "epoch_length" uint64 NOT NULL,
-    "data_availability" data_availability_selector NOT NULL,
+    "data_availability" data_availability NOT NULL,
     "state" "ApplicationState" NOT NULL,
     "reason" VARCHAR(4096),
     "last_input_check_block" uint64 NOT NULL,
@@ -85,7 +85,7 @@ CREATE TABLE "application"
     CONSTRAINT "application_pkey" PRIMARY KEY ("id")
 );
 
-CREATE INDEX "application_data_availability_selector_idx" ON "application"("data_availability");
+CREATE INDEX "application_data_availability_selector_idx" ON "application"(substring("data_availability" FROM 1 for 4));
 
 CREATE TRIGGER "application_set_updated_at" BEFORE UPDATE ON "application"
 FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();

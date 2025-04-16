@@ -177,9 +177,6 @@ func run(cmd *cobra.Command, args []string) {
 	)
 	cobra.CheckErr(err)
 
-	var daSelector model.DataAvailabilitySelector
-	copy(daSelector[:], encodedDA[:model.DATA_AVAILABILITY_SELECTOR_SIZE])
-
 	if !cmd.Flags().Changed("inputbox-block-number") {
 		block, err := getInputBoxDeploymentBlock(ctx, *inputBoxAddress)
 		if err != nil {
@@ -197,7 +194,7 @@ func run(cmd *cobra.Command, args []string) {
 		TemplateURI:          templatePath,
 		TemplateHash:         parsedTemplateHash,
 		EpochLength:          epochLength,
-		DataAvailability:     daSelector,
+		DataAvailability:     encodedDA,
 		State:                applicationState,
 		IInputBoxBlock:       inputBoxBlockNumber,
 		LastInputCheckBlock:  0,

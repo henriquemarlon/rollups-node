@@ -491,7 +491,7 @@
 						"$ref": "#/components/schemas/UnsignedInteger"
 					},
 					"data_availability": {
-						"$ref": "#/components/schemas/FunctionSelector"
+						"$ref": "#/components/schemas/ByteArray"
 					},
 					"state": {
 						"$ref": "#/components/schemas/ApplicationState"

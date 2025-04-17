@@ -94,6 +94,7 @@ env:
 	@echo export CARTESI_CONTRACTS_SELF_HOSTED_APPLICATION_FACTORY_ADDRESS="0xc700285Ab555eeB5201BC00CFD4b2CC8DED90051"
 	@echo export CARTESI_AUTH_MNEMONIC=\"test test test test test test test test test test test junk\"
 	@echo export CARTESI_DATABASE_CONNECTION="postgres://postgres:password@localhost:5432/rollupsdb?sslmode=disable"
+	@echo export CARTESI_SNAPSHOTS_DIR="snapshots"
 	@echo export CARTESI_TEST_DATABASE_CONNECTION="postgres://test_user:password@localhost:5432/test_rollupsdb?sslmode=disable"
 	@echo export CARTESI_TEST_MACHINE_IMAGES_PATH=\"$(CARTESI_TEST_MACHINE_IMAGES_PATH)\"
 	@echo export PATH=\"$(CURDIR):$$PATH\"
@@ -171,7 +172,7 @@ clean-debian-packages:
 
 clean-dapps: ## Clean the dapps
 	@echo "Cleaning dapps"
-	@rm -rf applications
+	@rm -rf applications snapshots
 
 clean-test-dependencies: ## Clean the test dependencies
 	@echo "Cleaning test dependencies"

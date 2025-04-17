@@ -28,6 +28,7 @@ type CartesiMachine interface {
 	ReadCycle(context.Context) (uint64, error)
 	ReadMemory(context.Context) ([]byte, error)
 	WriteRequest(context.Context, []byte, RequestType) error
+	Store(context.Context, string) error
 
 	PayloadLengthLimit() uint
 	Address() string

@@ -626,6 +626,12 @@ func (m *MockMachineInstance) Synchronize(ctx context.Context, repo manager.Mach
 	return nil
 }
 
+// CreateSnapshot implements the MachineInstance interface for testing
+func (m *MockMachineInstance) CreateSnapshot(ctx context.Context, processInputs uint64, path string) error {
+	// Not used in advancer tests, but needed to satisfy the interface
+	return nil
+}
+
 // Close implements the MachineInstance interface for testing
 func (m *MockMachineInstance) Close() error {
 	// Not used in advancer tests, but needed to satisfy the interface
@@ -643,6 +649,8 @@ type MockRepository struct {
 	UpdateApplicationStateError error
 	UpdateEpochsError           error
 	UpdateEpochsCount           int64
+	GetLastSnapshotReturn       *Input
+	GetLastSnapshotError        error
 
 	StoredResults              []*AdvanceResult
 	ApplicationStateUpdates    int
@@ -716,6 +724,71 @@ func (mock *MockRepository) UpdateApplicationState(ctx context.Context, appID in
 	mock.LastApplicationState = state
 	mock.LastApplicationStateReason = reason
 	return mock.UpdateApplicationStateError
+}
+
+func (mock *MockRepository) GetEpoch(ctx context.Context, nameOrAddress string, index uint64) (*Epoch, error) {
+	// Not used in most advancer tests, but needed to satisfy the interface
+	return &Epoch{Status: EpochStatus_Closed}, nil
+}
+
+func (mock *MockRepository) GetLastInput(ctx context.Context, appAddress string, epochIndex uint64) (*Input, error) {
+	// Check for context cancellation
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	address := common.HexToAddress(appAddress)
+	inputs := mock.GetInputsReturn[address]
+	if len(inputs) == 0 {
+		return nil, nil
+	}
+
+	// Find the last input for the given epoch
+	var lastInput *Input
+	for _, input := range inputs {
+		if input.EpochIndex == epochIndex && (lastInput == nil || input.Index > lastInput.Index) {
+			lastInput = input
+		}
+	}
+
+	return lastInput, nil
+}
+
+func (mock *MockRepository) GetLastProcessedInput(ctx context.Context, appAddress string) (*Input, error) {
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	address := common.HexToAddress(appAddress)
+	inputs := mock.GetInputsReturn[address]
+	if len(inputs) == 0 {
+		return nil, nil
+	}
+
+	// Find the last input for the given epoch
+	var lastInput *Input
+	for _, input := range inputs {
+		if input.Status != InputCompletionStatus_None && (lastInput == nil || input.Index > lastInput.Index) {
+			lastInput = input
+		}
+	}
+
+	return lastInput, nil
+}
+
+func (mock *MockRepository) UpdateInputSnapshotURI(ctx context.Context, appId int64, inputIndex uint64, snapshotURI string) error {
+	// Not used in most advancer tests, but needed to satisfy the interface
+	return nil
+}
+
+func (mock *MockRepository) GetLastSnapshot(ctx context.Context, nameOrAddress string) (*Input, error) {
+	// Check for context cancellation
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
+	return mock.GetLastSnapshotReturn, mock.GetLastSnapshotError
 }
 
 // ------------------------------------------------------------------------------------------------

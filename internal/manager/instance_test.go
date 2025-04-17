@@ -68,6 +68,7 @@ func (s *MachineInstanceSuite) TestNewMachineInstance() {
 			context.Background(),
 			cartesimachine.MachineLogLevelInfo,
 			app,
+			0,
 			testLogger,
 			false,
 			mockFactory,
@@ -96,6 +97,7 @@ func (s *MachineInstanceSuite) TestNewMachineInstance() {
 			context.Background(),
 			cartesimachine.MachineLogLevelInfo,
 			app,
+			0,
 			testLogger,
 			false,
 			mockFactory,
@@ -122,6 +124,7 @@ func (s *MachineInstanceSuite) TestNewMachineInstance() {
 			context.Background(),
 			cartesimachine.MachineLogLevelInfo,
 			app,
+			0,
 			testLogger,
 			false,
 			mockFactory,
@@ -148,6 +151,7 @@ func (s *MachineInstanceSuite) TestNewMachineInstance() {
 			context.Background(),
 			cartesimachine.MachineLogLevelInfo,
 			app,
+			0,
 			testLogger,
 			false,
 			mockFactory,
@@ -172,6 +176,7 @@ func (s *MachineInstanceSuite) TestNewMachineInstance() {
 			context.Background(),
 			cartesimachine.MachineLogLevelInfo,
 			app,
+			0,
 			nil,
 			false,
 			mockFactory,
@@ -196,6 +201,7 @@ func (s *MachineInstanceSuite) TestNewMachineInstance() {
 			context.Background(),
 			cartesimachine.MachineLogLevelInfo,
 			app,
+			0,
 			testLogger,
 			false,
 			nil,
@@ -527,6 +533,46 @@ func (s *MachineInstanceSuite) TestInspect() {
 	})
 }
 
+func (s *MachineInstanceSuite) TestCreateSnapshot() {
+	s.Run("Ok", func() {
+		require := s.Require()
+		inner, _, machine := s.setupAdvance()
+		inner.CloseError = nil
+
+		err := machine.CreateSnapshot(context.Background(), 5, "/tmp/snapshot")
+		require.Nil(err)
+	})
+
+	s.Run("Error", func() {
+		require := s.Require()
+		inner, _, machine := s.setupAdvance()
+		errStore := errors.New("Store error")
+		inner.StoreError = errStore
+
+		err := machine.CreateSnapshot(context.Background(), 5, "/tmp/snapshot")
+		require.Error(err)
+		require.Equal(errStore, err)
+	})
+
+	s.Run("MachineClosed", func() {
+		require := s.Require()
+		_, _, machine := s.setupAdvance()
+		machine.runtime = nil
+
+		err := machine.CreateSnapshot(context.Background(), 5, "/tmp/snapshot")
+		require.Error(err)
+		require.Equal(ErrMachineClosed, err)
+	})
+
+	s.Run("InvalidSnapshotPoint", func() {
+		require := s.Require()
+		_, _, machine := s.setupAdvance()
+
+		err := machine.CreateSnapshot(context.Background(), 6, "/tmp/snapshot")
+		require.ErrorIs(err, ErrInvalidSnapshotPoint)
+	})
+}
+
 func (s *MachineInstanceSuite) TestClose() {
 	s.Run("Ok", func() {
 		require := s.Require()
@@ -602,6 +648,10 @@ func (m *MockMachineInstance) Inspect(ctx context.Context, query []byte) (*model
 }
 
 func (m *MockMachineInstance) Synchronize(ctx context.Context, repo MachineRepository) error {
+	return nil
+}
+
+func (m *MockMachineInstance) CreateSnapshot(ctx context.Context, processedInputs uint64, path string) error {
 	return nil
 }
 
@@ -771,6 +821,8 @@ type MockRollupsMachine struct {
 	InspectReportsReturn  []rollupsmachine.Report
 	InspectError          error
 
+	StoreError error
+
 	CloseError error
 }
 
@@ -800,6 +852,10 @@ func (machine *MockRollupsMachine) Inspect(_ context.Context,
 	query []byte,
 ) (bool, []rollupsmachine.Report, error) {
 	return machine.InspectAcceptedReturn, machine.InspectReportsReturn, machine.InspectError
+}
+
+func (machine *MockRollupsMachine) Store(_ context.Context, _ string) error {
+	return machine.StoreError
 }
 
 func (machine *MockRollupsMachine) Close(_ context.Context) error {

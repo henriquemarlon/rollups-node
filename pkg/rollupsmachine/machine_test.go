@@ -1196,6 +1196,8 @@ type CartesiMachineMock struct {
 
 	AddressReturn string
 
+	StoreError error
+
 	Responses             uint
 	ReadYieldReasonReturn []emulator.CmioYieldReason
 	ReadYieldReasonError  []error
@@ -1242,6 +1244,10 @@ func (machine *CartesiMachineMock) PayloadLengthLimit() uint {
 
 func (machine *CartesiMachineMock) Address() string {
 	return machine.AddressReturn
+}
+
+func (machine *CartesiMachineMock) Store(_ context.Context, _ string) error {
+	return machine.StoreError
 }
 
 // ------------------------------------------------------------------------------------------------

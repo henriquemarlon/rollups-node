@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"sync"
 
 	. "github.com/cartesi/rollups-node/internal/model"
@@ -27,6 +28,9 @@ type MachineRepository interface {
 
 	// ListInputs retrieves inputs based on filter criteria
 	ListInputs(ctx context.Context, nameOrAddress string, f repository.InputFilter, p repository.Pagination) ([]*Input, uint64, error)
+
+	// GetLastSnapshot retrieves the most recent input with a snapshot for the given application
+	GetLastSnapshot(ctx context.Context, nameOrAddress string) (*Input, error)
 }
 
 // MachineManager manages the lifecycle of machine instances for applications
@@ -74,8 +78,83 @@ func (m *MachineManager) UpdateMachines(ctx context.Context) error {
 			"application", app.Name,
 			"address", app.IApplicationAddress.String())
 
-		// Create a new machine instance
-		instance, err := NewMachineInstance(ctx, m.verbosity, app, m.logger, m.checkHash)
+		// Check if we have a snapshot to load from
+		var instance MachineInstance
+		var err error
+
+		// Find the latest snapshot for this application
+		snapshot, err := m.repository.GetLastSnapshot(ctx, app.IApplicationAddress.String())
+		if err != nil {
+			m.logger.Error("Failed to find latest snapshot",
+				"application", app.Name,
+				"error", err)
+			// Continue with template-based initialization
+		}
+
+		if snapshot != nil && snapshot.SnapshotURI != nil {
+			// Create a machine instance from the snapshot
+			m.logger.Info("Creating machine instance from snapshot",
+				"application", app.Name,
+				"snapshot", *snapshot.SnapshotURI)
+
+			// Verify the snapshot path exists
+			if _, err := os.Stat(*snapshot.SnapshotURI); os.IsNotExist(err) {
+				m.logger.Error("Snapshot path does not exist",
+					"application", app.Name,
+					"snapshot", *snapshot.SnapshotURI,
+					"error", err)
+				// Fall back to template-based initialization
+			} else {
+				// Create a factory with the snapshot path and machine hash
+				instance, err = NewMachineInstanceFromSnapshot(
+					ctx, m.verbosity, app, m.logger, m.checkHash, *snapshot.SnapshotURI, snapshot.MachineHash, snapshot.Index)
+
+				if err != nil {
+					m.logger.Error("Failed to create machine instance from snapshot",
+						"application", app.Name,
+						"snapshot", *snapshot.SnapshotURI,
+						"error", err)
+					// Fall back to template-based initialization
+				} else {
+					// If we loaded from a snapshot, we need to synchronize from the snapshot point
+					// Get the inputs after the snapshot
+					inputsAfterSnapshot, err := getInputsAfterSnapshot(ctx, m.repository, app, snapshot.Index)
+					if err != nil {
+						m.logger.Error("Failed to get inputs after snapshot",
+							"application", app.Name,
+							"snapshot_input_index", snapshot.Index,
+							"error", err)
+						instance.Close()
+						continue
+					}
+
+					// Process each input to bring the machine to the current state
+					for _, input := range inputsAfterSnapshot {
+						m.logger.Info("Replaying input after snapshot",
+							"application", app.Name,
+							"epoch_index", input.EpochIndex,
+							"input_index", input.Index)
+
+						_, err := instance.Advance(ctx, input.RawData, input.Index)
+						if err != nil {
+							m.logger.Error("Failed to replay input after snapshot",
+								"application", app.Name,
+								"input_index", input.Index,
+								"error", err)
+							instance.Close()
+							continue
+						}
+					}
+
+					// Add the machine to the manager
+					m.addMachine(app.ID, instance)
+					continue
+				}
+			}
+		}
+
+		// If we didn't load from a snapshot, create a new machine instance from the template
+		instance, err = NewMachineInstance(ctx, m.verbosity, app, m.logger, m.checkHash)
 		if err != nil {
 			m.logger.Error("Failed to create machine instance",
 				"application", app.IApplicationAddress,
@@ -197,4 +276,21 @@ func getEnabledApplications(ctx context.Context, repo MachineRepository) ([]*App
 func getProcessedInputs(ctx context.Context, repo MachineRepository, appAddress string) ([]*Input, uint64, error) {
 	f := repository.InputFilter{NotStatus: Pointer(InputCompletionStatus_None)}
 	return repo.ListInputs(ctx, appAddress, f, repository.Pagination{})
+}
+
+// Helper function to get inputs after a specific index
+func getInputsAfterSnapshot(ctx context.Context, repo MachineRepository, app *Application, snapshotInputIndex uint64) ([]*Input, error) {
+	// Get all processed inputs for this application
+	inputs, _, err := getProcessedInputs(ctx, repo, app.IApplicationAddress.String())
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter inputs to only include those after the snapshot
+	for i, input := range inputs {
+		if input.Index > snapshotInputIndex {
+			return inputs[i:], nil
+		}
+	}
+	return []*Input{}, nil
 }

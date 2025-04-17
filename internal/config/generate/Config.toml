@@ -198,7 +198,7 @@ used-by = ["cli"]
 # Snapshot
 #
 
-[snapshot.CARTESI_SNAPSHOT_DIR]
+[snapshot.CARTESI_SNAPSHOTS_DIR]
 default = "/var/lib/cartesi-rollups-node/snapshots"
 go-type = "string"
 description = """

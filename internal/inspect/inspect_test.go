@@ -233,6 +233,11 @@ func (mock *MockMachine) Synchronize(ctx context.Context, repo manager.MachineRe
 	return nil
 }
 
+func (mock *MockMachine) CreateSnapshot(ctx context.Context, processedInputs uint64, path string) error {
+	// Not used in inspect tests, but needed to satisfy the interface
+	return nil
+}
+
 func (mock *MockMachine) Close() error {
 	// Not used in inspect tests, but needed to satisfy the interface
 	return nil

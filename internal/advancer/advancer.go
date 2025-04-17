@@ -8,6 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"path"
+	"strings"
 
 	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/internal/inspect"
@@ -28,14 +31,20 @@ var (
 // AdvancerRepository defines the repository interface needed by the Advancer service
 type AdvancerRepository interface {
 	ListInputs(ctx context.Context, nameOrAddress string, f repository.InputFilter, p repository.Pagination) ([]*Input, uint64, error)
+	GetLastInput(ctx context.Context, appAddress string, epochIndex uint64) (*Input, error)
 	StoreAdvanceResult(ctx context.Context, appID int64, ar *AdvanceResult) error
 	UpdateEpochsInputsProcessed(ctx context.Context, nameOrAddress string) (int64, error)
 	UpdateApplicationState(ctx context.Context, appID int64, state ApplicationState, reason *string) error
+	GetEpoch(ctx context.Context, nameOrAddress string, index uint64) (*Epoch, error)
+	UpdateInputSnapshotURI(ctx context.Context, appId int64, inputIndex uint64, snapshotURI string) error
+	GetLastSnapshot(ctx context.Context, nameOrAddress string) (*Input, error)
+	GetLastProcessedInput(ctx context.Context, appAddress string) (*Input, error)
 }
 
 // Service is the main advancer service that processes inputs through Cartesi machines
 type Service struct {
 	service.Service
+	snapshotsDir   string
 	repository     AdvancerRepository
 	machineManager manager.MachineProvider
 	inspector      *inspect.Inspector
@@ -91,6 +100,8 @@ func Create(ctx context.Context, c *CreateInfo) (*Service, error) {
 		)
 	}
 
+	s.snapshotsDir = c.Config.SnapshotsDir
+
 	return s, nil
 }
 
@@ -143,6 +154,11 @@ func (s *Service) Step(ctx context.Context) error {
 	// Process inputs for each application
 	for _, app := range apps {
 		appAddress := app.IApplicationAddress.String()
+
+		err := s.handleEpochSnapshotAfterInputProcessed(ctx, app)
+		if err != nil {
+			return err
+		}
 
 		// Get unprocessed inputs for this application
 		s.Logger.Debug("Querying for unprocessed inputs", "application", app.Name)
@@ -230,7 +246,177 @@ func (s *Service) processInputs(ctx context.Context, app *Application, inputs []
 				"error", err)
 			return err
 		}
+
+		// Create a snapshot if needed
+		if result.Status == InputCompletionStatus_Accepted {
+			err = s.handleSnapshot(ctx, app, machine, input)
+			if err != nil {
+				s.Logger.Error("Failed to create snapshot",
+					"application", app.Name,
+					"index", input.Index,
+					"error", err)
+				// Continue processing even if snapshot creation fails
+			}
+		}
 	}
 
 	return nil
+}
+
+// handleEpochSnapshotAfterInputProcessed handles the snapshot creation after when an epoch is closed after an input was processed
+func (s *Service) handleEpochSnapshotAfterInputProcessed(ctx context.Context, app *Application) error {
+	// Check if the application has a epoch snapshot policy
+	if app.ExecutionParameters.SnapshotPolicy != SnapshotPolicy_EveryEpoch {
+		return nil
+	}
+
+	// Get the machine instance for this application
+	machine, exists := s.machineManager.GetMachine(app.ID)
+	if !exists {
+		return fmt.Errorf("%w: %d", ErrNoApp, app.ID)
+	}
+
+	// Check if this is the last processed input
+	lastProcessedInput, err := s.repository.GetLastProcessedInput(ctx, app.IApplicationAddress.String())
+	if err != nil {
+		return fmt.Errorf("failed to get last input: %w", err)
+	}
+
+	if lastProcessedInput == nil {
+		return nil
+	}
+
+	// Handle the snapshot
+	return s.handleSnapshot(ctx, app, machine, lastProcessedInput)
+}
+
+// handleSnapshot creates a snapshot based on the application's snapshot policy
+func (s *Service) handleSnapshot(ctx context.Context, app *Application, machine manager.MachineInstance, input *Input) error {
+	policy := app.ExecutionParameters.SnapshotPolicy
+
+	// Skip if snapshot policy is NONE
+	if policy == SnapshotPolicy_None {
+		return nil
+	}
+
+	// For EVERY_INPUT policy, create a snapshot for every input
+	if policy == SnapshotPolicy_EveryInput {
+		return s.createSnapshot(ctx, app, machine, input)
+	}
+
+	// For EVERY_EPOCH policy, check if this is the last input of the epoch
+	if policy == SnapshotPolicy_EveryEpoch {
+		// Get the epoch for this input
+		epoch, err := s.repository.GetEpoch(ctx, app.IApplicationAddress.String(), input.EpochIndex)
+		if err != nil {
+			return fmt.Errorf("failed to get epoch: %w", err)
+		}
+
+		// Skip if the epoch is still open
+		if epoch.Status == EpochStatus_Open {
+			return nil
+		}
+
+		// Check if this is the last input of the epoch
+		lastInput, err := s.repository.GetLastInput(ctx, app.IApplicationAddress.String(), input.EpochIndex)
+		if err != nil {
+			return fmt.Errorf("failed to get last input: %w", err)
+		}
+
+		// If this is the last input and the epoch is closed, create a snapshot
+		if lastInput != nil && lastInput.Index == input.Index {
+			return s.createSnapshot(ctx, app, machine, input)
+		}
+	}
+
+	return nil
+}
+
+// createSnapshot creates a snapshot and updates the input record with the snapshot URI
+func (s *Service) createSnapshot(ctx context.Context, app *Application, machine manager.MachineInstance, input *Input) error {
+	if input.SnapshotURI != nil {
+		s.Logger.Debug("Skipping snapshot, input already has a snapshot",
+			"application", app.Name,
+			"epoch", input.EpochIndex,
+			"input", input.Index,
+			"path", *input.SnapshotURI)
+		return nil
+	}
+
+	// Generate a snapshot path with a simpler structure
+	// Use app name and input index only, avoiding deep directory nesting
+	snapshotName := fmt.Sprintf("%s_epoch%d_input%d", app.Name, input.EpochIndex, input.Index)
+	snapshotPath := path.Join(s.snapshotsDir, snapshotName)
+
+	s.Logger.Info("Creating snapshot",
+		"application", app.Name,
+		"epoch", input.EpochIndex,
+		"input", input.Index,
+		"path", snapshotPath)
+
+	// Ensure the parent directory exists
+	if _, err := os.Stat(s.snapshotsDir); os.IsNotExist(err) {
+		if err := os.MkdirAll(s.snapshotsDir, 0755); err != nil { // nolint: mnd
+			return fmt.Errorf("failed to create snapshots directory: %w", err)
+		}
+	}
+
+	// Remove previous snapshot if it exists
+	previousSnapshot, err := s.repository.GetLastSnapshot(ctx, app.IApplicationAddress.String())
+	if err != nil {
+		s.Logger.Error("Failed to get previous snapshot",
+			"application", app.Name,
+			"error", err)
+		// Continue even if we can't get the previous snapshot
+	}
+
+	// Create the snapshot
+	err = machine.CreateSnapshot(ctx, input.Index+1, snapshotPath)
+	if err != nil {
+		return err
+	}
+
+	// Update the input record with the snapshot URI
+	input.SnapshotURI = &snapshotPath
+
+	// Update the input's snapshot URI in the database
+	err = s.repository.UpdateInputSnapshotURI(ctx, input.EpochApplicationID, input.Index, snapshotPath)
+	if err != nil {
+		return fmt.Errorf("failed to update input snapshot URI: %w", err)
+	}
+
+	// Remove previous snapshot if it exists
+	if previousSnapshot != nil && previousSnapshot.Index != input.Index && previousSnapshot.SnapshotURI != nil {
+		// Only remove if it's a different snapshot than the one we just created
+		if err := s.removeSnapshot(*previousSnapshot.SnapshotURI, app.Name); err != nil {
+			s.Logger.Error("Failed to remove previous snapshot",
+				"application", app.Name,
+				"snapshot", *previousSnapshot.SnapshotURI,
+				"error", err)
+			// Continue even if we can't remove the previous snapshot
+		}
+	}
+
+	return nil
+}
+
+// removeSnapshot safely removes a previous snapshot
+func (s *Service) removeSnapshot(snapshotPath string, appName string) error {
+	// Safety check: ensure the path contains the application name and is in the snapshots directory
+	if !strings.HasPrefix(snapshotPath, s.snapshotsDir) || !strings.Contains(snapshotPath, appName) {
+		return fmt.Errorf("invalid snapshot path: %s", snapshotPath)
+	}
+
+	s.Logger.Debug("Removing previous snapshot", "application", appName, "path", snapshotPath)
+
+	// Check if the path exists before attempting to remove it
+	if _, err := os.Stat(snapshotPath); os.IsNotExist(err) {
+		s.Logger.Warn("Snapshot path does not exist, nothing to remove",
+			"application", appName,
+			"path", snapshotPath)
+		return nil
+	}
+
+	// Use os.RemoveAll to remove the snapshot directory or file
+	return os.RemoveAll(snapshotPath)
 }

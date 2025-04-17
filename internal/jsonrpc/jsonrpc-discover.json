@@ -911,8 +911,8 @@
 				"type": "string",
 				"enum": [
 					"NONE",
-					"EACH_INPUT",
-					"EACH_EPOCH"
+					"EVERY_INPUT",
+					"EVERY_EPOCH"
 				]
 			},
 			"ExecutionParameters": {

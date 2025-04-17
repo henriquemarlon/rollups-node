@@ -17,3 +17,4 @@ machine-snapshot/**
 /rollups-contracts
 /applications
 /test/downloads
+/snapshots

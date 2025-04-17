@@ -335,6 +335,69 @@ func (r *PostgresRepository) UpdateEventLastCheckBlock(
 	return err
 }
 
+// GetLastSnapshot retrieves the most recent input with a snapshot for the given application
+func (r *PostgresRepository) GetLastSnapshot(ctx context.Context, nameOrAddress string) (*model.Input, error) {
+	whereClause, err := getWhereClauseFromNameOrAddress(nameOrAddress)
+	if err != nil {
+		return nil, err
+	}
+
+	sel := table.Input.
+		SELECT(
+			table.Input.EpochApplicationID,
+			table.Input.EpochIndex,
+			table.Input.Index,
+			table.Input.BlockNumber,
+			table.Input.RawData,
+			table.Input.Status,
+			table.Input.MachineHash,
+			table.Input.OutputsHash,
+			table.Input.TransactionReference,
+			table.Input.SnapshotURI,
+			table.Input.CreatedAt,
+			table.Input.UpdatedAt,
+		).
+		FROM(
+			table.Input.
+				INNER_JOIN(table.Application,
+					table.Input.EpochApplicationID.EQ(table.Application.ID),
+				),
+		).
+		WHERE(
+			whereClause.
+				AND(table.Input.Status.EQ(postgres.NewEnumValue(model.InputCompletionStatus_Accepted.String()))).
+				AND(table.Input.SnapshotURI.IS_NOT_NULL()),
+		).
+		ORDER_BY(table.Input.Index.DESC()).
+		LIMIT(1)
+
+	sqlStr, args := sel.Sql()
+	row := r.db.QueryRow(ctx, sqlStr, args...)
+
+	var inp model.Input
+	err = row.Scan(
+		&inp.EpochApplicationID,
+		&inp.EpochIndex,
+		&inp.Index,
+		&inp.BlockNumber,
+		&inp.RawData,
+		&inp.Status,
+		&inp.MachineHash,
+		&inp.OutputsHash,
+		&inp.TransactionReference,
+		&inp.SnapshotURI,
+		&inp.CreatedAt,
+		&inp.UpdatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &inp, nil
+}
+
 // DeleteApplication removes the row from "application" by ID.
 func (r *PostgresRepository) DeleteApplication(
 	ctx context.Context,

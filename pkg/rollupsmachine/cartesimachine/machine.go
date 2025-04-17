@@ -257,6 +257,21 @@ func (machine cartesiMachine) Address() string {
 	return machine.address
 }
 
+// Store stores the cartesi machine state to the specified path.
+func (machine *cartesiMachine) Store(ctx context.Context, path string) error {
+	if err := checkContext(ctx); err != nil {
+		return err
+	}
+
+	err := machine.server.Store(path)
+	if err != nil {
+		err = fmt.Errorf("could not store the machine state: %w", err)
+		return errCartesiMachine(err)
+	}
+
+	return nil
+}
+
 // Close closes the cartesi machine. It also shuts down the remote cartesi machine server.
 func (machine *cartesiMachine) Close(ctx context.Context) error {
 	if err := checkContext(ctx); err != nil {

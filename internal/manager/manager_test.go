@@ -60,6 +60,10 @@ func (s *MachineManagerSuite) TestUpdateMachines() {
 		repo.On("ListInputs", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 			Return([]*model.Input{}, uint64(0), nil)
 
+		// Mock GetLastSnapshot to return nil (no snapshot available)
+		repo.On("GetLastSnapshot", mock.Anything, mock.Anything).
+			Return(nil, nil)
+
 		// Create manager with a test logger
 		testLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
 		manager := NewMachineManager(context.Background(), repo, cartesimachine.MachineLogLevelInfo, testLogger, false)
@@ -86,9 +90,14 @@ func (s *MachineManagerSuite) TestUpdateMachines() {
 	s.Run("RemoveDisabledMachines", func() {
 		require := s.Require()
 
+		// Create a mock repository
+		repo := &MockMachineRepository{}
+		repo.On("GetLastSnapshot", mock.Anything, mock.Anything).
+			Return(nil, nil)
+
 		// Create a test logger
 		testLogger := slog.New(slog.NewTextHandler(io.Discard, nil))
-		manager := NewMachineManager(context.Background(), nil, cartesimachine.MachineLogLevelInfo, testLogger, false)
+		manager := NewMachineManager(context.Background(), repo, cartesimachine.MachineLogLevelInfo, testLogger, false)
 
 		// Add mock machines
 		app1 := &model.Application{ID: 1, Name: "App1"}
@@ -117,7 +126,11 @@ func (s *MachineManagerSuite) TestUpdateMachines() {
 func (s *MachineManagerSuite) TestGetMachine() {
 	require := s.Require()
 
-	manager := NewMachineManager(context.Background(), nil, cartesimachine.MachineLogLevelInfo, nil, false)
+	repo := &MockMachineRepository{}
+	repo.On("GetLastSnapshot", mock.Anything, mock.Anything).
+		Return(nil, nil)
+
+	manager := NewMachineManager(context.Background(), repo, cartesimachine.MachineLogLevelInfo, nil, false)
 	machine := &MockMachineInstance{application: &model.Application{ID: 1}}
 
 	// Add a machine
@@ -136,7 +149,11 @@ func (s *MachineManagerSuite) TestGetMachine() {
 func (s *MachineManagerSuite) TestHasMachine() {
 	require := s.Require()
 
-	manager := NewMachineManager(context.Background(), nil, cartesimachine.MachineLogLevelInfo, nil, false)
+	repo := &MockMachineRepository{}
+	repo.On("GetLastSnapshot", mock.Anything, mock.Anything).
+		Return(nil, nil)
+
+	manager := NewMachineManager(context.Background(), repo, cartesimachine.MachineLogLevelInfo, nil, false)
 	machine := &MockMachineInstance{application: &model.Application{ID: 1}}
 
 	// Add a machine
@@ -152,7 +169,11 @@ func (s *MachineManagerSuite) TestHasMachine() {
 func (s *MachineManagerSuite) TestAddMachine() {
 	require := s.Require()
 
-	manager := NewMachineManager(context.Background(), nil, cartesimachine.MachineLogLevelInfo, nil, false)
+	repo := &MockMachineRepository{}
+	repo.On("GetLastSnapshot", mock.Anything, mock.Anything).
+		Return(nil, nil)
+
+	manager := NewMachineManager(context.Background(), repo, cartesimachine.MachineLogLevelInfo, nil, false)
 	machine1 := &MockMachineInstance{application: &model.Application{ID: 1}}
 	machine2 := &MockMachineInstance{application: &model.Application{ID: 2}}
 
@@ -203,7 +224,11 @@ func (s *MachineManagerSuite) TestRemoveDisabledMachines() {
 func (s *MachineManagerSuite) TestApplications() {
 	require := s.Require()
 
-	manager := NewMachineManager(context.Background(), nil, cartesimachine.MachineLogLevelInfo, nil, false)
+	repo := &MockMachineRepository{}
+	repo.On("GetLastSnapshot", mock.Anything, mock.Anything).
+		Return(nil, nil)
+
+	manager := NewMachineManager(context.Background(), repo, cartesimachine.MachineLogLevelInfo, nil, false)
 
 	// Add machines
 	app1 := &model.Application{ID: 1, Name: "App1"}
@@ -251,4 +276,14 @@ func (m *MockMachineRepository) ListInputs(
 	p repository.Pagination) ([]*model.Input, uint64, error) {
 	args := m.Called(ctx, nameOrAddress, f, p)
 	return args.Get(0).([]*model.Input), args.Get(1).(uint64), args.Error(2)
+}
+
+func (m *MockMachineRepository) GetLastSnapshot(
+	ctx context.Context,
+	nameOrAddress string) (*model.Input, error) {
+	args := m.Called(ctx, nameOrAddress)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*model.Input), args.Error(1)
 }

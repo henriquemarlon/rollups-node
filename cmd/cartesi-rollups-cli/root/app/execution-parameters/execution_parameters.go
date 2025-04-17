@@ -40,7 +40,7 @@ cartesi-rollups-cli app execution-parameters load echo-dapp < echo-dapp-params.j
 Note: Duration values can be set using time suffixes (e.g., "11s", "1m", "1h", or "1h20m0.5s").
       When using 'dump' and 'load', durations are represented in nanoseconds.
 
-      Snapshot policy is one of: NONE, EACH_INPUT, EACH_EPOCH`
+      Snapshot policy is one of: NONE, EVERY_INPUT, EVERY_EPOCH`
 
 const maxJSONSize = 1 << 20 // 1MB limit
 const maxParamLength = 100
@@ -367,10 +367,10 @@ func setParameterValue(params *model.ExecutionParameters, parameter, value strin
 	case "snapshot_policy":
 		value = strings.ToUpper(value)
 		switch model.SnapshotPolicy(value) {
-		case model.SnapshotPolicy_None, model.SnapshotPolicy_EachInput, model.SnapshotPolicy_EachEpoch:
+		case model.SnapshotPolicy_None, model.SnapshotPolicy_EveryInput, model.SnapshotPolicy_EveryEpoch:
 			params.SnapshotPolicy = model.SnapshotPolicy(value)
 		default:
-			return fmt.Errorf("invalid snapshot policy: %s. Valid values are: NONE, EACH_INPUT, EACH_EPOCH", value)
+			return fmt.Errorf("invalid snapshot policy: %s. Valid values are: NONE, EVERY_INPUT, EVERY_EPOCH", value)
 		}
 	case "advance_inc_cycles":
 		val, err := strconv.ParseUint(value, 10, 64)
@@ -489,12 +489,12 @@ func validateParameters(params *model.ExecutionParameters) error {
 	// Validate snapshot policy
 	validPolicy := false
 	switch params.SnapshotPolicy {
-	case model.SnapshotPolicy_None, model.SnapshotPolicy_EachInput, model.SnapshotPolicy_EachEpoch:
+	case model.SnapshotPolicy_None, model.SnapshotPolicy_EveryInput, model.SnapshotPolicy_EveryEpoch:
 		validPolicy = true
 	}
 
 	if !validPolicy {
-		return fmt.Errorf("invalid snapshot policy: %s. Valid values are: NONE, EACH_INPUT, EACH_EPOCH", params.SnapshotPolicy)
+		return fmt.Errorf("invalid snapshot policy: %s. Valid values are: NONE, EVERY_INPUT, EVERY_EPOCH", params.SnapshotPolicy)
 	}
 
 	return nil

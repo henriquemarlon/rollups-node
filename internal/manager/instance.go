@@ -23,6 +23,7 @@ import (
 var (
 	ErrMachineClosed          = errors.New("machine is closed")
 	ErrInvalidInputIndex      = errors.New("invalid input index")
+	ErrInvalidSnapshotPoint   = errors.New("invalid snapshot point")
 	ErrInvalidApplication     = errors.New("application must not be nil")
 	ErrInvalidAdvanceTimeout  = errors.New("advance timeout must not be negative")
 	ErrInvalidInspectTimeout  = errors.New("inspect timeout must not be negative")
@@ -66,7 +67,25 @@ func NewMachineInstance(
 	logger *slog.Logger,
 	checkHash bool,
 ) (MachineInstance, error) {
-	return NewMachineInstanceWithFactory(ctx, verbosity, app, logger, checkHash, defaultFactory)
+	return NewMachineInstanceWithFactory(ctx, verbosity, app, 0, logger, checkHash, defaultFactory)
+}
+
+// NewMachineInstanceFromSnapshot creates a new machine instance from a snapshot
+func NewMachineInstanceFromSnapshot(
+	ctx context.Context,
+	verbosity MachineLogLevel,
+	app *Application,
+	logger *slog.Logger,
+	checkHash bool,
+	snapshotPath string,
+	machineHash *common.Hash,
+	inputIndex uint64,
+) (MachineInstance, error) {
+	factory := &SnapshotMachineRuntimeFactory{
+		SnapshotPath: snapshotPath,
+		MachineHash:  machineHash,
+	}
+	return NewMachineInstanceWithFactory(ctx, verbosity, app, inputIndex+1, logger, checkHash, factory)
 }
 
 // NewMachineInstanceWithFactory creates a new machine instance with a custom factory
@@ -74,6 +93,7 @@ func NewMachineInstanceWithFactory(
 	ctx context.Context,
 	verbosity MachineLogLevel,
 	app *Application,
+	processedInputs uint64,
 	logger *slog.Logger,
 	checkHash bool,
 	factory MachineRuntimeFactory,
@@ -110,7 +130,7 @@ func NewMachineInstanceWithFactory(
 	instance := &MachineInstanceImpl{
 		application:           app,
 		runtime:               runtime,
-		processedInputs:       0,
+		processedInputs:       processedInputs,
 		advanceTimeout:        app.ExecutionParameters.AdvanceMaxDeadline,
 		inspectTimeout:        app.ExecutionParameters.InspectMaxDeadline,
 		maxConcurrentInspects: app.ExecutionParameters.MaxConcurrentInspects,
@@ -130,7 +150,7 @@ func (m *MachineInstanceImpl) Application() *Application {
 // Synchronize brings the machine up to date with processed inputs
 func (m *MachineInstanceImpl) Synchronize(ctx context.Context, repo MachineRepository) error {
 	appAddress := m.application.IApplicationAddress.String()
-	m.logger.Info("Synchronizing machine with processed inputs",
+	m.logger.Info("Synchronizing machine processed inputs",
 		"address", appAddress,
 		"processed_inputs", m.application.ProcessedInputs)
 
@@ -146,6 +166,11 @@ func (m *MachineInstanceImpl) Synchronize(ctx context.Context, repo MachineRepos
 			m.application.ProcessedInputs, len(inputs))
 		m.logger.Error(errorMsg, "address", appAddress)
 		return fmt.Errorf("%w: %s", ErrMachineSynchronization, errorMsg)
+	}
+
+	if len(inputs) == 0 {
+		m.logger.Info("No previous processed inputs to synchronize", "address", appAddress)
+		return nil
 	}
 
 	// Process each input to bring the machine to the current state
@@ -177,7 +202,7 @@ func (m *MachineInstanceImpl) forkForAdvance(ctx context.Context, index uint64) 
 
 	// Verify input index
 	if m.processedInputs != index {
-		return nil, ErrInvalidInputIndex
+		return nil, fmt.Errorf("%w: processed inputs is %d and index is %d", ErrInvalidInputIndex, m.processedInputs, index)
 	}
 
 	// Fork the machine
@@ -328,6 +353,42 @@ func (m *MachineInstanceImpl) Inspect(ctx context.Context, query []byte) (*Inspe
 	return result, nil
 }
 
+// CreateSnapshot creates a snapshot of the machine's current state
+func (m *MachineInstanceImpl) CreateSnapshot(ctx context.Context, processedInputs uint64, path string) error {
+	// Acquire the advance mutex to ensure no advance operations are in progress
+	m.advanceMutex.Lock()
+	defer m.advanceMutex.Unlock()
+
+	// Acquire a read lock on the machine
+	m.mutex.LLock()
+	defer m.mutex.Unlock()
+
+	if m.runtime == nil {
+		return ErrMachineClosed
+	}
+
+	// Verify processed inputs
+	if m.processedInputs != processedInputs {
+		return fmt.Errorf("%w: machine processed inputs is %d and expected is %d", ErrInvalidSnapshotPoint, m.processedInputs, processedInputs)
+	}
+
+	m.logger.Debug("Creating machine snapshot", "path", path, "processed_inputs", m.processedInputs)
+
+	// Create a context with a timeout for the store operation
+	storeCtx, cancel := context.WithTimeout(ctx, m.application.ExecutionParameters.StoreDeadline)
+	defer cancel()
+
+	// Store the machine state to the specified path
+	err := m.runtime.Store(storeCtx, path)
+	if err != nil {
+		m.logger.Error("Failed to create snapshot", "path", path, "error", err)
+		return err
+	}
+
+	m.logger.Debug("Snapshot created successfully", "path", path)
+	return nil
+}
+
 // Close shuts down the machine instance
 func (m *MachineInstanceImpl) Close() error {
 	// Acquire all locks to ensure no operations are in progress
@@ -364,26 +425,26 @@ type MachineRuntimeFactory interface {
 	) (rollupsmachine.RollupsMachine, error)
 }
 
-// DefaultMachineRuntimeFactory is the standard implementation of MachineRuntimeFactory
-type DefaultMachineRuntimeFactory struct{}
-
-// CreateMachineRuntime creates a new machine runtime for an application
-func (f *DefaultMachineRuntimeFactory) CreateMachineRuntime(
+// createMachineRuntimeCommon contains the shared logic for creating machine runtimes
+func createMachineRuntimeCommon(
 	ctx context.Context,
 	verbosity MachineLogLevel,
 	app *Application,
 	logger *slog.Logger,
 	checkHash bool,
+	machinePath string,
+	sourceType string,
+	expectedHash common.Hash,
 ) (rollupsmachine.RollupsMachine, error) {
 	if logger == nil {
 		return nil, ErrInvalidLogger
 	}
 
 	appAddress := app.IApplicationAddress.String()
-	logger.Info("Creating machine runtime",
+	logger.Info(fmt.Sprintf("Creating machine runtime from %s", sourceType),
 		"application", app.Name,
 		"address", appAddress,
-		"template-path", app.TemplateURI)
+		"path", machinePath)
 
 	// Start the machine server
 	// TODO(mpolitzer): this needs a refactoring to:
@@ -397,24 +458,24 @@ func (f *DefaultMachineRuntimeFactory) CreateMachineRuntime(
 	_ = server
 	_ = pid
 
-	// Load the machine template
-	logger.Info("Loading machine on server",
+	// Load the machine
+	logger.Info(fmt.Sprintf("Loading machine from %s", sourceType),
 		"application", app.Name,
 		"address", appAddress,
 		"remote-machine", address,
-		"template-path", app.TemplateURI)
+		"path", machinePath)
 
-	// Create the machine from the template
-	machine, err := cartesimachine.Load(ctx, app.TemplateURI, address, nil, &app.ExecutionParameters)
+	// Create the machine
+	machine, err := cartesimachine.Load(ctx, machinePath, address, nil, &app.ExecutionParameters)
 	if err != nil {
 		return nil, errors.Join(err, cartesimachine.StopServer(address, logger, &app.ExecutionParameters))
 	}
 
-	logger.Debug("Machine loaded on server",
+	logger.Debug(fmt.Sprintf("Machine loaded from %s", sourceType),
 		"application", app.Name,
 		"address", appAddress,
 		"remote-machine", address,
-		"template-path", app.TemplateURI)
+		"path", machinePath)
 
 	// Verify the machine hash if required
 	if checkHash {
@@ -427,15 +488,15 @@ func (f *DefaultMachineRuntimeFactory) CreateMachineRuntime(
 			return nil, errors.Join(err, cartesimachine.StopServer(address, logger, &app.ExecutionParameters))
 		}
 
-		if machineHash != app.TemplateHash {
+		if machineHash != expectedHash {
 			logger.Error("Machine hash mismatch",
 				"application", app.Name,
 				"address", appAddress,
 				"machine-hash", common.Hash(machineHash).Hex(),
-				"expected-hash", app.TemplateHash.Hex())
+				"expected-hash", expectedHash.Hex())
 
 			err = fmt.Errorf("machine hash mismatch: expected %s, got %s",
-				app.TemplateHash, machineHash)
+				expectedHash, machineHash)
 			return nil, errors.Join(err, machine.Close(ctx))
 		}
 	}
@@ -452,6 +513,61 @@ func (f *DefaultMachineRuntimeFactory) CreateMachineRuntime(
 	}
 
 	return runtime, nil
+}
+
+// DefaultMachineRuntimeFactory is the standard implementation of MachineRuntimeFactory
+type DefaultMachineRuntimeFactory struct{}
+
+// CreateMachineRuntime creates a new machine runtime for an application
+func (f *DefaultMachineRuntimeFactory) CreateMachineRuntime(
+	ctx context.Context,
+	verbosity MachineLogLevel,
+	app *Application,
+	logger *slog.Logger,
+	checkHash bool,
+) (rollupsmachine.RollupsMachine, error) {
+	return createMachineRuntimeCommon(
+		ctx,
+		verbosity,
+		app,
+		logger,
+		checkHash,
+		app.TemplateURI,
+		"template",
+		app.TemplateHash,
+	)
+}
+
+// SnapshotMachineRuntimeFactory creates machine runtimes from snapshots
+type SnapshotMachineRuntimeFactory struct {
+	SnapshotPath string
+	MachineHash  *common.Hash // The hash to check against (from the input's machine_hash)
+}
+
+// CreateMachineRuntime creates a new machine runtime from a snapshot
+func (f *SnapshotMachineRuntimeFactory) CreateMachineRuntime(
+	ctx context.Context,
+	verbosity MachineLogLevel,
+	app *Application,
+	logger *slog.Logger,
+	checkHash bool,
+) (rollupsmachine.RollupsMachine, error) {
+	// Determine which hash to check against
+	expectedHash := app.TemplateHash
+	if f.MachineHash != nil {
+		expectedHash = *f.MachineHash
+	}
+
+	return createMachineRuntimeCommon(
+		ctx,
+		verbosity,
+		app,
+		logger,
+		checkHash,
+		f.SnapshotPath,
+		"snapshot",
+		expectedHash,
+	)
 }
 
 // Default factory instance

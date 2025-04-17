@@ -38,6 +38,7 @@ func (r *PostgresRepository) GetInput(
 			table.Input.MachineHash,
 			table.Input.OutputsHash,
 			table.Input.TransactionReference,
+			table.Input.SnapshotURI,
 			table.Input.CreatedAt,
 			table.Input.UpdatedAt,
 		).
@@ -66,6 +67,7 @@ func (r *PostgresRepository) GetInput(
 		&inp.MachineHash,
 		&inp.OutputsHash,
 		&inp.TransactionReference,
+		&inp.SnapshotURI,
 		&inp.CreatedAt,
 		&inp.UpdatedAt,
 	)
@@ -104,6 +106,7 @@ func (r *PostgresRepository) GetInputByTxReference(
 			table.Input.MachineHash,
 			table.Input.OutputsHash,
 			table.Input.TransactionReference,
+			table.Input.SnapshotURI,
 			table.Input.CreatedAt,
 			table.Input.UpdatedAt,
 		).
@@ -132,6 +135,7 @@ func (r *PostgresRepository) GetInputByTxReference(
 		&inp.MachineHash,
 		&inp.OutputsHash,
 		&inp.TransactionReference,
+		&inp.SnapshotURI,
 		&inp.CreatedAt,
 		&inp.UpdatedAt,
 	)
@@ -166,6 +170,7 @@ func (r *PostgresRepository) GetLastInput(
 			table.Input.MachineHash,
 			table.Input.OutputsHash,
 			table.Input.TransactionReference,
+			table.Input.SnapshotURI,
 			table.Input.CreatedAt,
 			table.Input.UpdatedAt,
 		).
@@ -196,6 +201,72 @@ func (r *PostgresRepository) GetLastInput(
 		&inp.MachineHash,
 		&inp.OutputsHash,
 		&inp.TransactionReference,
+		&inp.SnapshotURI,
+		&inp.CreatedAt,
+		&inp.UpdatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &inp, nil
+}
+
+func (r *PostgresRepository) GetLastProcessedInput(
+	ctx context.Context,
+	nameOrAddress string,
+) (*model.Input, error) {
+
+	whereClause, err := getWhereClauseFromNameOrAddress(nameOrAddress)
+	if err != nil {
+		return nil, err
+	}
+
+	sel := table.Input.
+		SELECT(
+			table.Input.EpochApplicationID,
+			table.Input.EpochIndex,
+			table.Input.Index,
+			table.Input.BlockNumber,
+			table.Input.RawData,
+			table.Input.Status,
+			table.Input.MachineHash,
+			table.Input.OutputsHash,
+			table.Input.TransactionReference,
+			table.Input.SnapshotURI,
+			table.Input.CreatedAt,
+			table.Input.UpdatedAt,
+		).
+		FROM(
+			table.Input.
+				INNER_JOIN(table.Application,
+					table.Input.EpochApplicationID.EQ(table.Application.ID),
+				),
+		).
+		WHERE(
+			whereClause.
+				AND(table.Input.Status.NOT_EQ(postgres.NewEnumValue(model.InputCompletionStatus_None.String()))),
+		).
+		ORDER_BY(table.Input.Index.DESC()).
+		LIMIT(1)
+
+	sqlStr, args := sel.Sql()
+	row := r.db.QueryRow(ctx, sqlStr, args...)
+
+	var inp model.Input
+	err = row.Scan(
+		&inp.EpochApplicationID,
+		&inp.EpochIndex,
+		&inp.Index,
+		&inp.BlockNumber,
+		&inp.RawData,
+		&inp.Status,
+		&inp.MachineHash,
+		&inp.OutputsHash,
+		&inp.TransactionReference,
+		&inp.SnapshotURI,
 		&inp.CreatedAt,
 		&inp.UpdatedAt,
 	)
@@ -231,6 +302,7 @@ func (r *PostgresRepository) ListInputs(
 			table.Input.MachineHash,
 			table.Input.OutputsHash,
 			table.Input.TransactionReference,
+			table.Input.SnapshotURI,
 			table.Input.CreatedAt,
 			table.Input.UpdatedAt,
 			postgres.COUNT(postgres.STAR).OVER().AS("total_count"),
@@ -291,6 +363,7 @@ func (r *PostgresRepository) ListInputs(
 			&in.MachineHash,
 			&in.OutputsHash,
 			&in.TransactionReference,
+			&in.SnapshotURI,
 			&in.CreatedAt,
 			&in.UpdatedAt,
 			&total,

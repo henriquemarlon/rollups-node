@@ -70,6 +70,8 @@ type ApplicationRepository interface {
 	UpdateExecutionParameters(ctx context.Context, ep *ExecutionParameters) error
 
 	UpdateEventLastCheckBlock(ctx context.Context, appIDs []int64, event MonitoredEvent, blockNumber uint64) error
+
+	GetLastSnapshot(ctx context.Context, nameOrAddress string) (*Input, error)
 }
 
 type EpochRepository interface {
@@ -91,6 +93,7 @@ type InputRepository interface {
 	GetInput(ctx context.Context, nameOrAddress string, inputIndex uint64) (*Input, error)
 	GetInputByTxReference(ctx context.Context, nameOrAddress string, ref *common.Hash) (*Input, error)
 	GetLastInput(ctx context.Context, appAddress string, epochIndex uint64) (*Input, error)
+	GetLastProcessedInput(ctx context.Context, appAddress string) (*Input, error)
 	ListInputs(ctx context.Context, nameOrAddress string, f InputFilter, p Pagination) ([]*Input, uint64, error)
 }
 
@@ -109,6 +112,7 @@ type ReportRepository interface {
 type BulkOperationsRepository interface {
 	StoreAdvanceResult(ctx context.Context, appId int64, ar *AdvanceResult) error
 	StoreClaimAndProofs(ctx context.Context, epoch *Epoch, outputs []*Output) error
+	UpdateInputSnapshotURI(ctx context.Context, appId int64, inputIndex uint64, snapshotURI string) error
 }
 
 type NodeConfigRepository interface {

@@ -58,7 +58,7 @@ const (
 	CLAIMER_POLLING_INTERVAL                          = "CARTESI_CLAIMER_POLLING_INTERVAL"
 	MAX_STARTUP_TIME                                  = "CARTESI_MAX_STARTUP_TIME"
 	VALIDATOR_POLLING_INTERVAL                        = "CARTESI_VALIDATOR_POLLING_INTERVAL"
-	SNAPSHOT_DIR                                      = "CARTESI_SNAPSHOT_DIR"
+	SNAPSHOTS_DIR                                     = "CARTESI_SNAPSHOTS_DIR"
 )
 
 func SetDefaults() {
@@ -140,7 +140,7 @@ func SetDefaults() {
 
 	viper.SetDefault(VALIDATOR_POLLING_INTERVAL, "3")
 
-	viper.SetDefault(SNAPSHOT_DIR, "/var/lib/cartesi-rollups-node/snapshots")
+	viper.SetDefault(SNAPSHOTS_DIR, "/var/lib/cartesi-rollups-node/snapshots")
 
 }
 
@@ -187,7 +187,7 @@ type AdvancerConfig struct {
 	MaxStartupTime Duration `mapstructure:"CARTESI_MAX_STARTUP_TIME"`
 
 	// Path to the directory where the snapshots will be written.
-	SnapshotDir string `mapstructure:"CARTESI_SNAPSHOT_DIR"`
+	SnapshotsDir string `mapstructure:"CARTESI_SNAPSHOTS_DIR"`
 }
 
 // LoadAdvancerConfig reads configuration from environment variables, a config file, and defaults.
@@ -276,11 +276,11 @@ func LoadAdvancerConfig() (*AdvancerConfig, error) {
 		return nil, fmt.Errorf("CARTESI_MAX_STARTUP_TIME is required for the advancer service: %w", err)
 	}
 
-	cfg.SnapshotDir, err = GetSnapshotDir()
+	cfg.SnapshotsDir, err = GetSnapshotsDir()
 	if err != nil && err != ErrNotDefined {
-		return nil, fmt.Errorf("failed to get CARTESI_SNAPSHOT_DIR: %w", err)
+		return nil, fmt.Errorf("failed to get CARTESI_SNAPSHOTS_DIR: %w", err)
 	} else if err == ErrNotDefined {
-		return nil, fmt.Errorf("CARTESI_SNAPSHOT_DIR is required for the advancer service: %w", err)
+		return nil, fmt.Errorf("CARTESI_SNAPSHOTS_DIR is required for the advancer service: %w", err)
 	}
 
 	return &cfg, nil
@@ -832,7 +832,7 @@ type NodeConfig struct {
 	ValidatorPollingInterval Duration `mapstructure:"CARTESI_VALIDATOR_POLLING_INTERVAL"`
 
 	// Path to the directory where the snapshots will be written.
-	SnapshotDir string `mapstructure:"CARTESI_SNAPSHOT_DIR"`
+	SnapshotsDir string `mapstructure:"CARTESI_SNAPSHOTS_DIR"`
 }
 
 // LoadNodeConfig reads configuration from environment variables, a config file, and defaults.
@@ -1033,11 +1033,11 @@ func LoadNodeConfig() (*NodeConfig, error) {
 		return nil, fmt.Errorf("CARTESI_VALIDATOR_POLLING_INTERVAL is required for the node service: %w", err)
 	}
 
-	cfg.SnapshotDir, err = GetSnapshotDir()
+	cfg.SnapshotsDir, err = GetSnapshotsDir()
 	if err != nil && err != ErrNotDefined {
-		return nil, fmt.Errorf("failed to get CARTESI_SNAPSHOT_DIR: %w", err)
+		return nil, fmt.Errorf("failed to get CARTESI_SNAPSHOTS_DIR: %w", err)
 	} else if err == ErrNotDefined {
-		return nil, fmt.Errorf("CARTESI_SNAPSHOT_DIR is required for the node service: %w", err)
+		return nil, fmt.Errorf("CARTESI_SNAPSHOTS_DIR is required for the node service: %w", err)
 	}
 
 	return &cfg, nil
@@ -1146,7 +1146,7 @@ func (c *NodeConfig) ToAdvancerConfig() *AdvancerConfig {
 		RemoteMachineLogLevel:          c.RemoteMachineLogLevel,
 		AdvancerPollingInterval:        c.AdvancerPollingInterval,
 		MaxStartupTime:                 c.MaxStartupTime,
-		SnapshotDir:                    c.SnapshotDir,
+		SnapshotsDir:                   c.SnapshotsDir,
 	}
 }
 
@@ -1710,15 +1710,15 @@ func GetValidatorPollingInterval() (Duration, error) {
 	return notDefinedDuration(), fmt.Errorf("%s: %w", VALIDATOR_POLLING_INTERVAL, ErrNotDefined)
 }
 
-// GetSnapshotDir returns the value for the environment variable CARTESI_SNAPSHOT_DIR.
-func GetSnapshotDir() (string, error) {
-	s := viper.GetString(SNAPSHOT_DIR)
+// GetSnapshotsDir returns the value for the environment variable CARTESI_SNAPSHOTS_DIR.
+func GetSnapshotsDir() (string, error) {
+	s := viper.GetString(SNAPSHOTS_DIR)
 	if s != "" {
 		v, err := toString(s)
 		if err != nil {
-			return v, fmt.Errorf("failed to parse %s: %w", SNAPSHOT_DIR, err)
+			return v, fmt.Errorf("failed to parse %s: %w", SNAPSHOTS_DIR, err)
 		}
 		return v, nil
 	}
-	return notDefinedstring(), fmt.Errorf("%s: %w", SNAPSHOT_DIR, ErrNotDefined)
+	return notDefinedstring(), fmt.Errorf("%s: %w", SNAPSHOTS_DIR, ErrNotDefined)
 }

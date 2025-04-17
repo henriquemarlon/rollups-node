@@ -32,7 +32,7 @@ CREATE TYPE "EpochStatus" AS ENUM (
     'CLAIM_ACCEPTED',
     'CLAIM_REJECTED');
 
-CREATE TYPE "SnapshotPolicy" AS ENUM ('NONE', 'EACH_INPUT', 'EACH_EPOCH');
+CREATE TYPE "SnapshotPolicy" AS ENUM ('NONE', 'EVERY_INPUT', 'EVERY_EPOCH');
 
 CREATE FUNCTION "update_updated_at_column"()
 RETURNS TRIGGER AS $$

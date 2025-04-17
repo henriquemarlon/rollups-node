@@ -29,9 +29,9 @@ type (
 	Hash    = [hashLength]byte
 )
 
-// The RollupsMachine interface covers the four core rollups-oriented functionalities of a cartesi
-// machine: forking, getting the merkle tree's root hash, sending advance-state requests, and
-// sending inspect-state requests.
+// The RollupsMachine interface covers the core rollups-oriented functionalities of a cartesi
+// machine: forking, getting the merkle tree's root hash, sending advance-state requests,
+// sending inspect-state requests, and storing machine state.
 type RollupsMachine interface {
 	// Fork forks the machine.
 	Fork(context.Context) (RollupsMachine, error)
@@ -52,6 +52,9 @@ type RollupsMachine interface {
 	// It returns a boolean indicating whether or not the request was accepted
 	// It also returns the corresponding reports.
 	Inspect(_ context.Context, query []byte) (bool, []Report, error)
+
+	// Store saves the machine state to the specified path.
+	Store(context.Context, string) error
 
 	// Close closes the inner cartesi machine.
 	// It returns nil if the machine has already been closed.
@@ -168,6 +171,13 @@ func (machine *rollupsMachine) Advance(
 func (machine *rollupsMachine) Inspect(ctx context.Context, query []byte) (bool, []Report, error) {
 	accepted, _, reports, err := machine.process(ctx, query, cartesimachine.InspectStateRequest)
 	return accepted, reports, err
+}
+
+func (machine *rollupsMachine) Store(ctx context.Context, path string) error {
+	if machine.inner == nil {
+		return ErrUnreachable
+	}
+	return machine.inner.Store(ctx, path)
 }
 
 func (machine *rollupsMachine) Close(ctx context.Context) error {

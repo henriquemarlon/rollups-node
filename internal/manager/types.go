@@ -19,6 +19,7 @@ type MachineInstance interface {
 	Advance(ctx context.Context, input []byte, index uint64) (*AdvanceResult, error)
 	Inspect(ctx context.Context, query []byte) (*InspectResult, error)
 	Synchronize(ctx context.Context, repo MachineRepository) error
+	CreateSnapshot(ctx context.Context, processedInputs uint64, path string) error
 	Close() error
 }
 

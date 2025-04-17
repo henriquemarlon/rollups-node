@@ -49,7 +49,7 @@ func NewPostgresRepository(ctx context.Context, conn string, maxRetries int, del
 	}
 
 	// Wait for database to be available
-	for i := 0; i < maxRetries; i++ {
+	for i := range maxRetries {
 		if err := pool.Ping(ctx); err == nil {
 			break
 		}
@@ -61,7 +61,7 @@ func NewPostgresRepository(ctx context.Context, conn string, maxRetries int, del
 	}
 
 	// Wait for schema validation (migrations) to complete. Workaround to facilitate container startup order.
-	for i := 0; i < maxRetries; i++ {
+	for i := range maxRetries {
 		err = validateSchema(pool)
 		if err == nil {
 			return &PostgresRepository{db: pool}, nil

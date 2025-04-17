@@ -219,7 +219,7 @@ func (s *AdvanceSuite) SetupSuite() {
 		err     error
 	)
 
-	script = "ioctl-echo-loop --vouchers=1 --notices=3 --reports=5 --verbose=1"
+	script = "ioctl-echo-loop --vouchers=1 --delegate-call-vouchers=1 --notices=3 --reports=5 --verbose=1"
 	s.snapshotEcho, err = snapshot.FromScript(script, cycles)
 	require.Nil(err)
 	require.Equal(emulator.BreakReasonYieldedManually, s.snapshotEcho.BreakReason)
@@ -268,13 +268,14 @@ func (s *AdvanceSuite) TestEchoLoop() {
 	accepted, outputs, reports, outputsHash, err := machine.Advance(ctx, encodedInput)
 	require.Nil(err)
 	require.True(accepted)
-	require.Len(outputs, 4)
+	require.Len(outputs, 5)
 	require.Len(reports, 5)
 	require.NotEmpty(outputsHash)
 
 	// Checks the responses.
 	require.Equal(input.Data, expectVoucher(s.T(), outputs[0]).Data)
-	for i := 1; i < 4; i++ {
+	require.Equal(input.Data, expectDelegateCallVoucher(s.T(), outputs[1]).Data)
+	for i := 2; i < 5; i++ {
 		require.Equal(input.Data, expectNotice(s.T(), outputs[i]).Data)
 	}
 	for _, report := range reports {
@@ -442,18 +443,30 @@ func (s *InspectSuite) TestEchoLoop() {
 
 // expectVoucher decodes the output and asserts that it is a voucher.
 func expectVoucher(t *testing.T, output Output) *Voucher {
-	voucher, notice, err := DecodeOutput(output)
+	voucher, delegateCallVoucher, notice, err := DecodeOutput(output)
 	require.Nil(t, err)
 	require.NotNil(t, voucher)
+	require.Nil(t, delegateCallVoucher)
 	require.Nil(t, notice)
 	return voucher
 }
 
-// expectNotice decodes the output and asserts that it is a notice.
-func expectNotice(t *testing.T, output Output) *Notice {
-	voucher, notice, err := DecodeOutput(output)
+// expectVoucher decodes the output and asserts that it is a voucher.
+func expectDelegateCallVoucher(t *testing.T, output Output) *DelegateCallVoucher {
+	voucher, delegateCallVoucher, notice, err := DecodeOutput(output)
 	require.Nil(t, err)
 	require.Nil(t, voucher)
+	require.NotNil(t, delegateCallVoucher)
+	require.Nil(t, notice)
+	return delegateCallVoucher
+}
+
+// expectNotice decodes the output and asserts that it is a notice.
+func expectNotice(t *testing.T, output Output) *Notice {
+	voucher, delegateCallVoucher, notice, err := DecodeOutput(output)
+	require.Nil(t, err)
+	require.Nil(t, voucher)
+	require.Nil(t, delegateCallVoucher)
 	require.NotNil(t, notice)
 	return notice
 }

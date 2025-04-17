@@ -21,6 +21,13 @@
     ]
 }, {
     "type" : "function",
+    "name" : "DelegateCallVoucher",
+    "inputs" : [
+        { "type" : "address" },
+        { "type" : "bytes"   }
+    ]
+}, {
+    "type" : "function",
     "name" : "Notice",
     "inputs" : [
         { "type" : "bytes"   }

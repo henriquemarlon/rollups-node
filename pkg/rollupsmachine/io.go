@@ -52,6 +52,11 @@ type Voucher struct {
 	Data    []byte
 }
 
+type DelegateCallVoucher struct {
+	Address Address
+	Data    []byte
+}
+
 // A Notice is a type of machine output.
 type Notice struct {
 	Data []byte
@@ -71,25 +76,31 @@ func (input Input) Encode() ([]byte, error) {
 }
 
 // DecodeOutput decodes an output into either a voucher or a notice.
-func DecodeOutput(payload []byte) (*Voucher, *Notice, error) {
+func DecodeOutput(payload []byte) (*Voucher, *DelegateCallVoucher, *Notice, error) {
 	arguments, err := decodeArguments(payload)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	switch length := len(arguments); length {
 	case 1:
 		notice := &Notice{Data: arguments[0].([]byte)}
-		return nil, notice, nil
+		return nil, nil, notice, nil
+	case 2:
+		delegateCallVoucher := &DelegateCallVoucher{
+			Address: Address(arguments[0].(common.Address)),
+			Data:    arguments[1].([]byte),
+		}
+		return nil, delegateCallVoucher, nil, nil
 	case 3: //nolint:mnd
 		voucher := &Voucher{
 			Address: Address(arguments[0].(common.Address)),
 			Value:   arguments[1].(*big.Int),
 			Data:    arguments[2].([]byte),
 		}
-		return voucher, nil, nil
+		return voucher, nil, nil, nil
 	default:
-		return nil, nil, fmt.Errorf("not an output: len(arguments) == %d, should be 1 or 3", length)
+		return nil, nil, nil, fmt.Errorf("not an output: len(arguments) == %d, should be 1 or 3", length)
 	}
 }
 

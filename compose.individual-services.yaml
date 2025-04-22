@@ -36,7 +36,7 @@ services:
 
   migration:
     image: cartesi/rollups-node:devel
-    command: cartesi-rollups-cli db upgrade
+    command: cartesi-rollups-cli db init
     depends_on:
       database:
         condition: service_healthy

@@ -68,8 +68,8 @@ func (s *Service) handleRPC(w http.ResponseWriter, r *http.Request) {
 		s.handleListEpochs(w, r, req)
 	case "cartesi_getEpoch":
 		s.handleGetEpoch(w, r, req)
-	case "cartesi_getLastAcceptedEpoch":
-		s.handleGetLastAcceptedEpoch(w, r, req)
+	case "cartesi_getLastAcceptedEpochIndex":
+		s.handleGetLastAcceptedEpochIndex(w, r, req)
 	case "cartesi_listInputs":
 		s.handleListInputs(w, r, req)
 	case "cartesi_getInput":
@@ -321,7 +321,7 @@ func (s *Service) handleGetEpoch(w http.ResponseWriter, r *http.Request, req RPC
 	writeRPCResult(w, req.ID, result)
 }
 
-func (s *Service) handleGetLastAcceptedEpoch(w http.ResponseWriter, r *http.Request, req RPCRequest) {
+func (s *Service) handleGetLastAcceptedEpochIndex(w http.ResponseWriter, r *http.Request, req RPCRequest) {
 	var params GetEpochParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, "Invalid params", nil)
@@ -334,22 +334,22 @@ func (s *Service) handleGetLastAcceptedEpoch(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	epoch, err := s.repository.GetLastAcceptedEpoch(r.Context(), params.Application)
+	index, err := s.repository.GetLastAcceptedEpochIndex(r.Context(), params.Application)
+	if errors.Is(err, repository.ErrNotFound) {
+		writeRPCError(w, req.ID, JSONRPC_RESOURCE_NOT_FOUND, "Epoch not found", nil)
+		return
+	}
 	if err != nil {
 		s.Logger.Error("Unable to retrieve epoch from repository", "err", err)
 		writeRPCError(w, req.ID, JSONRPC_INTERNAL_ERROR, "Internal server error", nil)
 		return
 	}
-	if epoch == nil {
-		writeRPCError(w, req.ID, JSONRPC_RESOURCE_NOT_FOUND, "Epoch not found", nil)
-		return
-	}
 
 	// Format response according to spec
 	result := struct {
-		Data *model.Epoch `json:"data"`
+		Data string `json:"data"`
 	}{
-		Data: epoch,
+		Data: fmt.Sprintf("0x%x", index),
 	}
 
 	writeRPCResult(w, req.ID, result)
@@ -503,7 +503,7 @@ func (s *Service) handleGetProcessedInputCount(w http.ResponseWriter, r *http.Re
 	}
 
 	processedInputs, err := s.repository.GetProcessedInputs(r.Context(), params.Application)
-	if errors.Is(err, repository.ErrApplicationNotFound) {
+	if errors.Is(err, repository.ErrNotFound) {
 		writeRPCError(w, req.ID, JSONRPC_RESOURCE_NOT_FOUND, "Application not found", nil)
 		return
 	}
@@ -515,7 +515,7 @@ func (s *Service) handleGetProcessedInputCount(w http.ResponseWriter, r *http.Re
 
 	// Return processed input count as specified in the spec
 	result := struct {
-		ProcessedInputs string `json:"processed_inputs"`
+		ProcessedInputs string `json:"data"`
 	}{
 		ProcessedInputs: fmt.Sprintf("0x%x", processedInputs),
 	}

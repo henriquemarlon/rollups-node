@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	ErrApplicationNotFound = fmt.Errorf("application not found")
+	ErrNotFound = fmt.Errorf("not found")
 )
 
 type Pagination struct {
@@ -78,7 +78,7 @@ type EpochRepository interface {
 	CreateEpochsAndInputs(ctx context.Context, nameOrAddress string, epochInputMap map[*Epoch][]*Input, blockNumber uint64) error
 
 	GetEpoch(ctx context.Context, nameOrAddress string, index uint64) (*Epoch, error)
-	GetLastAcceptedEpoch(ctx context.Context, nameOrAddress string) (*Epoch, error)
+	GetLastAcceptedEpochIndex(ctx context.Context, nameOrAddress string) (uint64, error)
 	GetEpochByVirtualIndex(ctx context.Context, nameOrAddress string, index uint64) (*Epoch, error)
 
 	UpdateEpoch(ctx context.Context, nameOrAddress string, e *Epoch) error

@@ -26,6 +26,7 @@ type JsonRpcClient interface {
 	GetApplicationAddress(ctx context.Context, name string) (string, error)
 	ListEpochs(ctx context.Context, application string, status *string, limit, offset int64) ([]*model.Epoch, error)
 	GetEpoch(ctx context.Context, application string, index uint64) (*model.Epoch, error)
+	GetLastAcceptedEpochIndex(ctx context.Context, application string) (uint64, error)
 	ListInputs(ctx context.Context, application string, epochIndex *string, sender *string, decode bool, limit, offset int64) ([]interface{}, error)
 	GetInput(ctx context.Context, application string, inputIndex string, decode bool) (any, error)
 	GetProcessedInputCount(ctx context.Context, application string) (int64, error)
@@ -295,6 +296,20 @@ func (c *Client) GetEpoch(ctx context.Context, application string, index uint64)
 		return nil, err
 	}
 	return result.Epoch, nil
+}
+
+// GetLastAcceptedEpochIndex calls "cartesi_getLastAcceptedEpochIndex".
+func (c *Client) GetLastAcceptedEpochIndex(ctx context.Context, application string) (uint64, error) {
+	params := struct {
+		Application string `json:"application"`
+	}{Application: application}
+	var result struct {
+		LastAcceptedEpochIndex uint64 `json:"data"`
+	}
+	if err := c.Call(ctx, "cartesi_getLastAcceptedEpochIndex", params, &result); err != nil {
+		return 0, err
+	}
+	return result.LastAcceptedEpochIndex, nil
 }
 
 // ListInputs calls "cartesi_ListInputs".

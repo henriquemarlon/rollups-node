@@ -219,7 +219,7 @@ func (r *PostgresRepository) GetProcessedInputs(
 	var processedInputs uint64
 	err = row.Scan(&processedInputs)
 	if errors.Is(err, sql.ErrNoRows) {
-		return 0, repository.ErrApplicationNotFound
+		return 0, repository.ErrNotFound
 	}
 	return processedInputs, err
 }

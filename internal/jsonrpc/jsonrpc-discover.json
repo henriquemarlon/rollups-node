@@ -139,9 +139,9 @@
 			}
 		},
 		{
-			"name": "cartesi_getLastAcceptedEpoch",
-			"summary": "Get the last accepted epoch",
-			"description": "Fetches the latest accepted epoch by application.",
+			"name": "cartesi_getLastAcceptedEpochIndex",
+			"summary": "Get the last accepted epoch index",
+			"description": "Fetches the latest accepted epoch index by application.",
 			"params": [
 				{
 					"name": "application",
@@ -155,7 +155,7 @@
 			"result": {
 				"name": "result",
 				"schema": {
-					"$ref": "#/components/schemas/EpochGetResult"
+					"$ref": "#/components/schemas/LastAcceptedEpochIndexResult"
 				}
 			}
 		},
@@ -724,10 +724,18 @@
 					}
 				}
 			},
+			"LastAcceptedEpochIndexResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					}
+				}
+			},
 			"ProcessedInputCountResult": {
 				"type": "object",
 				"properties": {
-					"processed_inputs": {
+					"data": {
 						"$ref": "#/components/schemas/UnsignedInteger"
 					}
 				}

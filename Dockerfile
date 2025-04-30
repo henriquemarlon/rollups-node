@@ -8,7 +8,7 @@ ARG EMULATOR_VERSION=0.19.0
 # Build directories.
 ARG GO_BUILD_PATH=/build/cartesi/go
 
-FROM debian:bookworm-20250113 AS common-env
+FROM debian:bookworm-20250407 AS common-env
 
 USER root
 
@@ -120,7 +120,7 @@ RUN make build-debian-package DESTDIR=$PWD/_install
 # (This stage copies the binaries from previous stages.)
 # =============================================================================
 
-FROM debian:bookworm-20250113 AS rollups-node
+FROM debian:bookworm-20250407 AS rollups-node
 
 ARG NODE_RUNTIME_DIR=/var/lib/cartesi-rollups-node
 ARG GO_BUILD_PATH

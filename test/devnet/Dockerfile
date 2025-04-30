@@ -2,7 +2,7 @@ ARG FOUNDRY_VERSION=1.0.0
 ARG CONTRACTS_VERSION=2.0.0-rc.17
 ARG DEVNET_BUILD_PATH=/opt/cartesi/rollups-contracts
 
-FROM debian:bookworm-20250113 AS rollups-node-devnet
+FROM debian:bookworm-20250407 AS rollups-node-devnet
 ARG FOUNDRY_VERSION
 ARG CONTRACTS_VERSION
 ARG DEVNET_BUILD_PATH

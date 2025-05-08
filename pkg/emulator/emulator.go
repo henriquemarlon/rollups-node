@@ -12,11 +12,15 @@ package emulator
 import "C"
 
 import (
+	"runtime"
 	"time"
 	"unsafe"
 )
 
 func ConnectServer(address string, timeout time.Duration) (*RemoteMachine, error) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	cAddr := C.CString(address)
 	defer C.free(unsafe.Pointer(cAddr))
 
@@ -28,6 +32,9 @@ func ConnectServer(address string, timeout time.Duration) (*RemoteMachine, error
 }
 
 func SpawnServer(address string, timeout time.Duration) (*RemoteMachine, string, uint32, error) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	cAddr := C.CString(address)
 	defer C.free(unsafe.Pointer(cAddr))
 

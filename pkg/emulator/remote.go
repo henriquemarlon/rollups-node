@@ -24,13 +24,23 @@ type RemoteMachine struct {
 
 // set_timeout
 func (m *RemoteMachine) SetTimeout(milliseconds int64) error {
-	return newError(C.cm_jsonrpc_set_timeout(m.ptr, C.int64_t(milliseconds)))
+	var err error
+	m.callCAPI(func() {
+		err = newError(C.cm_jsonrpc_set_timeout(m.ptr, C.int64_t(milliseconds)))
+	})
+	return err
 }
 
 // get_timeout
 func (m *RemoteMachine) GetTimeout() (int64, error) {
 	var ms C.int64_t
-	if err := newError(C.cm_jsonrpc_get_timeout(m.ptr, &ms)); err != nil {
+	var err error
+
+	m.callCAPI(func() {
+		err = newError(C.cm_jsonrpc_get_timeout(m.ptr, &ms))
+	})
+
+	if err != nil {
 		return 0, err
 	}
 	return int64(ms), nil
@@ -38,14 +48,25 @@ func (m *RemoteMachine) GetTimeout() (int64, error) {
 
 // set_cleanup_call
 func (m *RemoteMachine) SetCleanupCall(call int32) error {
-	// call is one of {CM_JSONRPC_NOTHING, CM_JSONRPC_DESTROY, CM_JSONRPC_SHUTDOWN}
-	return newError(C.cm_jsonrpc_set_cleanup_call(m.ptr, C.cm_jsonrpc_cleanup_call(call)))
+	var err error
+
+	m.callCAPI(func() {
+		err = newError(C.cm_jsonrpc_set_cleanup_call(m.ptr, C.cm_jsonrpc_cleanup_call(call)))
+	})
+
+	return err
 }
 
 // get_cleanup_call
 func (m *RemoteMachine) GetCleanupCall() (int32, error) {
 	var call C.cm_jsonrpc_cleanup_call
-	if err := newError(C.cm_jsonrpc_get_cleanup_call(m.ptr, &call)); err != nil {
+	var err error
+
+	m.callCAPI(func() {
+		err = newError(C.cm_jsonrpc_get_cleanup_call(m.ptr, &call))
+	})
+
+	if err != nil {
 		return 0, err
 	}
 	return int32(call), nil
@@ -53,58 +74,106 @@ func (m *RemoteMachine) GetCleanupCall() (int32, error) {
 
 // get_server_address
 func (m *RemoteMachine) GetServerAddress() (string, error) {
-	var addr *C.char
-	if err := newError(C.cm_jsonrpc_get_server_address(m.ptr, &addr)); err != nil {
+	var cAddr *C.char
+	var err error
+	var addr string
+
+	m.callCAPI(func() {
+		err = newError(C.cm_jsonrpc_get_server_address(m.ptr, &cAddr))
+		addr = C.GoString(cAddr)
+	})
+
+	if err != nil {
 		return "", err
 	}
-	return C.GoString(addr), nil
+	return addr, nil
 }
 
 // get_server_version
 func (m *RemoteMachine) GetServerVersion() (string, error) {
-	var ver *C.char
-	if err := newError(C.cm_jsonrpc_get_server_version(m.ptr, &ver)); err != nil {
+	var cVer *C.char
+	var err error
+	var ver string
+
+	m.callCAPI(func() {
+		err = newError(C.cm_jsonrpc_get_server_version(m.ptr, &cVer))
+		ver = C.GoString(cVer)
+	})
+
+	if err != nil {
 		return "", err
 	}
-	return C.GoString(ver), nil
+	return ver, nil
 }
 
 // fork_server
 func (m *RemoteMachine) ForkServer() (*RemoteMachine, string, uint32, error) {
 	var forked *C.cm_machine
-	var addr *C.char
+	var cAddr *C.char
+	var addr string
 	var pid C.uint32_t
-	if err := newError(C.cm_jsonrpc_fork_server(m.ptr, &forked, &addr, &pid)); err != nil {
+	var err error
+
+	m.callCAPI(func() {
+		err = newError(C.cm_jsonrpc_fork_server(m.ptr, &forked, &cAddr, &pid))
+		addr = C.GoString(cAddr)
+	})
+
+	if err != nil {
 		return nil, "", 0, err
 	}
-	return &RemoteMachine{Machine: Machine{ptr: forked}}, C.GoString(addr), uint32(pid), nil
+	return &RemoteMachine{Machine: Machine{ptr: forked}}, addr, uint32(pid), nil
 }
 
 // rebind_server
 func (m *RemoteMachine) RebindServer(newAddr string) (string, error) {
-	cAddr := C.CString(newAddr)
-	defer C.free(unsafe.Pointer(cAddr))
+	var cBoundAddr *C.char
+	var boundAddr string
+	var err error
 
-	var bound *C.char
-	if err := newError(C.cm_jsonrpc_rebind_server(m.ptr, cAddr, &bound)); err != nil {
+	m.callCAPI(func() {
+		cAddr := C.CString(newAddr)
+		defer C.free(unsafe.Pointer(cAddr))
+
+		err = newError(C.cm_jsonrpc_rebind_server(m.ptr, cAddr, &cBoundAddr))
+		boundAddr = C.GoString(cBoundAddr)
+	})
+
+	if err != nil {
 		return "", err
 	}
-	return C.GoString(bound), nil
+	return boundAddr, nil
 }
 
 // shutdown_server
 func (m *RemoteMachine) ShutdownServer() error {
-	return newError(C.cm_jsonrpc_shutdown_server(m.ptr))
+	var err error
+
+	m.callCAPI(func() {
+		err = newError(C.cm_jsonrpc_shutdown_server(m.ptr))
+	})
+
+	return err
 }
 
 // emancipate_server
 func (m *RemoteMachine) EmancipateServer() error {
-	code := C.cm_jsonrpc_emancipate_server(m.ptr)
-	err := newError(code)
+	var err error
+
+	m.callCAPI(func() {
+		err = newError(C.cm_jsonrpc_emancipate_server(m.ptr))
+	})
+
 	return err
 }
 
 // delay_next_request
 func (m *RemoteMachine) DelayNextRequest(milliseconds uint64) error {
-	return newError(C.cm_jsonrpc_delay_next_request(m.ptr, C.uint64_t(milliseconds)))
+	var err error
+
+	m.callCAPI(func() {
+		err = newError(C.cm_jsonrpc_delay_next_request(m.ptr, C.uint64_t(milliseconds)))
+	})
+
+	return err
 }

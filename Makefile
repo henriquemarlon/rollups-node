@@ -201,7 +201,7 @@ applications/echo-dapp: ## Create echo-dapp test application
 
 deploy-echo-dapp: applications/echo-dapp ## Deploy echo-dapp test application
 	@echo "Deploying echo-dapp test application"
-	@./cartesi-rollups-cli app deploy -n echo-dapp -t applications/echo-dapp/ -v
+	@./cartesi-rollups-cli deploy application echo-dapp applications/echo-dapp/
 
 # Temporary test dependencies target while we are not using distribution packages
 DOWNLOADS_DIR = test/downloads

@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/cartesi/rollups-node/internal/config"
+	"github.com/cartesi/rollups-node/pkg/contracts/iselfhostedapplicationfactory"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -15,42 +17,67 @@ import (
 )
 
 func CreateAnvilSnapshotAndDeployApp(ctx context.Context, client *ethclient.Client, factoryAddr common.Address, templateHash common.Hash, dataAvailability []byte, salt string) (common.Address, func(), error) {
-	var contractAddr common.Address
+	zero := common.Address{}
 	if client == nil {
-		return contractAddr, nil, fmt.Errorf("ethclient Client is nil")
+		return zero, nil, fmt.Errorf("ethclient Client is nil")
 	}
 
 	// Create a snapshot of the current state
 	snapshotID, err := CreateAnvilSnapshot(client.Client())
 	if err != nil {
-		return contractAddr, nil, fmt.Errorf("failed to create snapshot: %w", err)
+		return zero, nil, fmt.Errorf("failed to create snapshot: %w", err)
 	}
 
 	chainId, err := client.ChainID(ctx)
 	if err != nil {
 		_ = RevertToAnvilSnapshot(client.Client(), snapshotID)
-		return contractAddr, nil, fmt.Errorf("failed to retrieve chainID from Anvil: %w", err)
+		return zero, nil, fmt.Errorf("failed to retrieve chainID from Anvil: %w", err)
 	}
 
 	privateKey, err := MnemonicToPrivateKey(FoundryMnemonic, 0)
 	if err != nil {
 		_ = RevertToAnvilSnapshot(client.Client(), snapshotID)
-		return contractAddr, nil, fmt.Errorf("failed to create privateKey: %w", err)
+		return zero, nil, fmt.Errorf("failed to create privateKey: %w", err)
 	}
 
 	txOpts, err := bind.NewKeyedTransactorWithChainID(privateKey, chainId)
 	if err != nil {
 		_ = RevertToAnvilSnapshot(client.Client(), snapshotID)
-		return contractAddr, nil, fmt.Errorf("failed to create TransactOpts: %w", err)
+		return zero, nil, fmt.Errorf("failed to create TransactOpts: %w", err)
 	}
 
-	// Deploy the application contract
-	contractAddr, err = DeploySelfHostedApplication(ctx, client, txOpts, factoryAddr, txOpts.From,
-		templateHash, dataAvailability, salt)
+	// build the self hosted deployment struct
+	selfHostedApplicationFactoryAddress, err := config.GetContractsSelfHostedApplicationFactoryAddress()
 	if err != nil {
-		_ = RevertToAnvilSnapshot(client.Client(), snapshotID)
-		return contractAddr, nil, fmt.Errorf("failed to deploy application contract: %w", err)
+		return zero, nil, fmt.Errorf("failed retrieve self hosted application factory address: %w", err)
 	}
+
+	selfHostedApplicationFactory, err := iselfhostedapplicationfactory.NewISelfHostedApplicationFactory(selfHostedApplicationFactoryAddress, client)
+	if err != nil {
+		return zero, nil, fmt.Errorf("Failed to instantiate contract: %v", err)
+	}
+
+	applicationFactoryAddress, err := selfHostedApplicationFactory.GetApplicationFactory(nil)
+	if err != nil {
+		return zero, nil, err
+	}
+
+	authorityFactoryAddress, err := config.GetContractsAuthorityFactoryAddress()
+	if err != nil {
+		return zero, nil, err
+	}
+
+	ownerAddress := txOpts.From
+
+	deployment := &SelfhostedDeployment{
+		FactoryAddress:            selfHostedApplicationFactoryAddress,
+		ApplicationFactoryAddress: applicationFactoryAddress,
+		AuthorityFactoryAddress:   authorityFactoryAddress,
+		OwnerAddress:              ownerAddress,
+		TemplateHash:              templateHash,
+		EpochLength:               10,
+	}
+	applicationAddress, _, err := deployment.Deploy(ctx, client, txOpts)
 
 	// Define a cleanup function to revert to the snapshot
 	cleanup := func() {
@@ -60,7 +87,7 @@ func CreateAnvilSnapshotAndDeployApp(ctx context.Context, client *ethclient.Clie
 		}
 	}
 
-	return contractAddr, cleanup, nil
+	return applicationAddress, cleanup, nil
 }
 
 func CreateAnvilSnapshot(rpcClient *rpc.Client) (string, error) {

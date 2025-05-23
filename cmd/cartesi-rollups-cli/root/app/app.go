@@ -4,7 +4,6 @@
 package app
 
 import (
-	"github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/app/deploy"
 	"github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/app/execution-parameters"
 	"github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/app/list"
 	"github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root/app/register"
@@ -20,7 +19,6 @@ var Cmd = &cobra.Command{
 
 func init() {
 	Cmd.AddCommand(register.Cmd)
-	Cmd.AddCommand(deploy.Cmd)
 	Cmd.AddCommand(list.Cmd)
 	Cmd.AddCommand(status.Cmd)
 	Cmd.AddCommand(remove.Cmd)

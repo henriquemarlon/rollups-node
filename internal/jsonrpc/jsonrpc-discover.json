@@ -767,7 +767,8 @@
 						"type": "array",
 						"items": {
 							"$ref": "#/components/schemas/Hash"
-						}
+						},
+						"nullable": true
 					},
 					"execution_transaction_hash": {
 						"$ref": "#/components/schemas/Hash",

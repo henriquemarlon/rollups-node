@@ -4,7 +4,9 @@ package ethutil
 
 import (
 	"context"
+	"encoding/json"
 	"iter"
+	"log/slog"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum"
@@ -16,6 +18,20 @@ import (
 var (
 	minChunk = new(big.Int).SetInt64(64)
 )
+
+type jsonRPCError struct {
+	Version string `json:"jsonrpc"`
+	ID int `jsonrpc:"id"`
+	Error struct {
+		Code int `jsonrpc:"code"`
+		Message string `jsonrpc:"message"`
+	} `jsonrpc:"error"`
+}
+
+func unwrapHTTPErrorAsJSON(body []byte) (jsonRPCError, error) {
+	err := jsonRPCError{}
+	return err, json.Unmarshal(body, &err)
+}
 
 // read chunkedFilterLogs comment for additional information.
 //
@@ -30,14 +46,29 @@ var (
 // │ https://mainnet.infura.io/v3/{key} (free)         │ 10000 │ -32005 │ 2025-05-15 │
 // │ https://site1.moralis-nodes.com/eth/{key} (free)  │   100 │    400 │ 2025-05-15 │
 // └───────────────────────────────────────────────────┴───────┴────────┴────────────┘
+func queryBlockRangeTooLargeCode(code int) bool {
+	return  (code == -32047) || // cloudflare (free)
+		(code == -32600) || // alchemy (free)
+		(code == -32005) || // infura (free)
+		(code == 400) || // moralis (free)
+		false
+}
+
 func queryBlockRangeTooLarge(err error) bool {
 	if err != nil {
 		switch e := err.(type) {
 		case rpc.Error:
-			return (e.ErrorCode() == -32047) || // cloudflare (free)
-				(e.ErrorCode() == -32600) || // alchemy (free)
-				(e.ErrorCode() == -32005) || // infura (free)
-				(e.ErrorCode() == 400) // moralis (free)
+			return queryBlockRangeTooLargeCode(e.ErrorCode())
+
+		// some providers give a HTTP bad request in addition to the jsonrpc error.
+		// try to unwrap the json contents and check if the error code is for
+		// a block range too large. Otherwise assume the error was something else.
+		case rpc.HTTPError:
+			json, err := unwrapHTTPErrorAsJSON(e.Body)
+			if err != nil {
+				return false
+			}
+			return queryBlockRangeTooLargeCode(json.Error.Code)
 		}
 	}
 	return false
@@ -73,10 +104,12 @@ func ChunkedFilterLogs(
 		one := big.NewInt(1)
 		endBlock := new(big.Int).Set(q.ToBlock)
 		for q.FromBlock.Cmp(endBlock) <= 0 {
+			slog.Debug("ChunkedFilterLogs for range", "from", q.FromBlock, "to", q.ToBlock)
 			logs, err := client.FilterLogs(ctx, q)
 			delta := new(big.Int).Sub(q.ToBlock, q.FromBlock)
 
 			if queryBlockRangeTooLarge(err) {
+				slog.Debug("ChunkedFilterLogs range is too large", "from", q.FromBlock, "to", q.ToBlock)
 				if delta.Cmp(minChunk) < 0 {
 					yield(nil, err)
 					return

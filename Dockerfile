@@ -25,10 +25,10 @@ RUN <<EOF
     addgroup --system --gid 102 cartesi
     adduser --system --uid 102 --ingroup cartesi --disabled-login --no-create-home --home /nonexistent --gecos "cartesi user" --shell /bin/false cartesi
     ARCH=$(dpkg --print-architecture)
-    wget -O /tmp/cartesi-machine-emulator.deb "https://github.com/cartesi/machine-emulator/releases/download/v${EMULATOR_VERSION}-alpha4/machine-emulator_${ARCH}.deb"
+    wget -O /tmp/cartesi-machine-emulator.deb "https://github.com/cartesi/machine-emulator/releases/download/v${EMULATOR_VERSION}/machine-emulator_${ARCH}.deb"
     case "$ARCH" in
-        amd64) echo "c18c078bc42e5fdbb1366912d0dd99173de96522580589478d96dbd0f8aa48bf  /tmp/cartesi-machine-emulator.deb" | sha256sum --check ;;
-        arm64) echo "bc19d297d48c4b86843486f8b0a998d46f05373a11b8fa96ad8f009fb76edbd2  /tmp/cartesi-machine-emulator.deb" | sha256sum --check ;;
+        amd64) echo "adae6b030a8990e316997aad53d175192bfeaa84ad12ee19491366377073572b  /tmp/cartesi-machine-emulator.deb" | sha256sum --check ;;
+        arm64) echo "15ebb64d8cd3296564d2297dd809d1d72c13a938976bb4ecc5e5c82e71bb8069  /tmp/cartesi-machine-emulator.deb" | sha256sum --check ;;
         *) echo "unsupported architecture: $ARCH"; exit 1 ;;
     esac
     apt-get install -y --no-install-recommends /tmp/cartesi-machine-emulator.deb

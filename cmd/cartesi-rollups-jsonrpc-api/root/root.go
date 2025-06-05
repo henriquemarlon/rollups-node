@@ -16,7 +16,7 @@ import (
 	"github.com/spf13/viper"
 )
 
-const serviceName = "validator"
+const serviceName = "jsonrpc-api"
 
 var (
 	logLevel           string

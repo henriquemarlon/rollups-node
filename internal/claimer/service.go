@@ -7,11 +7,14 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
+	"math/big"
 
 	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/internal/config/auth"
 	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/repository"
+	"github.com/cartesi/rollups-node/pkg/ethutil"
 	"github.com/cartesi/rollups-node/pkg/service"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -95,11 +98,22 @@ func Create(ctx context.Context, c *CreateInfo) (*Service, error) {
 
 	s.repository = c.Repository
 
+	// ensure we won't spam the provider
+	maxBlockRange := c.Config.BlockchainMaxBlockRange
+	if maxBlockRange == 0 {
+		maxBlockRange = math.MaxUint64
+	}
 	s.blockchain = &claimerBlockchain{
 		logger:       s.Logger,
 		client:       c.EthConn,
 		txOpts:       txOpts,
 		defaultBlock: c.Config.BlockchainDefaultBlock,
+
+		filter: ethutil.Filter{
+			MinChunkSize: ethutil.DefaultMinChunkSize,
+			MaxChunkSize: new(big.Int).SetUint64(maxBlockRange),
+			Logger:       s.Logger,
+		},
 	}
 
 	return s, nil

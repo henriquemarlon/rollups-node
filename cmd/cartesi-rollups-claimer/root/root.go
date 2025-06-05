@@ -32,6 +32,7 @@ var (
 	enableSubmission       bool
 	telemetryAddress       string
 	cfg                    *config.ClaimerConfig
+	maxBlockRange          uint64
 )
 
 var Cmd = &cobra.Command{
@@ -71,6 +72,10 @@ func init() {
 
 	Cmd.Flags().BoolVar(&enableSubmission, "claim-submission", true, "Enable or disable claim submission (reader mode)")
 	cobra.CheckErr(viper.BindPFlag(config.FEATURE_CLAIM_SUBMISSION_ENABLED, Cmd.Flags().Lookup("claim-submission")))
+
+	Cmd.Flags().Uint64Var(&maxBlockRange, "max-block-range", 0,
+		"Maximum number of blocks in a single query. large queries will be split automatically. Zero for unlimited.")
+	cobra.CheckErr(viper.BindPFlag(config.BLOCKCHAIN_MAX_BLOCK_RANGE, Cmd.Flags().Lookup("max-block-range")))
 
 	// TODO: validate on preRunE
 	Cmd.PreRunE = func(cmd *cobra.Command, args []string) error {

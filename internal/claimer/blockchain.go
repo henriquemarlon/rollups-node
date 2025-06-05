@@ -73,6 +73,7 @@ type claimerBlockchain struct {
 	client       *ethclient.Client
 	txOpts       *bind.TransactOpts
 	logger       *slog.Logger
+	filter       ethutil.Filter
 	defaultBlock config.DefaultBlock
 }
 
@@ -150,7 +151,7 @@ func (self *claimerBlockchain) findClaimSubmittedEventAndSucc(
 		return nil, nil, nil, err
 	}
 
-	it, err := ethutil.ChunkedFilterLogs(ctx, self.client, ethereum.FilterQuery{
+	it, err := self.filter.ChunkedFilterLogs(ctx, self.client, ethereum.FilterQuery{
 		FromBlock: new(big.Int).SetUint64(epoch.LastBlock),
 		ToBlock:   endBlock,
 		Addresses: []common.Address{application.IConsensusAddress},
@@ -230,7 +231,7 @@ func (self *claimerBlockchain) findClaimAcceptedEventAndSucc(
 		return nil, nil, nil, err
 	}
 
-	it, err := ethutil.ChunkedFilterLogs(ctx, self.client, ethereum.FilterQuery{
+	it, err := self.filter.ChunkedFilterLogs(ctx, self.client, ethereum.FilterQuery{
 		FromBlock: new(big.Int).SetUint64(epoch.LastBlock),
 		ToBlock:   endBlock,
 		Addresses: []common.Address{application.IConsensusAddress},

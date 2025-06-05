@@ -21,6 +21,7 @@ import (
 	"github.com/cartesi/rollups-node/internal/repository"
 	"github.com/cartesi/rollups-node/pkg/contracts/iapplication"
 	"github.com/cartesi/rollups-node/pkg/contracts/iinputbox"
+	"github.com/cartesi/rollups-node/pkg/ethutil"
 )
 
 // Interface for the node repository
@@ -234,7 +235,9 @@ type AdapterFactory interface {
 	CreateAdapters(app *Application, client EthClientInterface) (ApplicationContractAdapter, InputSourceAdapter, error)
 }
 
-type DefaultAdapterFactory struct{}
+type DefaultAdapterFactory struct {
+	Filter ethutil.Filter
+}
 
 func (f *DefaultAdapterFactory) CreateAdapters(app *Application, client EthClientInterface) (ApplicationContractAdapter, InputSourceAdapter, error) {
 	if app == nil {
@@ -247,7 +250,7 @@ func (f *DefaultAdapterFactory) CreateAdapters(app *Application, client EthClien
 		return nil, nil, fmt.Errorf("client is not an *ethclient.Client, cannot create adapters")
 	}
 
-	applicationContract, err := NewApplicationContractAdapter(app.IApplicationAddress, ethClient)
+	applicationContract, err := NewApplicationContractAdapter(app.IApplicationAddress, ethClient, f.Filter)
 	if err != nil {
 		return nil, nil, errors.Join(
 			fmt.Errorf("error building application contract"),
@@ -255,7 +258,7 @@ func (f *DefaultAdapterFactory) CreateAdapters(app *Application, client EthClien
 		)
 	}
 
-	inputSource, err := NewInputSourceAdapter(app.IInputBoxAddress, ethClient)
+	inputSource, err := NewInputSourceAdapter(app.IInputBoxAddress, ethClient, f.Filter)
 	if err != nil {
 		return nil, nil, errors.Join(
 			fmt.Errorf("error building inputbox contract"),
@@ -265,5 +268,3 @@ func (f *DefaultAdapterFactory) CreateAdapters(app *Application, client EthClien
 
 	return applicationContract, inputSource, nil
 }
-
-var defaultAdapterFactory = &DefaultAdapterFactory{}

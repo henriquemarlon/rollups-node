@@ -16,14 +16,20 @@ import (
 )
 
 var (
-	minChunk = new(big.Int).SetInt64(64)
+	DefaultMinChunkSize = new(big.Int).SetInt64(50)
 )
+
+type Filter struct {
+	MinChunkSize *big.Int
+	MaxChunkSize *big.Int
+	Logger       *slog.Logger
+}
 
 type jsonRPCError struct {
 	Version string `json:"jsonrpc"`
-	ID int `jsonrpc:"id"`
-	Error struct {
-		Code int `jsonrpc:"code"`
+	ID      int    `jsonrpc:"id"`
+	Error   struct {
+		Code    int    `jsonrpc:"code"`
 		Message string `jsonrpc:"message"`
 	} `jsonrpc:"error"`
 }
@@ -47,7 +53,7 @@ func unwrapHTTPErrorAsJSON(body []byte) (jsonRPCError, error) {
 // │ https://site1.moralis-nodes.com/eth/{key} (free)  │   100 │    400 │ 2025-05-15 │
 // └───────────────────────────────────────────────────┴───────┴────────┴────────────┘
 func queryBlockRangeTooLargeCode(code int) bool {
-	return  (code == -32047) || // cloudflare (free)
+	return (code == -32047) || // cloudflare (free)
 		(code == -32600) || // alchemy (free)
 		(code == -32005) || // infura (free)
 		(code == 400) || // moralis (free)
@@ -81,7 +87,7 @@ func queryBlockRangeTooLarge(err error) bool {
 // provider rejected the query for this specific reason. Detection is a
 // heuristic and implemented in the function queryBlockRangeTooLarge. It
 // potentially has to be adjusted to accomodate each provider.
-func ChunkedFilterLogs(
+func (f *Filter) ChunkedFilterLogs(
 	ctx context.Context,
 	client *ethclient.Client,
 	q ethereum.FilterQuery,
@@ -103,18 +109,33 @@ func ChunkedFilterLogs(
 	return func(yield func(log *types.Log, err error) bool) {
 		one := big.NewInt(1)
 		endBlock := new(big.Int).Set(q.ToBlock)
+
+		// user defined the split point, use it
+		if f.MaxChunkSize != nil {
+			delta := new(big.Int).Sub(q.ToBlock, q.FromBlock)
+
+			// split the query
+			if delta.Cmp(f.MaxChunkSize) > 0 {
+				q.ToBlock.Add(q.FromBlock, f.MaxChunkSize)
+
+				// range is inclusive, so remove 1
+				// e.g. a chunk size of 500 is: from: 0, to: 499
+				q.ToBlock.Sub(q.ToBlock, one)
+			}
+		}
+
 		for q.FromBlock.Cmp(endBlock) <= 0 {
-			slog.Debug("ChunkedFilterLogs for range", "from", q.FromBlock, "to", q.ToBlock)
+			f.Logger.Debug("ChunkedFilterLogs for range", "from", q.FromBlock, "to", q.ToBlock, "max", f.MaxChunkSize)
 			logs, err := client.FilterLogs(ctx, q)
 			delta := new(big.Int).Sub(q.ToBlock, q.FromBlock)
 
 			if queryBlockRangeTooLarge(err) {
-				slog.Debug("ChunkedFilterLogs range is too large", "from", q.FromBlock, "to", q.ToBlock)
-				if delta.Cmp(minChunk) < 0 {
+				f.Logger.Debug("ChunkedFilterLogs range is too large", "from", q.FromBlock, "to", q.ToBlock)
+				if delta.Cmp(f.MinChunkSize) < 0 {
 					yield(nil, err)
 					return
 				}
-				// ToBlock -= ToBlock/2
+				// ToBlock -= delta/2
 				q.ToBlock.Sub(q.ToBlock, delta.Rsh(delta, 1))
 				continue
 			} else if err != nil {

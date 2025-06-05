@@ -43,6 +43,7 @@ var (
 	telemetryAddress       string
 	machinelogLevel        string
 	cfg                    *config.NodeConfig
+	maxBlockRange          uint64
 )
 
 var Cmd = &cobra.Command{
@@ -114,6 +115,10 @@ func init() {
 	Cmd.Flags().StringVar(&machinelogLevel, "machine-log-level", "info",
 		"Remote Machine log level: trace, debug, info, warning, error, fatal")
 	cobra.CheckErr(viper.BindPFlag(config.REMOTE_MACHINE_LOG_LEVEL, Cmd.Flags().Lookup("machine-log-level")))
+
+	Cmd.Flags().Uint64Var(&maxBlockRange, "max-block-range", 0,
+		"Maximum number of blocks in a single query. large queries will be split automatically. Zero for unlimited.")
+	cobra.CheckErr(viper.BindPFlag(config.BLOCKCHAIN_MAX_BLOCK_RANGE, Cmd.Flags().Lookup("max-block-range")))
 
 	// TODO: validate on preRunE
 	Cmd.PreRunE = func(cmd *cobra.Command, args []string) error {

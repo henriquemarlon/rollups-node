@@ -6,10 +6,13 @@ package evmreader
 import (
 	"context"
 	"fmt"
+	"math"
+	"math/big"
 
 	"github.com/cartesi/rollups-node/internal/config"
 	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/repository"
+	"github.com/cartesi/rollups-node/pkg/ethutil"
 	"github.com/cartesi/rollups-node/pkg/service"
 )
 
@@ -105,7 +108,18 @@ func Create(ctx context.Context, c *CreateInfo) (*Service, error) {
 	s.inputReaderEnabled = nodeConfig.InputReaderEnabled
 	s.hasEnabledApps = true
 
-	s.adapterFactory = defaultAdapterFactory
+	// ensure we won't spam the provider
+	maxBlockRange := c.Config.BlockchainMaxBlockRange
+	if maxBlockRange == 0 {
+		maxBlockRange = math.MaxUint64
+	}
+	s.adapterFactory = &DefaultAdapterFactory{
+		Filter: ethutil.Filter{
+			MinChunkSize: ethutil.DefaultMinChunkSize,
+			MaxChunkSize: new(big.Int).SetUint64(maxBlockRange),
+			Logger:       s.Logger,
+		},
+	}
 
 	return s, nil
 }

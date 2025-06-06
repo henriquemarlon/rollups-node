@@ -156,7 +156,7 @@ Maximum wait time in seconds for the exponential backoff retry policy. The delay
 used-by = ["evmreader", "claimer", "node"]
 
 [rollups.CARTESI_BLOCKCHAIN_MAX_BLOCK_RANGE]
-default = "math.MaxUint64"
+default = "0"
 go-type = "uint64"
 description = """
 Maximum number of blocks in a single query to the provider. Queries with larger ranges will be broken into multiple smaller queries. Zero for unlimited."""

@@ -132,7 +132,7 @@ func SetDefaults() {
 
 	viper.SetDefault(BLOCKCHAIN_HTTP_RETRY_MIN_WAIT, "1")
 
-	viper.SetDefault(BLOCKCHAIN_MAX_BLOCK_RANGE, "math.MaxUint64")
+	viper.SetDefault(BLOCKCHAIN_MAX_BLOCK_RANGE, "0")
 
 	viper.SetDefault(CLAIMER_POLLING_INTERVAL, "3")
 

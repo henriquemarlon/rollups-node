@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"math"
 	"math/big"
 
 	"github.com/cartesi/rollups-node/internal/config"
@@ -97,12 +96,6 @@ func Create(ctx context.Context, c *CreateInfo) (*Service, error) {
 	}
 
 	s.repository = c.Repository
-
-	// ensure we won't spam the provider
-	maxBlockRange := c.Config.BlockchainMaxBlockRange
-	if maxBlockRange == 0 {
-		maxBlockRange = math.MaxUint64
-	}
 	s.blockchain = &claimerBlockchain{
 		logger:       s.Logger,
 		client:       c.EthConn,
@@ -111,7 +104,7 @@ func Create(ctx context.Context, c *CreateInfo) (*Service, error) {
 
 		filter: ethutil.Filter{
 			MinChunkSize: ethutil.DefaultMinChunkSize,
-			MaxChunkSize: new(big.Int).SetUint64(maxBlockRange),
+			MaxChunkSize: new(big.Int).SetUint64(c.Config.BlockchainMaxBlockRange),
 			Logger:       s.Logger,
 		},
 	}

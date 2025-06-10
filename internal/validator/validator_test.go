@@ -140,7 +140,7 @@ func (s *ValidatorSuite) TestCreateClaimAndProofSuccess() {
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		).Return([]*Output{}, uint64(0), nil)
 
-		claimHash, _, err := validator.createClaimAndProofs(nil, &app, &dummyEpochs[0])
+		claimHash, _, err := validator.createClaimAndProofs(context.TODO(), &app, &dummyEpochs[0])
 		claimHashRef, _, err := merkle.CreateProofs(nil, merkle.TREE_DEPTH)
 		s.ErrorIs(nil, err)
 		s.NotNil(claimHash)
@@ -157,7 +157,7 @@ func (s *ValidatorSuite) TestCreateClaimAndProofSuccess() {
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		).Return([]*Output{&output}, uint64(1), nil)
 
-		claimHash, _, err := validator.createClaimAndProofs(nil, &app, &dummyEpochs[0])
+		claimHash, _, err := validator.createClaimAndProofs(context.TODO(), &app, &dummyEpochs[0])
 		s.ErrorIs(nil, err)
 		s.NotNil(claimHash)
 		repo.AssertExpectations(s.T())
@@ -172,7 +172,7 @@ func (s *ValidatorSuite) TestCreateClaimAndProofSuccess() {
 			mock.Anything, mock.Anything, mock.Anything,
 		).Return(&dummyEpochs[0], nil).Once()
 
-		claimHash, _, err := validator.createClaimAndProofs(nil, &app, &dummyEpochs[1])
+		claimHash, _, err := validator.createClaimAndProofs(context.TODO(), &app, &dummyEpochs[1])
 		s.ErrorIs(nil, err)
 		s.Equal(dummyEpochs[0].ClaimHash, claimHash)
 		repo.AssertExpectations(s.T())
@@ -199,7 +199,7 @@ func (s *ValidatorSuite) TestCreateClaimAndProofSuccess() {
 			mock.Anything, mock.Anything, mock.Anything,
 		).Return(&dummyOutputs[0], nil).Once()
 
-		_, _, err := validator.createClaimAndProofs(nil, &app, &dummyEpochs[1])
+		_, _, err := validator.createClaimAndProofs(context.TODO(), &app, &dummyEpochs[1])
 		s.ErrorIs(nil, err)
 		repo.AssertExpectations(s.T())
 	})
@@ -217,7 +217,7 @@ func (s *ValidatorSuite) TestCreateClaimAndProofFailures() {
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		).Return([]*Output{}, uint64(0), xerror).Once()
 
-		_, _, err := validator.createClaimAndProofs(nil, &app, &dummyEpochs[0])
+		_, _, err := validator.createClaimAndProofs(context.TODO(), &app, &dummyEpochs[0])
 		s.NotNil(err)
 		repo.AssertExpectations(s.T())
 	})
@@ -232,7 +232,7 @@ func (s *ValidatorSuite) TestCreateClaimAndProofFailures() {
 			mock.Anything, mock.Anything, mock.Anything,
 		).Return(&dummyEpochs[0], xerror).Once()
 
-		_, _, err := validator.createClaimAndProofs(nil, &app, &dummyEpochs[1])
+		_, _, err := validator.createClaimAndProofs(context.TODO(), &app, &dummyEpochs[1])
 		s.NotNil(err)
 		repo.AssertExpectations(s.T())
 	})
@@ -253,7 +253,7 @@ func (s *ValidatorSuite) TestCreateClaimAndProofFailures() {
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		).Return(nil).Once()
 
-		_, _, err := validator.createClaimAndProofs(nil, &app, &dummyEpochs[1])
+		_, _, err := validator.createClaimAndProofs(context.TODO(), &app, &dummyEpochs[1])
 		s.NotNil(err)
 		repo.AssertExpectations(s.T())
 	})
@@ -272,7 +272,7 @@ func (s *ValidatorSuite) TestCreateClaimAndProofFailures() {
 			mock.Anything, mock.Anything, mock.Anything,
 		).Return(&Output{}, xerror).Once()
 
-		_, _, err := validator.createClaimAndProofs(nil, &app, &dummyEpochs[1])
+		_, _, err := validator.createClaimAndProofs(context.TODO(), &app, &dummyEpochs[1])
 		s.NotNil(err)
 		repo.AssertExpectations(s.T())
 	})
@@ -295,7 +295,7 @@ func (s *ValidatorSuite) TestCreateClaimAndProofFailures() {
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		).Return(nil).Once()
 
-		_, _, err := validator.createClaimAndProofs(nil, &app, &dummyEpochs[1])
+		_, _, err := validator.createClaimAndProofs(context.TODO(), &app, &dummyEpochs[1])
 		s.NotNil(err)
 		repo.AssertExpectations(s.T())
 	})
@@ -318,7 +318,7 @@ func (s *ValidatorSuite) TestCreateClaimAndProofFailures() {
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		).Return(nil).Once()
 
-		_, _, err := validator.createClaimAndProofs(nil, &app, &dummyEpochs[1])
+		_, _, err := validator.createClaimAndProofs(context.TODO(), &app, &dummyEpochs[1])
 		s.NotNil(err)
 		repo.AssertExpectations(s.T())
 	})
@@ -332,7 +332,7 @@ func (s *ValidatorSuite) TestValidateApplicationSuccess() {
 	s.Run("NoEpoch", func() {
 		repo.On("ListEpochs", mock.Anything, app.IApplicationAddress.String(), mock.Anything, mock.Anything).Return(([]*Epoch)(nil), uint64(0), nil).Once()
 
-		err := validator.validateApplication(nil, &app)
+		err := validator.validateApplication(context.TODO(), &app)
 		s.ErrorIs(nil, err)
 		repo.AssertExpectations(s.T())
 	})
@@ -359,7 +359,7 @@ func (s *ValidatorSuite) TestValidateApplicationSuccess() {
 			mock.Anything, mock.Anything, mock.Anything,
 		).Return(nil).Once()
 
-		err := validator.validateApplication(nil, &app)
+		err := validator.validateApplication(context.TODO(), &app)
 		s.ErrorIs(nil, err)
 		repo.AssertExpectations(s.T())
 	})
@@ -376,7 +376,7 @@ func (s *ValidatorSuite) TestValidateApplicationFailure() {
 			mock.Anything, app.IApplicationAddress.String(), mock.Anything, mock.Anything,
 		).Return([]*Epoch{}, uint64(0), xerror).Once()
 
-		err := validator.validateApplication(nil, &app)
+		err := validator.validateApplication(context.TODO(), &app)
 		s.NotNil(err)
 		repo.AssertExpectations(s.T())
 	})
@@ -390,7 +390,7 @@ func (s *ValidatorSuite) TestValidateApplicationFailure() {
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		).Return([]*Output{}, uint64(0), xerror).Once()
 
-		err := validator.validateApplication(nil, &app)
+		err := validator.validateApplication(context.TODO(), &app)
 		s.NotNil(err)
 		repo.AssertExpectations(s.T())
 	})
@@ -413,7 +413,7 @@ func (s *ValidatorSuite) TestValidateApplicationFailure() {
 			mock.Anything, app.IApplicationAddress.String(), dummyEpochs[0].Index,
 		).Return(&input, xerror).Once()
 
-		err := validator.validateApplication(nil, &app)
+		err := validator.validateApplication(context.TODO(), &app)
 		s.NotNil(err)
 		repo.AssertExpectations(s.T())
 	})
@@ -440,7 +440,7 @@ func (s *ValidatorSuite) TestValidateApplicationFailure() {
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		).Return(nil).Once()
 
-		err := validator.validateApplication(nil, &app)
+		err := validator.validateApplication(context.TODO(), &app)
 		s.NotNil(err)
 		repo.AssertExpectations(s.T())
 	})
@@ -468,7 +468,7 @@ func (s *ValidatorSuite) TestValidateApplicationFailure() {
 			mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		).Return(nil).Once()
 
-		err := validator.validateApplication(nil, &app)
+		err := validator.validateApplication(context.TODO(), &app)
 		s.NotNil(err)
 		repo.AssertExpectations(s.T())
 	})
@@ -495,7 +495,7 @@ func (s *ValidatorSuite) TestValidateApplicationFailure() {
 			mock.Anything, mock.Anything, mock.Anything,
 		).Return(xerror).Once()
 
-		err := validator.validateApplication(nil, &app)
+		err := validator.validateApplication(context.TODO(), &app)
 		s.ErrorIs(err, xerror)
 		repo.AssertExpectations(s.T())
 	})

@@ -17,6 +17,8 @@ import (
 	"github.com/cartesi/rollups-node/internal/model"
 )
 
+const softLimit = 10000 //nolint:mnd
+
 // JsonRpcClient defines the interface for our client so it can be mocked.
 type JsonRpcClient interface {
 	Discover(ctx context.Context) (any, error)
@@ -27,10 +29,15 @@ type JsonRpcClient interface {
 	ListEpochs(ctx context.Context, application string, status *string, limit, offset int64) ([]*model.Epoch, error)
 	GetEpoch(ctx context.Context, application string, index uint64) (*model.Epoch, error)
 	GetLastAcceptedEpochIndex(ctx context.Context, application string) (uint64, error)
-	ListInputs(ctx context.Context, application string, epochIndex *string, sender *string, decode bool, limit, offset int64) ([]interface{}, error)
+	ListInputs(ctx context.Context, application string, epochIndex *string, sender *string, decode bool, limit, offset int64) ([]any, error)
 	GetInput(ctx context.Context, application string, inputIndex string, decode bool) (any, error)
 	GetProcessedInputCount(ctx context.Context, application string) (int64, error)
-	ListOutputs(ctx context.Context, application string, epochIndex, inputIndex, rawDataPrefix, outputType, voucherAddress *string, decode bool, limit, offset int64) ([]interface{}, error)
+	ListOutputs(
+		ctx context.Context,
+		application string,
+		epochIndex, inputIndex, rawDataPrefix, outputType, voucherAddress *string,
+		decode bool, limit, offset int64,
+	) ([]any, error)
 	GetOutput(ctx context.Context, application string, outputIndex string, decode bool) (any, error)
 	ListReports(ctx context.Context, application string, epochIndex, inputIndex *string, limit, offset int64) ([]*model.Report, error)
 	GetReport(ctx context.Context, application string, reportIndex string) (*model.Report, error)
@@ -205,8 +212,8 @@ func (c *Client) Discover(ctx context.Context) (any, error) {
 // ListApplications calls "cartesi_ListApplications".
 func (c *Client) ListApplications(ctx context.Context, limit, offset int64) ([]*model.Application, error) {
 	// Cap limit at 10,000.
-	if limit > 10000 {
-		limit = 10000
+	if limit > softLimit {
+		limit = softLimit
 	}
 	params := struct {
 		Limit  int64 `json:"limit"`
@@ -233,8 +240,8 @@ func (c *Client) GetApplication(ctx context.Context, application string) (*model
 
 // ListApplicationStates calls "cartesi_ListApplicationStates".
 func (c *Client) ListApplicationStates(ctx context.Context, limit, offset int64) ([]*ApplicationStateItem, error) {
-	if limit > 10000 {
-		limit = 10000
+	if limit > softLimit {
+		limit = softLimit
 	}
 	params := struct {
 		Limit  int64 `json:"limit"`
@@ -261,8 +268,8 @@ func (c *Client) GetApplicationAddress(ctx context.Context, name string) (string
 
 // ListEpochs calls "cartesi_ListEpochs".
 func (c *Client) ListEpochs(ctx context.Context, application string, status *string, limit, offset int64) ([]*model.Epoch, error) {
-	if limit > 10000 {
-		limit = 10000
+	if limit > softLimit {
+		limit = softLimit
 	}
 	params := struct {
 		Application string  `json:"application"`
@@ -313,9 +320,16 @@ func (c *Client) GetLastAcceptedEpochIndex(ctx context.Context, application stri
 }
 
 // ListInputs calls "cartesi_ListInputs".
-func (c *Client) ListInputs(ctx context.Context, application string, epochIndex *string, sender *string, decode bool, limit, offset int64) ([]interface{}, error) {
-	if limit > 10000 {
-		limit = 10000
+func (c *Client) ListInputs(
+	ctx context.Context,
+	application string,
+	epochIndex *string,
+	sender *string,
+	decode bool,
+	limit, offset int64,
+) ([]any, error) {
+	if limit > softLimit {
+		limit = softLimit
 	}
 	params := struct {
 		Application string  `json:"application"`
@@ -374,9 +388,15 @@ func (c *Client) GetProcessedInputCount(ctx context.Context, application string)
 }
 
 // ListOutputs calls "cartesi_ListOutputs".
-func (c *Client) ListOutputs(ctx context.Context, application string, epochIndex, inputIndex, rawDataPrefix, outputType, voucherAddress *string, decode bool, limit, offset int64) ([]interface{}, error) {
-	if limit > 10000 {
-		limit = 10000
+func (c *Client) ListOutputs(
+	ctx context.Context,
+	application string,
+	epochIndex, inputIndex, rawDataPrefix, outputType, voucherAddress *string,
+	decode bool,
+	limit, offset int64,
+) ([]any, error) {
+	if limit > softLimit {
+		limit = softLimit
 	}
 	params := struct {
 		Application    string  `json:"application"`
@@ -425,9 +445,15 @@ func (c *Client) GetOutput(ctx context.Context, application string, outputIndex 
 }
 
 // ListReports calls "cartesi_ListReports".
-func (c *Client) ListReports(ctx context.Context, application string, epochIndex, inputIndex *string, limit, offset int64) ([]*model.Report, error) {
-	if limit > 10000 {
-		limit = 10000
+func (c *Client) ListReports(
+	ctx context.Context,
+	application string,
+	epochIndex,
+	inputIndex *string,
+	limit, offset int64,
+) ([]*model.Report, error) {
+	if limit > softLimit {
+		limit = softLimit
 	}
 	params := struct {
 		Application string  `json:"application"`

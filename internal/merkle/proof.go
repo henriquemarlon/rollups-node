@@ -115,21 +115,21 @@ func ComputeSiblingsMatrix(
 	post []common.Hash,
 	outputsBegin uint64,
 ) ([]common.Hash, error) {
-	if outputHashes == nil || len(outputHashes) == 0 {
-		return nil, fmt.Errorf("incorrect outputHashes in call ComputeSiblingsMatrix.")
+	if len(outputHashes) == 0 {
+		return nil, fmt.Errorf("[ComputeSiblingsMatrix]: incorrect outputHashes")
 	}
-	if pre == nil || len(pre) == 0 {
-		return nil, fmt.Errorf("incorrect pre context in call ComputeSiblingsMatrix.")
+	if len(pre) == 0 {
+		return nil, fmt.Errorf("[ComputeSiblingsMatrix]: incorrect pre context")
 	}
-	if post == nil || len(post) == 0 {
-		return nil, fmt.Errorf("incorrect post context in call ComputeSiblingsMatrix.")
+	if len(post) == 0 {
+		return nil, fmt.Errorf("[ComputeSiblingsMatrix]: incorrect post context")
 	}
 
 	hashes := dupArray(outputHashes) // preserve input
 	siblings := make([]common.Hash, len(hashes)*TREE_DEPTH)
 	childrenBegin := outputsBegin
 	childrenEnd := outputsBegin + uint64(len(hashes))
-	for level := 0; level < TREE_DEPTH; level++ {
+	for level := range TREE_DEPTH {
 		children := arrayChunk{
 			hashes: hashes,
 			before: &pre[level],
@@ -139,7 +139,7 @@ func ComputeSiblingsMatrix(
 		}
 
 		// store siblings
-		for i := 0; i < len(hashes); i++ {
+		for i := range hashes {
 			sibling := ((outputsBegin + uint64(i)) >> level) ^ 1
 			siblings[i*TREE_DEPTH+level] = *children.get(sibling)
 		}
@@ -173,7 +173,7 @@ func CreateProofs(leaves []common.Hash, height uint) (common.Hash, []common.Hash
 	siblings := make([]common.Hash, leafCount*height)
 
 	// for each level in the tree, starting from the leaves
-	for levelIdx := uint(0); levelIdx < height; levelIdx++ {
+	for levelIdx := range height {
 		// for each leaf
 		for leafIdx := uint(0); leafIdx < leafCount; leafIdx++ {
 			// calculate its sibling at the current level

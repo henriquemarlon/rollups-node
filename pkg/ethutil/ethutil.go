@@ -36,11 +36,11 @@ func AddInput(
 	input []byte,
 ) (uint64, uint64, error) {
 	if client == nil {
-		return 0, 0, fmt.Errorf("AddInput: client is nil")
+		return 0, 0, fmt.Errorf("[AddInput]: client is nil")
 	}
 	inputBox, err := iinputbox.NewIInputBox(inputBoxAddress, client)
 	if err != nil {
-		return 0, 0, fmt.Errorf("failed to connect to InputBox contract: %v", err)
+		return 0, 0, fmt.Errorf("[AddInput]: failed to connect to InputBox contract: %w", err)
 	}
 	receipt, err := sendTransaction(
 		ctx, client, transactionOpts, big.NewInt(0), GasLimit,
@@ -49,10 +49,10 @@ func AddInput(
 		},
 	)
 	if err != nil {
-		return 0, 0, err
+		return 0, 0, fmt.Errorf("[AddInput]: failed to send transaction: %w", err)
 	}
 	index, err := getInputIndex(inputBoxAddress, inputBox, receipt)
-	return index, receipt.BlockNumber.Uint64(), nil
+	return index, receipt.BlockNumber.Uint64(), err
 }
 
 // Get input index in the transaction by looking at the event logs.
@@ -67,12 +67,12 @@ func getInputIndex(
 		}
 		inputAdded, err := inputBox.ParseInputAdded(*log)
 		if err != nil {
-			return 0, fmt.Errorf("failed to parse input added event: %v", err)
+			return 0, fmt.Errorf("[getInputIndex]: failed to parse input added event: %w", err)
 		}
 		// We assume that uint64 will fit all dapp inputs for now
 		return inputAdded.Index.Uint64(), nil
 	}
-	return 0, fmt.Errorf("input index not found")
+	return 0, fmt.Errorf("[getInputIndex]: input not found")
 }
 
 // Get the given input of the given DApp from the input box.
@@ -84,11 +84,11 @@ func GetInputFromInputBox(
 	inputIndex uint64,
 ) (*iinputbox.IInputBoxInputAdded, error) {
 	if client == nil {
-		return nil, fmt.Errorf("GetInputFromInputBox: client is nil")
+		return nil, fmt.Errorf("[GetInputFromInputBox]: client is nil")
 	}
 	inputBox, err := iinputbox.NewIInputBox(inputBoxAddress, client)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to InputBox contract: %v", err)
+		return nil, fmt.Errorf("[GetInputFromInputBox]: failed to instantiate IInputBox: %w", err)
 	}
 	it, err := inputBox.FilterInputAdded(
 		nil,
@@ -96,11 +96,11 @@ func GetInputFromInputBox(
 		[]*big.Int{new(big.Int).SetUint64(inputIndex)},
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to filter input added: %v", err)
+		return nil, fmt.Errorf("[GetInputFromInputBox]: failed to filter InputAdded: %w", err)
 	}
 	defer it.Close()
 	if !it.Next() {
-		return nil, fmt.Errorf("event not found")
+		return nil, fmt.Errorf("[GetInputFromInputBox]: event not found")
 	}
 	return it.Event, nil
 }
@@ -116,7 +116,7 @@ func ValidateOutput(
 	outputHashesSiblings []common.Hash,
 ) error {
 	if client == nil {
-		return fmt.Errorf("ValidateOutput: client is nil")
+		return fmt.Errorf("[ValidateOutput]: client is nil")
 	}
 	proof := iapplication.OutputValidityProof{
 		OutputIndex:          index,
@@ -129,7 +129,7 @@ func ValidateOutput(
 
 	app, err := iapplication.NewIApplication(appAddr, client)
 	if err != nil {
-		return fmt.Errorf("failed to connect to CartesiDapp contract: %v", err)
+		return fmt.Errorf("[ValidateOutput]: failed to instantiate IApplication: %w", err)
 	}
 	return app.ValidateOutput(&bind.CallOpts{Context: ctx}, output, proof)
 }
@@ -146,7 +146,7 @@ func ExecuteOutput(
 	outputHashesSiblings []common.Hash,
 ) (*common.Hash, error) {
 	if client == nil {
-		return nil, fmt.Errorf("ExecuteOutput: client is nil")
+		return nil, fmt.Errorf("[ExecuteOutput]: client is nil")
 	}
 	proof := iapplication.OutputValidityProof{
 		OutputIndex:          index,
@@ -159,7 +159,7 @@ func ExecuteOutput(
 
 	app, err := iapplication.NewIApplication(appAddr, client)
 	if err != nil {
-		return nil, fmt.Errorf("failed to connect to CartesiDapp contract: %v", err)
+		return nil, fmt.Errorf("[ExecuteOutput]: failed to instantiate IApplication: %w", err)
 	}
 	receipt, err := sendTransaction(
 		ctx, client, transactionOpts, big.NewInt(0), GasLimit,
@@ -181,19 +181,19 @@ func GetTemplateHash(
 	applicationAddress common.Address,
 ) (*common.Hash, error) {
 	if client == nil {
-		return nil, fmt.Errorf("get template hash: client is nil")
+		return nil, fmt.Errorf("[GetTemplateHash]: client is nil")
 	}
 	cartesiApplication, err := iapplication.NewIApplicationCaller(
 		applicationAddress,
 		client,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("get template hash failed to instantiate binding: %w", err)
+		return nil, fmt.Errorf("[GetTemplateHash]: failed to instantiate IApplicationCaller: %w", err)
 	}
 	var hash common.Hash
 	hash, err = cartesiApplication.GetTemplateHash(&bind.CallOpts{Context: ctx})
 	if err != nil {
-		return nil, fmt.Errorf("get template hash failed to call contract method: %w", err)
+		return nil, fmt.Errorf("[GetTemplateHash]: failed to get template hash: %w", err)
 	}
 	return &hash, nil
 }
@@ -204,15 +204,15 @@ func GetConsensus(
 	appAddress common.Address,
 ) (common.Address, error) {
 	if client == nil {
-		return common.Address{}, fmt.Errorf("get consensus: client is nil")
+		return common.Address{}, fmt.Errorf("[GetConsensus]: client is nil")
 	}
 	app, err := iapplication.NewIApplication(appAddress, client)
 	if err != nil {
-		return common.Address{}, fmt.Errorf("Failed to instantiate contract: %v", err)
+		return common.Address{}, fmt.Errorf("[GetConsensus]: failed to instantiate IApplication with: %w", err)
 	}
 	consensus, err := app.GetOutputsMerkleRootValidator(&bind.CallOpts{Context: ctx})
 	if err != nil {
-		return common.Address{}, fmt.Errorf("error retrieving application epoch length: %v", err)
+		return common.Address{}, fmt.Errorf("[GetConsensus]: failed to retrieve consensus: %w", err)
 	}
 	return consensus, nil
 }
@@ -223,15 +223,15 @@ func GetDataAvailability(
 	appAddress common.Address,
 ) ([]byte, error) {
 	if client == nil {
-		return nil, fmt.Errorf("get dataAvailability: client is nil")
+		return nil, fmt.Errorf("[GetDataAvailability]: client is nil")
 	}
 	app, err := iapplication.NewIApplication(appAddress, client)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to instantiate contract: %v", err)
+		return nil, fmt.Errorf("[GetDataAvailability]: failed to instantiate IApplication with: %w", err)
 	}
 	dataAvailability, err := app.GetDataAvailability(&bind.CallOpts{Context: ctx})
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving application epoch length: %v", err)
+		return nil, fmt.Errorf("[GetDataAvailability]: failed to get data availability: %w", err)
 	}
 	return dataAvailability, nil
 }
@@ -242,15 +242,15 @@ func GetEpochLength(
 	consensusAddr common.Address,
 ) (uint64, error) {
 	if client == nil {
-		return 0, fmt.Errorf("get epoch length: client is nil")
+		return 0, fmt.Errorf("[GetEpochLength]: client is nil")
 	}
 	consensus, err := iconsensus.NewIConsensus(consensusAddr, client)
 	if err != nil {
-		return 0, fmt.Errorf("Failed to instantiate contract: %v", err)
+		return 0, fmt.Errorf("[GetEpochLength]: failed to instantiate IConsensus: %w", err)
 	}
 	epochLengthRaw, err := consensus.GetEpochLength(&bind.CallOpts{Context: ctx})
 	if err != nil {
-		return 0, fmt.Errorf("error retrieving application epoch length: %v", err)
+		return 0, fmt.Errorf("[GetEpochLength]: failed to get epoch length: %w", err)
 	}
 	return epochLengthRaw.Uint64(), nil
 }
@@ -261,15 +261,15 @@ func GetInputBoxDeploymentBlock(
 	inputBoxAddress common.Address,
 ) (*big.Int, error) {
 	if client == nil {
-		return nil, fmt.Errorf("get epoch length: client is nil")
+		return nil, fmt.Errorf("[GetInputBoxDeploymentBlock]: client is nil")
 	}
 	inputbox, err := iinputbox.NewIInputBox(inputBoxAddress, client)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create input box instance: %w", err)
+		return nil, fmt.Errorf("[GetInputBoxDeploymentBlock]: failed to instantiate IInputBox: %w", err)
 	}
 	block, err := inputbox.GetDeploymentBlockNumber(&bind.CallOpts{Context: ctx})
 	if err != nil {
-		return nil, fmt.Errorf("error retrieving inputbox deployment block: %v", err)
+		return nil, fmt.Errorf("[GetInputBoxDeploymentBlock]: failed to get deployment block number: %w", err)
 	}
 	return block, nil
 }

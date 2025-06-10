@@ -19,52 +19,52 @@ import (
 func CreateAnvilSnapshotAndDeployApp(ctx context.Context, client *ethclient.Client, factoryAddr common.Address, templateHash common.Hash, dataAvailability []byte, salt string) (common.Address, func(), error) {
 	zero := common.Address{}
 	if client == nil {
-		return zero, nil, fmt.Errorf("ethclient Client is nil")
+		return zero, nil, fmt.Errorf("[CreateAnvilSnapshotAndDeployApp]: ethclient Client is nil")
 	}
 
 	// Create a snapshot of the current state
 	snapshotID, err := CreateAnvilSnapshot(client.Client())
 	if err != nil {
-		return zero, nil, fmt.Errorf("failed to create snapshot: %w", err)
+		return zero, nil, fmt.Errorf("[CreateAnvilSnapshotAndDeployApp]: failed to create snapshot: %w", err)
 	}
 
 	chainId, err := client.ChainID(ctx)
 	if err != nil {
 		_ = RevertToAnvilSnapshot(client.Client(), snapshotID)
-		return zero, nil, fmt.Errorf("failed to retrieve chainID from Anvil: %w", err)
+		return zero, nil, fmt.Errorf("[CreateAnvilSnapshotAndDeployApp]: failed to retrieve chainID from Anvil: %w", err)
 	}
 
 	privateKey, err := MnemonicToPrivateKey(FoundryMnemonic, 0)
 	if err != nil {
 		_ = RevertToAnvilSnapshot(client.Client(), snapshotID)
-		return zero, nil, fmt.Errorf("failed to create privateKey: %w", err)
+		return zero, nil, fmt.Errorf("[CreateAnvilSnapshotAndDeployApp]: failed to create privateKey: %w", err)
 	}
 
 	txOpts, err := bind.NewKeyedTransactorWithChainID(privateKey, chainId)
 	if err != nil {
 		_ = RevertToAnvilSnapshot(client.Client(), snapshotID)
-		return zero, nil, fmt.Errorf("failed to create TransactOpts: %w", err)
+		return zero, nil, fmt.Errorf("[CreateAnvilSnapshotAndDeployApp]: failed to create TransactOpts: %w", err)
 	}
 
 	// build the self hosted deployment struct
 	selfHostedApplicationFactoryAddress, err := config.GetContractsSelfHostedApplicationFactoryAddress()
 	if err != nil {
-		return zero, nil, fmt.Errorf("failed retrieve self hosted application factory address: %w", err)
+		return zero, nil, fmt.Errorf("[CreateAnvilSnapshotAndDeployApp]: failed retrieve self hosted application factory address: %w", err)
 	}
 
 	selfHostedApplicationFactory, err := iselfhostedapplicationfactory.NewISelfHostedApplicationFactory(selfHostedApplicationFactoryAddress, client)
 	if err != nil {
-		return zero, nil, fmt.Errorf("Failed to instantiate contract: %v", err)
+		return zero, nil, fmt.Errorf("[CreateAnvilSnapshotAndDeployApp]: failed to instantiate contract: %v", err)
 	}
 
 	applicationFactoryAddress, err := selfHostedApplicationFactory.GetApplicationFactory(nil)
 	if err != nil {
-		return zero, nil, err
+		return zero, nil, fmt.Errorf("[CreateAnvilSnapshotAndDeployApp]: failed to get ApplicationFactory: %w", err)
 	}
 
 	authorityFactoryAddress, err := config.GetContractsAuthorityFactoryAddress()
 	if err != nil {
-		return zero, nil, err
+		return zero, nil, fmt.Errorf("[CreateAnvilSnapshotAndDeployApp]: failed to get contracts authority factory address: %w", err)
 	}
 
 	ownerAddress := txOpts.From
@@ -78,6 +78,9 @@ func CreateAnvilSnapshotAndDeployApp(ctx context.Context, client *ethclient.Clie
 		EpochLength:               10,
 	}
 	applicationAddress, _, err := deployment.Deploy(ctx, client, txOpts)
+	if err != nil {
+		return zero, nil, fmt.Errorf("[CreateAnvilSnapshotAndDeployApp]: failed to deploy the application: %w", err)
+	}
 
 	// Define a cleanup function to revert to the snapshot
 	cleanup := func() {
@@ -95,7 +98,7 @@ func CreateAnvilSnapshot(rpcClient *rpc.Client) (string, error) {
 	// Using the JSON-RPC method "evm_snapshot" to create a snapshot
 	err := rpcClient.Call(&snapshotID, "evm_snapshot")
 	if err != nil {
-		return "", fmt.Errorf("failed to create snapshot: %w", err)
+		return "", fmt.Errorf("[CreateAnvilSnapshot]: failed to create snapshot: %w", err)
 	}
 	return snapshotID, nil
 }
@@ -105,10 +108,10 @@ func RevertToAnvilSnapshot(rpcClient *rpc.Client, snapshotID string) error {
 	// Using the JSON-RPC method "evm_revert" to revert to the snapshot
 	err := rpcClient.Call(&success, "evm_revert", snapshotID)
 	if err != nil {
-		return fmt.Errorf("failed to revert to snapshot: %w", err)
+		return fmt.Errorf("[CreateAnvilSnapshot]: failed to revert to snapshot: %w", err)
 	}
 	if !success {
-		return fmt.Errorf("failed to revert to snapshot with ID: %s", snapshotID)
+		return fmt.Errorf("[CreateAnvilSnapshot]: failed to revert to snapshot with ID: %s", snapshotID)
 	}
 	return nil
 }
@@ -119,12 +122,12 @@ func MineNewBlock(
 	client *ethclient.Client,
 ) (uint64, error) {
 	if client == nil {
-		return 0, fmt.Errorf("MineNewBlock: client is nil")
+		return 0, fmt.Errorf("[MineNewBlock]: client is nil")
 	}
 	rpcClient := client.Client()
 	err := rpcClient.CallContext(ctx, nil, "evm_mine")
 	if err != nil {
-		return 0, err
+		return 0, fmt.Errorf("[MineNewBlock]: failed to call evm_mine via RPC: %w", err)
 	}
 	return client.BlockNumber(ctx)
 }

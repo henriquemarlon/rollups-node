@@ -72,21 +72,21 @@ const applicationExamples = `
 
 func init() {
 	applicationCmd.Flags().StringVarP(&applicationConsensusAddressParam, "consensus", "c", "",
-		"Consensus Address")
+		"Consensus address. A new authority consensus will be created if this field is left empty.")
 	applicationCmd.Flags().StringVarP(&applicationFactoryAddressParam, "factory", "f", "",
-		"Factory Address")
+		"Application factory address. Default value is retrieved from configuration.")
 	applicationCmd.Flags().StringVarP(&applicationOwnerAddressParam, "owner", "o", "",
-		"Owner Address")
+		"Application owner address. If not defined, it will be derived from the auth method.")
 	applicationCmd.Flags().StringVarP(&applicationDataAvailabilityParam, "data-availability", "d", "",
-		"Owner Address")
+		"Data availability string. Default is input box.")
 	applicationCmd.Flags().BoolVarP(&applicationSelfHostedParam, "self-hosted", "s", false,
-		"Self Hosted Application")
+		"Self Hosted Application. Request the application to be deployed as self hosted.")
 	applicationCmd.Flags().StringVarP(&applicationTemplateHashParam, "template-hash", "H", "",
 		"Template hash. If not provided, it will be read from the template path")
 	applicationCmd.Flags().BoolVarP(&applicationRegisterParam, "register", "r", true,
 		"Register the application into the database")
 	applicationCmd.Flags().BoolVarP(&applicationEnableParam, "enable", "e", true,
-		"Application Owner Address. If not defined, it will be derived from the auth method.")
+		"Start processing the application, requires 'register=true'.")
 
 	// in case the user also requests an authority deployment
 	applicationCmd.Flags().StringVarP(&authorityFactoryAddressParam, "authority-factory", "F", "",

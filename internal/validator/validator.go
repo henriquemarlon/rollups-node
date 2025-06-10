@@ -12,7 +12,7 @@ import (
 
 	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/internal/merkle"
-	. "github.com/cartesi/rollups-node/internal/model"
+	"github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/repository"
 	"github.com/cartesi/rollups-node/pkg/service"
 	"github.com/ethereum/go-ethereum/common"
@@ -95,29 +95,34 @@ func (v *Service) String() string {
 const MAX_OUTPUT_TREE_HEIGHT = merkle.TREE_DEPTH
 
 type ValidatorRepository interface {
-	ListApplications(ctx context.Context, f repository.ApplicationFilter, p repository.Pagination) ([]*Application, uint64, error)
-	UpdateApplicationState(ctx context.Context, appID int64, state ApplicationState, reason *string) error
-	ListOutputs(ctx context.Context, nameOrAddress string, f repository.OutputFilter, p repository.Pagination) ([]*Output, uint64, error)
-	GetLastOutputBeforeBlock(ctx context.Context, nameOrAddress string, block uint64) (*Output, error)
-	ListEpochs(ctx context.Context, nameOrAddress string, f repository.EpochFilter, p repository.Pagination) ([]*Epoch, uint64, error)
-	GetLastInput(ctx context.Context, appAddress string, epochIndex uint64) (*Input, error) // FIXME migrate to list
-	GetEpochByVirtualIndex(ctx context.Context, nameOrAddress string, index uint64) (*Epoch, error)
-	StoreClaimAndProofs(ctx context.Context, epoch *Epoch, outputs []*Output) error
+	ListApplications(ctx context.Context, f repository.ApplicationFilter, p repository.Pagination) ([]*model.Application, uint64, error)
+	UpdateApplicationState(ctx context.Context, appID int64, state model.ApplicationState, reason *string) error
+	ListOutputs(
+		ctx context.Context,
+		nameOrAddress string,
+		f repository.OutputFilter,
+		p repository.Pagination,
+	) ([]*model.Output, uint64, error)
+	GetLastOutputBeforeBlock(ctx context.Context, nameOrAddress string, block uint64) (*model.Output, error)
+	ListEpochs(ctx context.Context, nameOrAddress string, f repository.EpochFilter, p repository.Pagination) ([]*model.Epoch, uint64, error)
+	GetLastInput(ctx context.Context, appAddress string, epochIndex uint64) (*model.Input, error) // FIXME migrate to list
+	GetEpochByVirtualIndex(ctx context.Context, nameOrAddress string, index uint64) (*model.Epoch, error)
+	StoreClaimAndProofs(ctx context.Context, epoch *model.Epoch, outputs []*model.Output) error
 }
 
-func getAllRunningApplications(ctx context.Context, er ValidatorRepository) ([]*Application, uint64, error) {
-	f := repository.ApplicationFilter{State: Pointer(ApplicationState_Enabled)}
+func getAllRunningApplications(ctx context.Context, er ValidatorRepository) ([]*model.Application, uint64, error) {
+	f := repository.ApplicationFilter{State: model.Pointer(model.ApplicationState_Enabled)}
 	return er.ListApplications(ctx, f, repository.Pagination{})
 }
 
-func getProcessedEpochs(ctx context.Context, er ValidatorRepository, address string) ([]*Epoch, uint64, error) {
-	f := repository.EpochFilter{Status: Pointer(EpochStatus_InputsProcessed)}
+func getProcessedEpochs(ctx context.Context, er ValidatorRepository, address string) ([]*model.Epoch, uint64, error) {
+	f := repository.EpochFilter{Status: model.Pointer(model.EpochStatus_InputsProcessed)}
 	return er.ListEpochs(ctx, address, f, repository.Pagination{})
 }
 
 // setApplicationInoperable marks an application as inoperable with the given reason,
 // logs any error that occurs during the update, and returns an error with the reason.
-func (v *Service) setApplicationInoperable(ctx context.Context, app *Application, reasonFmt string, args ...interface{}) error {
+func (v *Service) setApplicationInoperable(ctx context.Context, app *model.Application, reasonFmt string, args ...interface{}) error {
 	reason := fmt.Sprintf(reasonFmt, args...)
 	appAddress := app.IApplicationAddress.String()
 
@@ -125,7 +130,7 @@ func (v *Service) setApplicationInoperable(ctx context.Context, app *Application
 	v.Logger.Error(reason, "application", appAddress)
 
 	// Update application state
-	err := v.repository.UpdateApplicationState(ctx, app.ID, ApplicationState_Inoperable, &reason)
+	err := v.repository.UpdateApplicationState(ctx, app.ID, model.ApplicationState_Inoperable, &reason)
 	if err != nil {
 		v.Logger.Error("failed to update application state to inoperable", "app", appAddress, "err", err)
 	}
@@ -136,7 +141,7 @@ func (v *Service) setApplicationInoperable(ctx context.Context, app *Application
 
 // validateApplication calculates, validates and stores the claim and/or proofs
 // for each processed epoch of the application.
-func (v *Service) validateApplication(ctx context.Context, app *Application) error {
+func (v *Service) validateApplication(ctx context.Context, app *model.Application) error {
 	v.Logger.Debug("Starting validation", "application", app.Name)
 	appAddress := app.IApplicationAddress.String()
 	processedEpochs, _, err := getProcessedEpochs(ctx, v.repository, appAddress)
@@ -196,7 +201,7 @@ func (v *Service) validateApplication(ctx context.Context, app *Application) err
 		}
 
 		// update the epoch status and its claim
-		epoch.Status = EpochStatus_ClaimComputed
+		epoch.Status = model.EpochStatus_ClaimComputed
 		epoch.ClaimHash = claim
 
 		// store the epoch and proofs in the database
@@ -224,9 +229,9 @@ func (v *Service) validateApplication(ctx context.Context, app *Application) err
 // claim for the first epoch or the previous epoch claim otherwise.
 func (v *Service) createClaimAndProofs(
 	ctx context.Context,
-	app *Application,
-	epoch *Epoch,
-) (*common.Hash, []*Output, error) {
+	app *model.Application,
+	epoch *model.Epoch,
+) (*common.Hash, []*model.Output, error) {
 	appAddress := app.IApplicationAddress.String()
 	epochOutputs, _, err := v.repository.ListOutputs(ctx, appAddress, repository.OutputFilter{
 		BlockRange: &repository.Range{
@@ -242,7 +247,7 @@ func (v *Service) createClaimAndProofs(
 		)
 	}
 
-	var previousEpoch *Epoch
+	var previousEpoch *model.Epoch
 	if epoch.VirtualIndex > 0 {
 		previousEpoch, err = v.repository.GetEpochByVirtualIndex(ctx, appAddress, epoch.VirtualIndex-1)
 		if err != nil {

@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	DefaultMinChunkSize = new(big.Int).SetInt64(50)
+	DefaultMinChunkSize = new(big.Int).SetInt64(50) //nolint:mnd
 )
 
 type Filter struct {
@@ -54,6 +54,7 @@ func unwrapHTTPErrorAsJSON(body []byte) (jsonRPCError, error) {
 // │ https://site1.moralis-nodes.com/eth/{key} (free)  │   100 │    400 │ 2025-05-15 │
 // └───────────────────────────────────────────────────┴───────┴────────┴────────────┘
 func queryBlockRangeTooLargeCode(code int) bool {
+	//nolint: mnd
 	return (code == -32047) || // cloudflare (free)
 		(code == -32600) || // alchemy (free)
 		(code == -32005) || // infura (free)
@@ -87,7 +88,7 @@ func queryBlockRangeTooLarge(err error) bool {
 // (From, To) block ranges into multiple smaller calls when it detects the
 // provider rejected the query for this specific reason. Detection is a
 // heuristic and implemented in the function queryBlockRangeTooLarge. It
-// potentially has to be adjusted to accomodate each provider.
+// potentially has to be adjusted to accommodate each provider.
 func (f *Filter) ChunkedFilterLogs(
 	ctx context.Context,
 	client *ethclient.Client,

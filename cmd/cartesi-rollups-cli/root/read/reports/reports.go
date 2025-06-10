@@ -65,7 +65,7 @@ func init() {
 
 	Cmd.PreRunE = func(cmd *cobra.Command, args []string) error {
 		if limit > jsonrpc.LIST_ITEM_LIMIT {
-			return fmt.Errorf("limit cannot exceed %d", jsonrpc.LIST_ITEM_LIMIT)
+			return fmt.Errorf("[init]: limit cannot exceed %d", jsonrpc.LIST_ITEM_LIMIT)
 		} else if limit == 0 {
 			limit = jsonrpc.LIST_ITEM_LIMIT
 		}
@@ -91,7 +91,7 @@ func run(cmd *cobra.Command, args []string) {
 		// Get a specific report by index
 		reportIndex, err := config.ToUint64FromDecimalOrHexString(args[1])
 		if err != nil {
-			cobra.CheckErr(fmt.Errorf("invalid report index value: %w", err))
+			cobra.CheckErr(fmt.Errorf("[run]: invalid report index value: %w", err))
 		}
 
 		report, err := repo.GetReport(ctx, nameOrAddress, reportIndex)

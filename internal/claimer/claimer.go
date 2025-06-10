@@ -482,16 +482,16 @@ func (s *Service) checkConsensusForAddressChange(
 
 func checkEpochConstraint(c *model.Epoch) error {
 	if c.FirstBlock > c.LastBlock {
-		return fmt.Errorf("unexpected epoch state. first_block: %v > last_block: %v", c.FirstBlock, c.LastBlock)
+		return fmt.Errorf("[checkEpochConstraint]: unexpected epoch state. first_block: %v > last_block: %v", c.FirstBlock, c.LastBlock)
 	}
 	if c.Status == model.EpochStatus_ClaimSubmitted {
 		if c.ClaimHash == nil {
-			return fmt.Errorf("unexpected epoch state. missing claim_hash.")
+			return fmt.Errorf("[checkEpochConstraint]: unexpected epoch state. missing claim_hash")
 		}
 	}
 	if c.Status == model.EpochStatus_ClaimAccepted || c.Status == model.EpochStatus_ClaimSubmitted {
 		if c.ClaimTransactionHash == nil {
-			return fmt.Errorf("unexpected epoch state. missing claim_transaction_hash.")
+			return fmt.Errorf("[checkEpochConstraint]: unexpected epoch state. missing claim_transaction_hash")
 		}
 	}
 	return nil
@@ -502,21 +502,24 @@ func checkEpochSequenceConstraint(prevEpoch *model.Epoch, currEpoch *model.Epoch
 
 	err = checkEpochConstraint(currEpoch)
 	if err != nil {
-		return fmt.Errorf("%w on current epoch.", err)
+		return fmt.Errorf("[checkEpochSequenceConstraint]: %w on current epoch", err)
 	}
 	err = checkEpochConstraint(prevEpoch)
 	if err != nil {
-		return fmt.Errorf("%w on previous epoch.", err)
+		return fmt.Errorf("[checkEpochSequenceConstraint]: %w on previous epoch", err)
 	}
 
 	if prevEpoch.LastBlock > currEpoch.LastBlock {
-		return fmt.Errorf("unexpected epochs sequence on field last_block: previous(%v) > current(%v)", prevEpoch.LastBlock, currEpoch.LastBlock)
+		return fmt.Errorf("[checkEpochSequenceConstraint]: unexpected field last_block: previous(%v) > current(%v)",
+			prevEpoch.LastBlock, currEpoch.LastBlock)
 	}
 	if prevEpoch.FirstBlock > currEpoch.FirstBlock {
-		return fmt.Errorf("unexpected epochs sequence on field first_block: previous(%v) > current(%v)", prevEpoch.FirstBlock, currEpoch.FirstBlock)
+		return fmt.Errorf("[checkEpochSequenceConstraint]: unexpected field first_block: previous(%v) > current(%v)",
+			prevEpoch.FirstBlock, currEpoch.FirstBlock)
 	}
 	if prevEpoch.Index > currEpoch.Index {
-		return fmt.Errorf("unexpected epochs sequence on field index: previous(%v) > current(%v)", prevEpoch.Index, currEpoch.Index)
+		return fmt.Errorf("[checkEpochSequenceConstraint]: unexpected field index: previous(%v) > current(%v)",
+			prevEpoch.Index, currEpoch.Index)
 	}
 	return nil
 }

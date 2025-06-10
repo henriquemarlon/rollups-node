@@ -167,7 +167,8 @@ func (r *Service) readAndStoreInputs(
 						)
 						err := r.repository.UpdateApplicationState(ctx, app.application.ID, ApplicationState_Inoperable, &reason)
 						if err != nil {
-							r.Logger.Error("failed to update application state to inoperable", "application", app.application.Name, "err", err)
+							r.Logger.Error("failed to update application state to inoperable", "application",
+								app.application.Name, "err", err)
 						}
 						return errors.New(reason)
 					}

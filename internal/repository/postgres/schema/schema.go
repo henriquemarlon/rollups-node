@@ -28,8 +28,8 @@ type Schema struct {
 }
 
 var (
-	ErrMigrationNotCompleted = errors.New("Schema version is dirty")
-	ErrNoValidDatabaseSchema = errors.New("No valid database schema found")
+	ErrMigrationNotCompleted = errors.New("schema version is dirty")
+	ErrNoValidDatabaseSchema = errors.New("no valid database schema found")
 )
 
 func New(postgresEndpoint string) (*Schema, error) {

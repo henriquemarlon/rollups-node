@@ -70,7 +70,7 @@ import (
 )
 
 var (
-	ErrInvalid = fmt.Errorf("Invalid Argument") // invalid argument
+	ErrInvalid = fmt.Errorf("invalid argument")
 )
 
 type ServiceImpl interface {
@@ -128,7 +128,7 @@ type Service struct {
 //   - using default values when applicable
 func Create(ctx context.Context, c *CreateInfo, s *Service) error {
 	if c == nil || c.Impl == nil || c.Impl == s || s == nil {
-		return ErrInvalid
+		return fmt.Errorf("[Create]: failed to create service: %w", ErrInvalid)
 	}
 	if err := ctx.Err(); err != nil {
 		return err // This returns context.Canceled or context.DeadlineExceeded.
@@ -309,7 +309,7 @@ func (s *Service) CreateDefaultTelemetry(
 	}
 	return server, func() error {
 		var err error = nil
-		for retry := 0; retry < maxRetries+1; retry++ {
+		for retry := range maxRetries + 1 {
 			switch err = server.ListenAndServe(); err {
 			case http.ErrServerClosed:
 				return nil

@@ -18,18 +18,8 @@ func buildSelfhostedDeployment(
 	args []string,
 	app *ethutil.ApplicationDeployment,
 ) (*ethutil.SelfhostedDeployment, error) {
-	var authorityFactoryAddress common.Address
 	var selfHostedApplicationFactoryAddress common.Address
 	var err error
-
-	if !cmd.Flags().Changed("authority-factory") {
-		authorityFactoryAddress, err = config.GetContractsAuthorityFactoryAddress()
-	} else {
-		authorityFactoryAddress, err = parseHexAddress(authorityFactoryAddressParam)
-	}
-	if err != nil {
-		return nil, err
-	}
 
 	if !cmd.Flags().Changed("selfhosted-factory") {
 		selfHostedApplicationFactoryAddress, err = config.GetContractsSelfHostedApplicationFactoryAddress()
@@ -41,13 +31,11 @@ func buildSelfhostedDeployment(
 	}
 
 	return &ethutil.SelfhostedDeployment{
-		FactoryAddress:            selfHostedApplicationFactoryAddress,
-		ApplicationFactoryAddress: app.FactoryAddress,
-		AuthorityFactoryAddress:   authorityFactoryAddress,
-		OwnerAddress:              app.OwnerAddress,
-		TemplateHash:              app.TemplateHash,
-		DataAvailability:          app.DataAvailability,
-		EpochLength:               app.EpochLength,
-		Salt:                      app.Salt,
+		FactoryAddress:   selfHostedApplicationFactoryAddress,
+		OwnerAddress:     app.OwnerAddress,
+		TemplateHash:     app.TemplateHash,
+		DataAvailability: app.DataAvailability,
+		EpochLength:      app.EpochLength,
+		Salt:             app.Salt,
 	}, nil
 }

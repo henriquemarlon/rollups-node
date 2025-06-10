@@ -9,7 +9,6 @@ import (
 	"log"
 
 	"github.com/cartesi/rollups-node/internal/config"
-	"github.com/cartesi/rollups-node/pkg/contracts/iselfhostedapplicationfactory"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -51,31 +50,11 @@ func CreateAnvilSnapshotAndDeployApp(ctx context.Context, client *ethclient.Clie
 	if err != nil {
 		return zero, nil, fmt.Errorf("failed retrieve self hosted application factory address: %w", err)
 	}
-
-	selfHostedApplicationFactory, err := iselfhostedapplicationfactory.NewISelfHostedApplicationFactory(selfHostedApplicationFactoryAddress, client)
-	if err != nil {
-		return zero, nil, fmt.Errorf("Failed to instantiate contract: %v", err)
-	}
-
-	applicationFactoryAddress, err := selfHostedApplicationFactory.GetApplicationFactory(nil)
-	if err != nil {
-		return zero, nil, err
-	}
-
-	authorityFactoryAddress, err := config.GetContractsAuthorityFactoryAddress()
-	if err != nil {
-		return zero, nil, err
-	}
-
-	ownerAddress := txOpts.From
-
 	deployment := &SelfhostedDeployment{
-		FactoryAddress:            selfHostedApplicationFactoryAddress,
-		ApplicationFactoryAddress: applicationFactoryAddress,
-		AuthorityFactoryAddress:   authorityFactoryAddress,
-		OwnerAddress:              ownerAddress,
-		TemplateHash:              templateHash,
-		EpochLength:               10,
+		FactoryAddress: selfHostedApplicationFactoryAddress,
+		OwnerAddress:   txOpts.From,
+		TemplateHash:   templateHash,
+		EpochLength:    10,
 	}
 	applicationAddress, _, err := deployment.Deploy(ctx, client, txOpts)
 

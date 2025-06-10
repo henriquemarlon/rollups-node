@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"strings"
 
 	"github.com/cartesi/rollups-node/pkg/contracts/iapplication"
 	"github.com/cartesi/rollups-node/pkg/contracts/iconsensus"
@@ -24,6 +25,13 @@ const GasLimit = 30_000_000
 
 // Dev mnemonic used by Foundry/Anvil.
 const FoundryMnemonic = "test test test test test test test test test test test junk"
+
+func TrimHex(s string) string {
+	s = strings.TrimPrefix(s, "0x")
+	s = strings.TrimPrefix(s, "0X")
+	s = strings.TrimSpace(s)
+	return s
+}
 
 // Add input to the input box for the given DApp address.
 // This function waits until the transaction is added to a block and return the input index.

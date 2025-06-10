@@ -17,14 +17,16 @@ import (
 )
 
 type SelfhostedDeployment struct {
-	FactoryAddress            common.Address `json:"factory"`
-	ApplicationFactoryAddress common.Address `json:"application"`
-	AuthorityFactoryAddress   common.Address `json:"authority"`
-	OwnerAddress              common.Address `json:"owner"` // same for application and authority
-	TemplateHash              common.Hash    `json:"template_hash"`
-	DataAvailability          []byte         `json:"data_availability"`
-	EpochLength               uint64         `json:"epoch_length"`
-	Salt                      SaltBytes      `json:"salt"`
+	FactoryAddress   common.Address `json:"selfhosted_factory"`
+	OwnerAddress     common.Address `json:"owner"` // same for application and authority
+	TemplateHash     common.Hash    `json:"template_hash"`
+	DataAvailability []byte         `json:"data_availability"`
+	EpochLength      uint64         `json:"epoch_length"`
+	Salt             SaltBytes      `json:"salt"`
+
+	// initialized during deploy
+	ApplicationFactoryAddress common.Address `json:"application_factory"`
+	AuthorityFactoryAddress   common.Address `json:"authority_factory"`
 }
 
 func (me *SelfhostedDeployment) Deploy(
@@ -38,9 +40,23 @@ func (me *SelfhostedDeployment) Deploy(
 		return zero, zero, err
 	}
 
+	// check if the factory address points to a deployed contract
+	code, err := client.CodeAt(ctx, me.FactoryAddress, nil)
+	if len(code) == 0 || err != nil {
+		return zero, zero, fmt.Errorf("failed to verify the factory address during self hosted application deployment. No code at address")
+	}
+
 	receipt, err := sendTransaction(
 		ctx, client, txOpts, big.NewInt(0), GasLimit,
 		func(txOpts *bind.TransactOpts) (*types.Transaction, error) {
+			me.ApplicationFactoryAddress, err = factory.GetApplicationFactory(nil)
+			if err != nil {
+				return nil, err
+			}
+			me.AuthorityFactoryAddress, err = factory.GetAuthorityFactory(nil)
+			if err != nil {
+				return nil, err
+			}
 			return factory.DeployContracts(txOpts, me.OwnerAddress, big.NewInt(0).SetUint64(me.EpochLength), me.OwnerAddress, me.TemplateHash,
 				me.DataAvailability, me.Salt)
 		},
@@ -69,8 +85,7 @@ func (me *SelfhostedDeployment) Deploy(
 		applicationAddress = event.AppContract
 		goto applicationEventFound
 	}
-	// searched logs, didn't find event
-	return zero, zero, fmt.Errorf("failed to obtain application address of self hosted application deployment")
+	return zero, zero, fmt.Errorf("failed to obtain application address during self hosted application deployment. ApplicationCreated event not found in the recipe logs")
 
 applicationEventFound:
 	for _, vLog := range receipt.Logs {
@@ -81,8 +96,7 @@ applicationEventFound:
 		authorityAddress = event.Authority
 		goto authorityEventFound
 	}
-	// searched logs, didn't find event
-	return zero, zero, fmt.Errorf("failed to obtain authority address of self hosted application deployment")
+	return zero, zero, fmt.Errorf("failed to obtain authority address during self hosted application deployment. AuthorityCreated event not found in the recipe logs")
 
 authorityEventFound:
 	return applicationAddress, authorityAddress, nil

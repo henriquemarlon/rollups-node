@@ -40,18 +40,24 @@ var (
 )
 
 var applicationCmd = &cobra.Command{
-	Use:     "application <application-name> <template-path>",
-	Short:   "Deploy a new application and register it into the database",
-	Args:    cobra.ExactArgs(2), // nolint: mnd
+	Use:   "application <application-name> [template-path]",
+	Short: "Deploy a new application and register it into the database",
+	Args: func(cmd *cobra.Command, args []string) error {
+		if !(1 <= len(args) && len(args) <= 2) {
+			return fmt.Errorf("Expected 1 or 2 args")
+		}
+		return cobra.OnlyValidArgs(cmd, args)
+	},
 	Example: applicationExamples,
 	Run:     runDeployApplication,
 	Long: `
 Supported Environment Variables:
-  CARTESI_DATABASE_CONNECTION                    Database connection string
-  CARTESI_BLOCKCHAIN_HTTP_ENDPOINT               Blockchain HTTP endpoint
-  CARTESI_CONTRACTS_INPUT_BOX_ADDRESS            Input Box contract address
-  CARTESI_CONTRACTS_APPLICATION_FACTORY_ADDRESS  Application Factory address
-  CARTESI_CONTRACTS_AUTHORITY_FACTORY_ADDRESS    Authority Factory address`,
+  CARTESI_DATABASE_CONNECTION                                Database connection string
+  CARTESI_BLOCKCHAIN_HTTP_ENDPOINT                           Blockchain HTTP endpoint
+  CARTESI_CONTRACTS_INPUT_BOX_ADDRESS                        Input Box contract address
+  CARTESI_CONTRACTS_APPLICATION_FACTORY_ADDRESS              Application Factory address
+  CARTESI_CONTRACTS_AUTHORITY_FACTORY_ADDRESS                Authority Factory address
+  CARTESI_CONTRACTS_SELF_HOSTED_APPLICATION_FACTORY_ADDRESS  Self Hosted Application Factory address`,
 }
 
 const applicationExamples = `
@@ -68,31 +74,43 @@ const applicationExamples = `
  - cli deploy application echo-dapp applications/echo-dapp/ --register=false
 
 # deploy and register into the database, but disabled
- - cli deploy application echo-dapp applications/echo-dapp/ --enable=false`
+ - cli deploy application echo-dapp applications/echo-dapp/ --enable=false
+
+# deploy an application without a template
+ - cli deploy application echo-dapp --template-hash=0x0000000000000000000000000000000000000000000000000000000000000000 --register=false`
 
 func init() {
 	applicationCmd.Flags().StringVarP(&applicationConsensusAddressParam, "consensus", "c", "",
-		"Consensus Address")
+		"Consensus address. A new authority consensus will be created if this field is left empty.")
 	applicationCmd.Flags().StringVarP(&applicationFactoryAddressParam, "factory", "f", "",
-		"Factory Address")
+		"Application factory address. Default value is retrieved from configuration.")
 	applicationCmd.Flags().StringVarP(&applicationOwnerAddressParam, "owner", "o", "",
-		"Owner Address")
+		"Application owner address. If not defined, it will be derived from the auth method.")
 	applicationCmd.Flags().StringVarP(&applicationDataAvailabilityParam, "data-availability", "d", "",
-		"Owner Address")
+		"Data availability string. Default is input box.")
 	applicationCmd.Flags().BoolVarP(&applicationSelfHostedParam, "self-hosted", "s", false,
-		"Self Hosted Application")
+		"Self Hosted Application. Request the application to be deployed as self hosted.")
 	applicationCmd.Flags().StringVarP(&applicationTemplateHashParam, "template-hash", "H", "",
 		"Template hash. If not provided, it will be read from the template path")
 	applicationCmd.Flags().BoolVarP(&applicationRegisterParam, "register", "r", true,
 		"Register the application into the database")
 	applicationCmd.Flags().BoolVarP(&applicationEnableParam, "enable", "e", true,
-		"Application Owner Address. If not defined, it will be derived from the auth method.")
+		"Start processing the application, requires 'register=true'.")
 
 	// in case the user also requests an authority deployment
 	applicationCmd.Flags().StringVarP(&authorityFactoryAddressParam, "authority-factory", "F", "",
 		"Authority Factory Address. If defined, epoch-length value will be used to create a new consensus")
 	applicationCmd.Flags().StringVarP(&authorityOwnerAddressParam, "authority-owner", "O", "",
 		"Authority Owner. If not defined, it will be derived from the auth method.")
+
+	origHelpFunc := applicationCmd.HelpFunc()
+	applicationCmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
+		command.Flags().Lookup("epoch-length").Hidden = false
+		command.Flags().Lookup("salt").Hidden = false
+		command.Flags().Lookup("json").Hidden = false
+		command.Flags().Lookup("verbose").Hidden = false
+		origHelpFunc(command, strings)
+	})
 }
 
 func runDeployApplication(cmd *cobra.Command, args []string) {
@@ -110,10 +128,13 @@ func runDeployApplication(cmd *cobra.Command, args []string) {
 	txOpts, err := auth.GetTransactOpts(chainId)
 	cobra.CheckErr(err)
 
-	application, err := buildApplicationDeployment(cmd, args, ctx, client, txOpts)
+	deployment, err := buildApplicationDeployment(cmd, args, ctx, client, txOpts)
 	cobra.CheckErr(err)
 
-	application.IApplicationAddress, err = application.Deploy(ctx, client, txOpts)
+	if !asJson {
+		fmt.Printf("\nDeploying application: %v...", deployment.Application.Name)
+	}
+	deployment.IApplicationAddress, err = deployment.Deploy(ctx, client, txOpts)
 	if err != nil {
 		if asJson {
 			result := struct {
@@ -127,39 +148,129 @@ func runDeployApplication(cmd *cobra.Command, args []string) {
 			cobra.CheckErr(err)
 			fmt.Println(string(report))
 		} else {
-			fmt.Fprintf(os.Stderr,
-				"%v.\n"+
-					"Possible errors include:\n"+
-					"- A contract was already deployed to this address, try changing the salt value.\n", err)
+			fmt.Printf("failure\n\n")
+			fmt.Fprintf(os.Stderr, "%v.\n\n", err)
 		}
 		os.Exit(1)
 	}
+	if !asJson {
+		fmt.Printf("success\n\n")
+		fmt.Println("application address:", deployment.IApplicationAddress)
+		if deployment.WithSelfHosted != nil {
+			fmt.Println("consensus address:", deployment.IConsensusAddress)
+		} else if deployment.WithAuthority != nil {
+			fmt.Println("consensus address:", deployment.IConsensusAddress)
+		}
+		if verbose {
+			if deployment.WithSelfHosted != nil {
+				fmt.Println("selfhosted factory:", deployment.WithSelfHosted.FactoryAddress)
+				fmt.Println("application factory:", deployment.WithSelfHosted.ApplicationFactoryAddress)
+				fmt.Println("authority factory:", deployment.WithSelfHosted.AuthorityFactoryAddress)
+			} else if deployment.WithAuthority != nil {
+				fmt.Println("application factory:", deployment.FactoryAddress)
+				fmt.Println("authority factory:", deployment.WithAuthority.FactoryAddress)
+			}
+		}
+	}
 
 	// register
+	registered := false
 	if applicationRegisterParam {
-		dsn, err := config.GetDatabaseConnection()
-		cobra.CheckErr(err)
+		if !asJson {
+			fmt.Printf("\nRegistering application: %v...", deployment.Application.Name)
+		}
 
-		repo, err := factory.NewRepositoryFromConnectionString(ctx, dsn.String())
-		cobra.CheckErr(err)
-		defer repo.Close()
+		if deployment.Application.TemplateURI == "" {
+			if !asJson {
+				fmt.Printf("failure. template-path is empty\n\n")
+			}
+		} else {
+			dsn, err := config.GetDatabaseConnection()
+			cobra.CheckErr(err)
 
-		_, err = repo.CreateApplication(ctx, (*model.Application)(&application.ApplicationModel))
-		cobra.CheckErr(err)
+			repo, err := factory.NewRepositoryFromConnectionString(ctx, dsn.String())
+			cobra.CheckErr(err)
+			defer repo.Close()
+
+			_, err = repo.CreateApplication(ctx, &deployment.Application)
+			cobra.CheckErr(err)
+
+			// retrieve fields initialized by the database
+			app, err := repo.GetApplication(ctx, deployment.Application.Name)
+			cobra.CheckErr(err)
+
+			deployment.Application = *app
+			if !asJson {
+				fmt.Printf("success\n\n")
+			}
+			registered = true
+		}
 	}
 
 	if asJson {
-		report, err := json.MarshalIndent(&application, "", "  ")
-		cobra.CheckErr(err) // deployed, but fail to print
-		fmt.Println(string(report))
-	} else {
-		if application.WithAuthority != nil {
-			fmt.Println("authority consensus: ", application.IConsensusAddress)
+		if !verbose {
+			report, err := json.MarshalIndent(&deployment.Application, "", "  ")
+			cobra.CheckErr(err)
+			fmt.Println(string(report))
+		} else {
+			if deployment.WithSelfHosted != nil {
+				// application + selfhosted details
+				deploymentReport := struct {
+					Application        model.Application `json:"application"`
+					Registered         bool              `json:"registered"`
+					Owner              common.Address    `json:"owner"`
+					SelfhostedFactory  common.Address    `json:"selfhosted_factory"`
+					ApplicationFactory common.Address    `json:"application_factory"`
+					AuthorityFactory   common.Address    `json:"authority_factory"`
+				}{
+					Application:        deployment.Application,
+					Registered:         registered,
+					Owner:              deployment.OwnerAddress,
+					SelfhostedFactory:  deployment.FactoryAddress,
+					ApplicationFactory: deployment.WithSelfHosted.ApplicationFactoryAddress,
+					AuthorityFactory:   deployment.WithSelfHosted.AuthorityFactoryAddress,
+				}
+				report, err := json.MarshalIndent(&deploymentReport, "", "  ")
+				cobra.CheckErr(err)
+				fmt.Println(string(report))
+
+			} else if deployment.WithAuthority != nil {
+				// application + authority details
+				deploymentReport := struct {
+					Application        model.Application `json:"application"`
+					Registered         bool              `json:"registered"`
+					Owner              common.Address    `json:"owner"`
+					ApplicationFactory common.Address    `json:"application_factory"`
+					AuthorityFactory   common.Address    `json:"authority_factory"`
+				}{
+					Application:        deployment.Application,
+					Registered:         registered,
+					Owner:              deployment.OwnerAddress,
+					ApplicationFactory: deployment.FactoryAddress,
+					AuthorityFactory:   deployment.WithAuthority.FactoryAddress,
+				}
+				report, err := json.MarshalIndent(&deploymentReport, "", "  ")
+				cobra.CheckErr(err)
+				fmt.Println(string(report))
+
+			} else {
+				// application only
+				deploymentReport := struct {
+					Application        model.Application `json:"application"`
+					Registered         bool              `json:"registered"`
+					Owner              common.Address    `json:"owner"`
+					ApplicationFactory common.Address    `json:"application_factory"`
+				}{
+					Application:        deployment.Application,
+					Registered:         registered,
+					Owner:              deployment.OwnerAddress,
+					ApplicationFactory: deployment.FactoryAddress,
+				}
+				report, err := json.MarshalIndent(&deploymentReport, "", "  ")
+				cobra.CheckErr(err)
+				fmt.Println(string(report))
+			}
 		}
-		if application.WithSelfHosted != nil {
-			fmt.Println("selfhosted consensus: ", application.IConsensusAddress)
-		}
-		fmt.Println("application: ", application.IApplicationAddress)
 	}
 }
 
@@ -180,16 +291,22 @@ func buildApplicationDeployment(
 	var inputBoxBlock *big.Int
 	var encodedDA []byte
 	var templateHash common.Hash
+	var templatePath string
 
 	name, err := config.ToApplicationNameFromString(args[0])
 	if err != nil {
 		return nil, err
 	}
 
-	template := args[1]
+	if len(args) > 1 {
+		templatePath = args[1]
+	}
 
 	if !cmd.Flags().Changed("template-hash") {
-		templateHash, err = readHash(template)
+		if len(args) < 2 {
+			return nil, fmt.Errorf("template-hash auto detection requires a value template-path")
+		}
+		templateHash, err = readHash(templatePath)
 	} else {
 		templateHash, err = parseHexHash(applicationTemplateHashParam)
 	}
@@ -231,9 +348,9 @@ func buildApplicationDeployment(
 
 	// partial construction of deployment. consensus will be updated after contracts are deployed
 	deployment := ethutil.ApplicationDeployment{
-		ApplicationModel: ethutil.ApplicationModel{
+		Application: model.Application{
 			Name:             name,
-			TemplateURI:      template,
+			TemplateURI:      templatePath,
 			TemplateHash:     templateHash,
 			IInputBoxAddress: inputBoxAddress,
 			IInputBoxBlock:   inputBoxBlock.Uint64(),

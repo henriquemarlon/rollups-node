@@ -37,13 +37,22 @@ const authorityExamples = `
  - cli deploy authority
 
 # deploy a new authority contract with a custom owner and factory address
- - cli deploy authority -O 0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA -F 0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB`
+ - cli deploy authority --authority-owner 0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA --authority-factory 0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB`
 
 func init() {
 	authorityCmd.Flags().StringVarP(&authorityFactoryAddressParam, "authority-factory", "F", "",
 		"Authority Factory Address. If defined, epoch-length value will be used to create a new consensus")
 	authorityCmd.Flags().StringVarP(&authorityOwnerAddressParam, "authority-owner", "O", "",
 		"Authority Owner. If not defined, it will be derived from the auth method.")
+
+	origHelpFunc := authorityCmd.HelpFunc()
+	authorityCmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
+		command.Flags().Lookup("epoch-length").Hidden = false
+		command.Flags().Lookup("salt").Hidden = false
+		command.Flags().Lookup("json").Hidden = false
+		command.Flags().Lookup("verbose").Hidden = false
+		origHelpFunc(command, strings)
+	})
 }
 
 func runDeployAuthority(cmd *cobra.Command, args []string) {
@@ -66,6 +75,9 @@ func runDeployAuthority(cmd *cobra.Command, args []string) {
 	authority, err := buildAuthorityDeployment(cmd, txOpts)
 	cobra.CheckErr(err)
 
+	if !asJson {
+		fmt.Printf("Deploying authority...")
+	}
 	authority.Address, err = authority.Deploy(ctx, client, txOpts)
 	cobra.CheckErr(err)
 
@@ -82,10 +94,7 @@ func runDeployAuthority(cmd *cobra.Command, args []string) {
 			cobra.CheckErr(err)
 			fmt.Println(string(report))
 		} else {
-			fmt.Fprintf(os.Stderr,
-				"%v.\n"+
-					"Possible errors include:\n"+
-					"- A contract was already deployed to this address, try changing the salt value.\n", err)
+			fmt.Fprintf(os.Stderr, "%v.\n", err)
 		}
 		os.Exit(1)
 	} else {
@@ -94,7 +103,8 @@ func runDeployAuthority(cmd *cobra.Command, args []string) {
 			cobra.CheckErr(err) // deployed, but fail to print
 			fmt.Println(string(report))
 		} else {
-			fmt.Println("authority deployed: ", authority.Address)
+			fmt.Printf("success\n\n")
+			fmt.Println("consensus address: ", authority.Address)
 		}
 	}
 }

@@ -12,7 +12,7 @@ import (
 type SaltBytes [32]byte
 
 func ParseSalt(salt string) (SaltBytes, error) {
-	data, err := hex.DecodeString(salt)
+	data, err := hex.DecodeString(TrimHex(salt))
 	if err != nil {
 		return [32]byte{}, err
 	}

@@ -14,6 +14,7 @@ var (
 	epochLengthParam uint64
 	saltParam        string
 	asJson           bool
+	verbose          bool
 )
 
 var Cmd = &cobra.Command{
@@ -25,10 +26,16 @@ var Cmd = &cobra.Command{
 func init() {
 	Cmd.PersistentFlags().Uint64VarP(&epochLengthParam, "epoch-length", "", 10, // nolint: mnd
 		"Epoch length")
+	Cmd.PersistentFlags().MarkHidden("epoch-length")
 	Cmd.PersistentFlags().StringVar(&saltParam, "salt", "0000000000000000000000000000000000000000000000000000000000000000",
 		"Salt value for contract deployment")
+	Cmd.PersistentFlags().MarkHidden("salt")
 	Cmd.PersistentFlags().BoolVarP(&asJson, "json", "", false,
 		"Print results as JSON")
+	Cmd.PersistentFlags().MarkHidden("json")
+	Cmd.PersistentFlags().BoolVarP(&verbose, "verbose", "", false,
+		"Print extra information")
+	Cmd.PersistentFlags().MarkHidden("verbose")
 
 	Cmd.AddCommand(applicationCmd)
 	Cmd.AddCommand(authorityCmd)

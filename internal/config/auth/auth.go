@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"math/big"
 	"os"
-	"strings"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -22,13 +21,6 @@ import (
 	signtx "github.com/cartesi/rollups-node/internal/kms"
 	"github.com/cartesi/rollups-node/pkg/ethutil"
 )
-
-func trimHex(s string) string {
-	s = strings.TrimSpace(s)
-	s = strings.TrimPrefix(s, "0x")
-	s = strings.TrimPrefix(s, "0X")
-	return s
-}
 
 func GetTransactOpts(chainId *big.Int) (*bind.TransactOpts, error) {
 	authKind, err := GetAuthKind()
@@ -73,7 +65,7 @@ func GetTransactOpts(chainId *big.Int) (*bind.TransactOpts, error) {
 		if err != nil {
 			return nil, err
 		}
-		key, err := crypto.HexToECDSA(trimHex(privateKey.Value))
+		key, err := crypto.HexToECDSA(ethutil.TrimHex(privateKey.Value))
 		if err != nil {
 			return nil, err
 		}
@@ -87,7 +79,7 @@ func GetTransactOpts(chainId *big.Int) (*bind.TransactOpts, error) {
 		if err != nil {
 			return nil, err
 		}
-		key, err := crypto.HexToECDSA(trimHex(string(privateKey)))
+		key, err := crypto.HexToECDSA(ethutil.TrimHex(string(privateKey)))
 		if err != nil {
 			return nil, err
 		}

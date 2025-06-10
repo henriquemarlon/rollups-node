@@ -14,14 +14,13 @@ import (
 )
 
 // NOTE: json formatting breaks if we don't use a separate type, don't know why
-type ApplicationModel model.Application
 type ApplicationDeployment struct {
-	ApplicationModel `json:"application"`
-	FactoryAddress   common.Address        `json:"factory"`
-	OwnerAddress     common.Address        `json:"owner"`
-	Salt             SaltBytes             `json:"salt"`
-	WithAuthority    *AuthorityDeployment  `json:"authority,omitempty"`
-	WithSelfHosted   *SelfhostedDeployment `json:"selfhosted,omitempty"`
+	model.Application `json:"application"`
+	FactoryAddress    common.Address        `json:"factory"`
+	OwnerAddress      common.Address        `json:"owner"`
+	Salt              SaltBytes             `json:"salt"`
+	WithAuthority     *AuthorityDeployment  `json:"authority,omitempty"`
+	WithSelfHosted    *SelfhostedDeployment `json:"selfhosted,omitempty"`
 }
 
 // function does one of 3 things:

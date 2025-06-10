@@ -33,7 +33,7 @@ func sendTransaction(
 	}
 	tx, err := doSend(txOpts)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send dapp address: %v", err)
+		return nil, fmt.Errorf("failed to send transaction: %v", err)
 	}
 	receipt, err := _waitForTransaction(ctx, client, tx)
 	if err != nil {
@@ -90,7 +90,7 @@ func _waitForTransaction(
 	if err != nil {
 		return nil, fmt.Errorf("failed to get receipt: %v", err)
 	}
-	if receipt.Status == 0 {
+	if receipt.Status == types.ReceiptStatusFailed {
 		reason, err := _traceTransaction(client, tx.Hash())
 		if err != nil {
 			return nil, fmt.Errorf("transaction failed; failed to get reason: %v", err)

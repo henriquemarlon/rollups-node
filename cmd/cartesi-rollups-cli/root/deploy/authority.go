@@ -72,40 +72,50 @@ func runDeployAuthority(cmd *cobra.Command, args []string) {
 	txOpts, err := auth.GetTransactOpts(chainId)
 	cobra.CheckErr(err)
 
-	authority, err := buildAuthorityDeployment(cmd, txOpts)
+	deployment, err := buildAuthorityDeployment(cmd, txOpts)
 	cobra.CheckErr(err)
 
-	if !asJson {
-		fmt.Printf("Deploying authority...")
+	if verboseParam {
+		fmt.Fprint(os.Stderr, deployment)
+		fmt.Fprintln(os.Stderr, "\twallet address:       ", txOpts.From)
+
 	}
-	authority.Address, err = authority.Deploy(ctx, client, txOpts)
+
+	// factory check
+	if verboseParam {
+		fmt.Fprint(os.Stderr, "checking factory address...")
+	}
+
+	factoryAddress := deployment.FactoryAddress
+	data, err := client.CodeAt(ctx, factoryAddress, nil)
 	cobra.CheckErr(err)
 
-	if err != nil {
-		if asJson {
-			data := struct {
-				Code    int
-				Message string
-			}{
-				Code:    1,
-				Message: err.Error(),
-			}
-			report, err := json.MarshalIndent(&data, "", "  ")
-			cobra.CheckErr(err)
-			fmt.Println(string(report))
-		} else {
-			fmt.Fprintf(os.Stderr, "%v.\n", err)
-		}
-		os.Exit(1)
-	} else {
-		if asJson {
-			report, err := json.MarshalIndent(&authority, "", "  ")
-			cobra.CheckErr(err) // deployed, but fail to print
-			fmt.Println(string(report))
-		} else {
-			fmt.Printf("success\n\n")
-			fmt.Println("consensus address: ", authority.Address)
-		}
+	if len(data) == 0 {
+		cobra.CheckErr(fmt.Errorf("No code at the factory address: %v", factoryAddress))
+	}
+	if verboseParam {
+		fmt.Fprint(os.Stderr, "success\n")
+	}
+
+	// deploy
+	if verboseParam || !asJsonParam {
+		fmt.Fprintf(os.Stderr, "deploying authority...")
+	}
+	deployment.Address, err = deployment.Deploy(ctx, client, txOpts)
+	cobra.CheckErr(err)
+
+	// report
+	if verboseParam || !asJsonParam {
+		fmt.Fprintf(os.Stderr, "success\n")
+		fmt.Fprintln(os.Stderr, "\tconsensus address:    ", deployment.Address)
+		fmt.Fprintln(os.Stderr, "\tepoch length:         ", deployment.EpochLength)
+	}
+
+	if asJsonParam {
+		report, err := json.MarshalIndent(&deployment, "", "  ")
+		cobra.CheckErr(err) // deployed, but fail to print
+
+		fmt.Println(string(report))
 	}
 }
 
@@ -120,21 +130,21 @@ func buildAuthorityDeployment(cmd *cobra.Command, txOpts *bind.TransactOpts) (*e
 		authorityFactoryAddress, err = parseHexAddress(authorityFactoryAddressParam)
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error on parameter authority-factory: %w", err)
 	}
 
 	if !cmd.Flags().Changed("authority-owner") {
 		authorityOwnerAddress = txOpts.From
 	} else {
 		authorityOwnerAddress, err = parseHexAddress(authorityOwnerAddressParam)
-		if err != nil {
-			return nil, err
-		}
+	}
+	if err != nil {
+		return nil, fmt.Errorf("error on parameter authority-owner: %w", err)
 	}
 
 	salt, err := ethutil.ParseSalt(saltParam)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error on parameter salt: %w", err)
 	}
 
 	return &ethutil.AuthorityDeployment{
@@ -142,5 +152,6 @@ func buildAuthorityDeployment(cmd *cobra.Command, txOpts *bind.TransactOpts) (*e
 		OwnerAddress:   authorityOwnerAddress,
 		EpochLength:    epochLengthParam,
 		Salt:           salt,
+		Verbose:        verboseParam,
 	}, nil
 }

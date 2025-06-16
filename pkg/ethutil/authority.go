@@ -19,9 +19,26 @@ type AuthorityDeployment struct {
 	OwnerAddress   common.Address `json:"owner"`
 	EpochLength    uint64         `json:"epoch_length"`
 	Salt           SaltBytes      `json:"salt"`
+	Verbose        bool           `json:"-"`
 }
 
-func (me AuthorityDeployment) Deploy(ctx context.Context, client *ethclient.Client, txOpts *bind.TransactOpts) (common.Address, error) {
+func (me *AuthorityDeployment) String() string {
+	result := ""
+	result += fmt.Sprintf("authority deployment:\n")
+	result += fmt.Sprintf("\tauthority owner:       %v\n", me.OwnerAddress)
+	if me.Verbose {
+		result += fmt.Sprintf("\tfactory address:       %v\n", me.FactoryAddress)
+		result += fmt.Sprintf("\tsalt:                  %v\n", me.Salt)
+		result += fmt.Sprintf("\tepoch length:          %v\n", me.EpochLength)
+	}
+	return result
+}
+
+func (me AuthorityDeployment) Deploy(
+	ctx context.Context,
+	client *ethclient.Client,
+	txOpts *bind.TransactOpts,
+) (common.Address, error) {
 	contract, err := iauthorityfactory.NewIAuthorityFactory(me.FactoryAddress, client)
 	if err != nil {
 		return common.Address{}, fmt.Errorf("failed to instantiate contract: %v", err)

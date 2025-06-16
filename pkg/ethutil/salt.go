@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+
+	"github.com/ethereum/go-ethereum/common"
 )
 
 // create a type for salt to print correctly as JSON
@@ -27,4 +29,8 @@ func ParseSalt(salt string) (SaltBytes, error) {
 // print it as a single string instead of multiple integer values
 func (me *SaltBytes) MarshalJSON() ([]byte, error) {
 	return json.Marshal(hex.EncodeToString(me[:]))
+}
+
+func (me SaltBytes) String() string {
+	return common.BytesToHash(me[:]).String()
 }

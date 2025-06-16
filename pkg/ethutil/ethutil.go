@@ -63,6 +63,17 @@ func AddInput(
 	return index, receipt.BlockNumber.Uint64(), nil
 }
 
+func CheckAddressForCode(ctx context.Context, client *ethclient.Client, address common.Address) error {
+	code, err := client.CodeAt(ctx, address, nil)
+	if err != nil {
+		return fmt.Errorf("failed to check address for code: %w", err)
+	}
+	if len(code) == 0 {
+		return fmt.Errorf("No code at address: %v", address)
+	}
+	return nil
+}
+
 // Get input index in the transaction by looking at the event logs.
 func getInputIndex(
 	inputBoxAddress common.Address,

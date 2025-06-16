@@ -4,66 +4,89 @@ package ethutil
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 
-	"github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/pkg/contracts/iapplicationfactory"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-// NOTE: json formatting breaks if we don't use a separate type, don't know why
+type IApplicationDeployment interface {
+	Deploy(ctx context.Context, client *ethclient.Client, txOpts *bind.TransactOpts) (common.Address, IApplicationDeploymentResult, error)
+	GetFactoryAddress() common.Address
+}
+type IApplicationDeploymentResult interface{}
+
 type ApplicationDeployment struct {
-	model.Application `json:"application"`
-	FactoryAddress    common.Address        `json:"factory"`
-	OwnerAddress      common.Address        `json:"owner"`
-	Salt              SaltBytes             `json:"salt"`
-	WithAuthority     *AuthorityDeployment  `json:"authority,omitempty"`
-	WithSelfHosted    *SelfhostedDeployment `json:"selfhosted,omitempty"`
+	FactoryAddress   common.Address `json:"factory"`
+	Consensus        common.Address `json:"consensus"`
+	OwnerAddress     common.Address `json:"owner"`
+	DataAvailability []byte         `json:"-"`
+	TemplateHash     common.Hash    `json:"template_hash"`
+	Salt             SaltBytes      `json:"salt"`
+
+	// needed by model.Application
+	InputBoxAddress common.Address `json:"inputbox_address"`
+	IInputBoxBlock  uint64         `json:"inputbox_block"`
+	EpochLength     uint64         `json:"epoch_length"`
+
+	Verbose bool
 }
 
-// function does one of 3 things:
-// - withSelfHosted != nil => application + authority (together via SelfHosted contract)
-// - withAuthority != nil =>  application + authority (as two separate deployments)
-// - withSelfHosted == nil && withAuthority == nil => application only
-func (me *ApplicationDeployment) Deploy(ctx context.Context, client *ethclient.Client, txOpts *bind.TransactOpts) (common.Address, error) {
-	var err error
+type ApplicationDeploymentResult struct {
+	Deployment *ApplicationDeployment `json:"deployment"`
+
+	ApplicationAddress common.Address `json:"address"`
+}
+
+func (me *ApplicationDeployment) String() string {
+	result := ""
+	result += fmt.Sprintf("application deployment:\n")
+	result += fmt.Sprintf("\tapplication owner:     %v\n", me.OwnerAddress)
+	result += fmt.Sprintf("\tconsensus address:     %v\n", me.Consensus)
+	if me.Verbose {
+		result += fmt.Sprintf("\tfactory address:       %v\n", me.FactoryAddress)
+		result += fmt.Sprintf("\ttemplate hash:         %v\n", me.TemplateHash)
+		result += fmt.Sprintf("\tdata availability:     0x%v\n", hex.EncodeToString(me.DataAvailability))
+		result += fmt.Sprintf("\tsalt:                  %v\n", me.Salt)
+		result += fmt.Sprintf("\tepoch length:          %v\n", me.EpochLength)
+	}
+	return result
+}
+
+func (me *ApplicationDeploymentResult) String() string {
+	result := ""
+	result += fmt.Sprintf("\tapplication address:   %v\n", me.ApplicationAddress)
+	return result
+}
+
+func (me *ApplicationDeployment) Deploy(
+	ctx context.Context,
+	client *ethclient.Client,
+	txOpts *bind.TransactOpts,
+) (common.Address, IApplicationDeploymentResult, error) {
 	zero := common.Address{}
-	var applicationAddress common.Address
-
-	if me.WithSelfHosted != nil {
-		applicationAddress, me.IConsensusAddress, err = me.WithSelfHosted.Deploy(ctx, client, txOpts)
-		if err != nil {
-			return zero, err
-		}
-		return applicationAddress, nil
-	}
-
-	if me.WithAuthority != nil {
-		me.IConsensusAddress, err = me.WithAuthority.Deploy(ctx, client, txOpts)
-		if err != nil {
-			return zero, err
-		}
-	}
-
+	result := &ApplicationDeploymentResult{}
+	result.Deployment = me
 	factory, err := iapplicationfactory.NewIApplicationFactory(me.FactoryAddress, client)
 	if err != nil {
-		return zero, fmt.Errorf("failed to instantiate contract: %v", err)
+		return zero, nil, fmt.Errorf("failed to instantiate contract: %v", err)
 	}
 
-	tx, err := factory.NewApplication(txOpts, me.IConsensusAddress, me.OwnerAddress, me.TemplateHash, me.DataAvailability, me.Salt)
+	tx, err := factory.NewApplication(txOpts, me.Consensus, me.OwnerAddress, me.TemplateHash, me.DataAvailability, me.Salt)
 	if err != nil {
-		return zero, fmt.Errorf("transaction failed: %v", err)
+		return zero, nil, fmt.Errorf("transaction failed: %v", err)
 	}
 
 	receipt, err := bind.WaitMined(ctx, client, tx)
 	if err != nil {
-		return zero, fmt.Errorf("failed to wait for transaction mining: %v", err)
+		return zero, nil, fmt.Errorf("failed to wait for transaction mining: %v", err)
 	}
 
 	if receipt.Status != 1 {
-		return zero, fmt.Errorf("transaction failed")
+		return zero, nil, fmt.Errorf("transaction failed")
 	}
 
 	// Look for the specific event in the receipt logs
@@ -73,7 +96,12 @@ func (me *ApplicationDeployment) Deploy(ctx context.Context, client *ethclient.C
 		if err != nil {
 			continue // Skip logs that don't match
 		}
-		return event.AppContract, nil
+		result.ApplicationAddress = event.AppContract
+		return result.ApplicationAddress, result, nil
 	}
-	return zero, fmt.Errorf("failed to find ApplicationCreated event in receipt logs")
+	return zero, nil, fmt.Errorf("failed to find ApplicationCreated event in receipt logs")
+}
+
+func (me *ApplicationDeployment) GetFactoryAddress() common.Address {
+	return me.FactoryAddress
 }

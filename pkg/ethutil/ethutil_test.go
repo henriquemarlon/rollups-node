@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/cartesi/rollups-node/internal/config"
-	"github.com/cartesi/rollups-node/pkg/contracts/dataavailability"
 	"github.com/cartesi/rollups-node/pkg/contracts/inputs"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -58,9 +57,6 @@ func (s *EthUtilSuite) SetupTest() {
 	s.txOpts, err = bind.NewKeyedTransactorWithChainID(privateKey, chainId)
 	s.Require().Nil(err)
 
-	s.inputBoxAddr, err = config.GetContractsInputBoxAddress()
-	s.Require().Nil(err)
-
 	s.selfHostedAppFactory, err = config.GetContractsSelfHostedApplicationFactoryAddress()
 	s.Require().Nil(err)
 
@@ -68,11 +64,10 @@ func (s *EthUtilSuite) SetupTest() {
 	_, err = rand.Read(templateHash[:])
 	s.Require().Nil(err)
 
-	parsedAbi, err := dataavailability.DataAvailabilityMetaData.GetAbi()
-	s.Require().Nil(err)
-	encodedDA, err := parsedAbi.Pack("InputBox", s.inputBoxAddr)
+	s.inputBoxAddr, err = config.GetContractsInputBoxAddress()
 	s.Require().Nil(err)
 
+	_, _, encodedDA, err := DefaultDA(s.client, s.inputBoxAddr)
 	salt := "0000000000000000000000000000000000000000000000000000000000000000"
 	s.appAddr, s.cleanup, err = CreateAnvilSnapshotAndDeployApp(s.ctx, s.client, s.selfHostedAppFactory, templateHash, encodedDA, salt)
 	s.Require().Nil(err)

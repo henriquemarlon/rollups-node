@@ -65,7 +65,7 @@ func (r *PostgresRepository) CreateApplication(
 	var newID int64
 	err = tx.QueryRow(ctx, sqlStr, args...).Scan(&newID)
 	if err != nil {
-		return 0, errors.Join(err, tx.Rollback(ctx))
+		return 0, errors.Join(fmt.Errorf("unable to create database application: %w", err), tx.Rollback(ctx))
 	}
 
 	sqlStr, args = table.ExecutionParameters.

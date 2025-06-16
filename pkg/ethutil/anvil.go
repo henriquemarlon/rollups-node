@@ -50,11 +50,15 @@ func CreateAnvilSnapshotAndDeployApp(ctx context.Context, client *ethclient.Clie
 	if err != nil {
 		return zero, nil, fmt.Errorf("failed retrieve self hosted application factory address: %w", err)
 	}
-	deployment := &SelfhostedDeployment{
-		FactoryAddress: selfHostedApplicationFactoryAddress,
-		OwnerAddress:   txOpts.From,
-		TemplateHash:   templateHash,
-		EpochLength:    10,
+
+	deployment := &SelfhostedApplicationDeployment{
+		FactoryAddress:          selfHostedApplicationFactoryAddress,
+		ApplicationOwnerAddress: txOpts.From,
+		AuthorityOwnerAddress:   txOpts.From,
+		TemplateHash:            templateHash,
+		DataAvailability:        dataAvailability,
+		EpochLength:             10,
+		Salt:                    [32]byte{},
 	}
 	applicationAddress, _, err := deployment.Deploy(ctx, client, txOpts)
 

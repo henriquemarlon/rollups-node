@@ -5,6 +5,7 @@ package claimer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math/big"
@@ -176,7 +177,7 @@ func setupPersistentConfig(
 	c *config.ClaimerConfig,
 ) (*PersistentConfig, error) {
 	config, err := repository.LoadNodeConfig[PersistentConfig](ctx, repo, ClaimerConfigKey)
-	if config == nil && err == nil {
+	if config == nil && errors.Is(err, repository.ErrNotFound) {
 		nc := NodeConfig[PersistentConfig]{
 			Key: ClaimerConfigKey,
 			Value: PersistentConfig{

@@ -174,56 +174,6 @@ type GetReportParams struct {
 	ReportIndex *string `json:"report_index"`
 }
 
-// Result types updated to match the OpenRPC specification
-type ApplicationListResult struct {
-	Data       []*model.Application `json:"data"`
-	Pagination Pagination           `json:"pagination"`
-}
-
-type ApplicationGetResult struct {
-	Data *model.Application `json:"data"`
-}
-
-type ProcessedInputCountResult struct {
-	ProcessedInputs uint64 `json:"processed_inputs"`
-}
-
-type EpochListResult struct {
-	Data       []*model.Epoch `json:"data"`
-	Pagination Pagination     `json:"pagination"`
-}
-
-type EpochGetResult struct {
-	Data *model.Epoch `json:"data"`
-}
-
-type InputListResult struct {
-	Data       []any      `json:"data"`
-	Pagination Pagination `json:"pagination"`
-}
-
-type InputGetResult struct {
-	Data any `json:"data"`
-}
-
-type OutputListResult struct {
-	Data       []any      `json:"data"`
-	Pagination Pagination `json:"pagination"`
-}
-
-type OutputGetResult struct {
-	Data any `json:"data"`
-}
-
-type ReportListResult struct {
-	Data       []*model.Report `json:"data"`
-	Pagination Pagination      `json:"pagination"`
-}
-
-type ReportGetResult struct {
-	Data *model.Report `json:"data"`
-}
-
 // -----------------------------------------------------------------------------
 // ABI Decoding helpers (provided code)
 // -----------------------------------------------------------------------------

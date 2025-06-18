@@ -5,6 +5,7 @@ package evmreader
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/big"
 
@@ -152,7 +153,7 @@ func (s *Service) setupPersistentConfig(
 	c *config.EvmreaderConfig,
 ) (*PersistentConfig, error) {
 	config, err := repository.LoadNodeConfig[PersistentConfig](ctx, s.repository, EvmReaderConfigKey)
-	if config == nil && err == nil {
+	if config == nil && errors.Is(err, repository.ErrNotFound) {
 		nc := NodeConfig[PersistentConfig]{
 			Key: EvmReaderConfigKey,
 			Value: PersistentConfig{

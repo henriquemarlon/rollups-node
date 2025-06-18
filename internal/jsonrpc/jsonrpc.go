@@ -15,8 +15,10 @@ import (
 	"strings"
 
 	"github.com/cartesi/rollups-node/internal/config"
+	"github.com/cartesi/rollups-node/internal/evmreader"
 	"github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/repository"
+	"github.com/cartesi/rollups-node/internal/version"
 )
 
 //go:embed jsonrpc-discover.json
@@ -84,6 +86,10 @@ func (s *Service) handleRPC(w http.ResponseWriter, r *http.Request) {
 		s.handleListReports(w, r, req)
 	case "cartesi_getReport":
 		s.handleGetReport(w, r, req)
+	case "cartesi_getChainId":
+		s.handleGetChainId(w, r, req)
+	case "cartesi_getNodeVersion":
+		s.handleGetNodeVersion(w, req)
 	default:
 		s.Logger.Info(fmt.Sprintf("RPC method not found: %s", req.Method))
 		writeRPCError(w, req.ID, JSONRPC_METHOD_NOT_FOUND, "Method not found", nil)
@@ -808,4 +814,36 @@ func (s *Service) handleGetReport(w http.ResponseWriter, r *http.Request, req RP
 	}
 
 	writeRPCResult(w, req.ID, response)
+}
+
+func (s *Service) handleGetChainId(w http.ResponseWriter, r *http.Request, req RPCRequest) {
+
+	config, err := repository.LoadNodeConfig[evmreader.PersistentConfig](r.Context(), s.repository, evmreader.EvmReaderConfigKey)
+	if errors.Is(err, repository.ErrNotFound) {
+		writeRPCError(w, req.ID, JSONRPC_RESOURCE_NOT_FOUND, "EVM Reader config not found", nil)
+		return
+	}
+	if err != nil {
+		s.Logger.Error("Unable to retrieve evmreader config from repository", "err", err)
+		writeRPCError(w, req.ID, JSONRPC_INTERNAL_ERROR, "Internal server error", nil)
+		return
+	}
+
+	result := struct {
+		Data string `json:"data"`
+	}{
+		Data: fmt.Sprintf("0x%x", config.Value.ChainID),
+	}
+
+	writeRPCResult(w, req.ID, result)
+}
+
+func (s *Service) handleGetNodeVersion(w http.ResponseWriter, req RPCRequest) {
+	result := struct {
+		Data string `json:"data"`
+	}{
+		Data: version.BuildVersion,
+	}
+
+	writeRPCResult(w, req.ID, result)
 }

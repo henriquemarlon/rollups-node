@@ -451,6 +451,28 @@
 					"$ref": "#/components/schemas/ReportGetResult"
 				}
 			}
+		},
+		{
+			"name": "cartesi_getChainId",
+			"summary": "Get node's chain ID",
+			"description": "Fetches the chain ID that node is operating on.",
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/ChainIdResult"
+				}
+			}
+		},
+		{
+			"name": "cartesi_getNodeVersion",
+			"summary": "Get node version",
+			"description": "Fetches the semantic version of the Cartesi rollups node.",
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/NodeVersionResult"
+				}
+			}
 		}
 	],
 	"components": {
@@ -972,6 +994,24 @@
 					"updated_at": {
 						"type": "string",
 						"format": "date-time"
+					}
+				}
+			},
+			"ChainIdResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					}
+				}
+			},
+			"NodeVersionResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"type": "string",
+						"format": "semver",
+						"pattern": "^[a-zA-Z0-9_-\\.]+$"
 					}
 				}
 			},

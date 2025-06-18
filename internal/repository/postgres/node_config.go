@@ -9,6 +9,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/cartesi/rollups-node/internal/repository"
 	"github.com/cartesi/rollups-node/internal/repository/postgres/db/rollupsdb/public/table"
 
 	"github.com/go-jet/jet/v2/postgres"
@@ -57,7 +58,7 @@ func (r *PostgresRepository) LoadNodeConfigRaw(ctx context.Context, key string) 
 		&updatedAt,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, time.Time{}, time.Time{}, nil
+		return nil, time.Time{}, time.Time{}, repository.ErrNotFound
 	}
 	if err != nil {
 		return nil, time.Time{}, time.Time{}, err

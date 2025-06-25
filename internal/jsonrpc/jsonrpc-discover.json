@@ -456,6 +456,7 @@
 			"name": "cartesi_getChainId",
 			"summary": "Get node's chain ID",
 			"description": "Fetches the chain ID that node is operating on.",
+			"params": [],
 			"result": {
 				"name": "result",
 				"schema": {
@@ -467,6 +468,7 @@
 			"name": "cartesi_getNodeVersion",
 			"summary": "Get node version",
 			"description": "Fetches the semantic version of the Cartesi rollups node.",
+			"params": [],
 			"result": {
 				"name": "result",
 				"schema": {

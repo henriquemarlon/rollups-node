@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/cartesi/rollups-node/internal/model"
-	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/cartesi/rollups-node/internal/repository"
 	"github.com/cartesi/rollups-node/pkg/contracts/iconsensus"
 	"github.com/cartesi/rollups-node/pkg/service"
@@ -34,9 +33,10 @@ func (m *claimerRepositoryMock) ListApplications(
 	ctx context.Context,
 	f repository.ApplicationFilter,
 	pagination repository.Pagination,
-) ([]*Application, uint64, error) {
-	args := m.Called(ctx, f, pagination)
-	return args.Get(0).([]*Application), args.Get(1).(uint64), args.Error(2)
+	descending bool,
+) ([]*model.Application, uint64, error) {
+	args := m.Called(ctx, f, pagination, descending)
+	return args.Get(0).([]*model.Application), args.Get(1).(uint64), args.Error(2)
 }
 
 func (m *claimerRepositoryMock) SelectSubmittedClaimPairsPerApp(ctx context.Context) (
@@ -77,7 +77,7 @@ func (m *claimerRepositoryMock) UpdateEpochWithSubmittedClaim(
 func (m *claimerRepositoryMock) UpdateApplicationState(
 	ctx context.Context,
 	appID int64,
-	state ApplicationState,
+	state model.ApplicationState,
 	reason *string,
 ) error {
 	args := m.Called(ctx, appID, state, reason)
@@ -219,7 +219,7 @@ func makeApplication(id int64) *model.Application {
 func makeEpoch(id int64, status model.EpochStatus, i uint64) *model.Epoch {
 	hash := common.HexToHash("0x01")
 	tx := common.HexToHash("0x02")
-	epoch := &Epoch{
+	epoch := &model.Epoch{
 		ApplicationID:        id,
 		Index:                i,
 		FirstBlock:           i * 10,
@@ -243,14 +243,14 @@ func makeComputedEpoch(app *model.Application, i uint64) *model.Epoch {
 	return makeEpoch(app.ID, model.EpochStatus_ClaimComputed, i)
 }
 func makeEpochMap(epochs ...*model.Epoch) map[int64]*model.Epoch {
-	result := map[int64]*Epoch{}
+	result := map[int64]*model.Epoch{}
 	for _, epoch := range epochs {
 		result[epoch.ApplicationID] = epoch
 	}
 	return result
 }
 func makeApplicationMap(apps ...*model.Application) map[int64]*model.Application {
-	result := map[int64]*Application{}
+	result := map[int64]*model.Application{}
 	for _, app := range apps {
 		result[app.ID] = app
 	}
@@ -655,7 +655,7 @@ func TestErrSubmittedMissingEvent(t *testing.T) {
 	assert.Equal(t, 1, len(errs))
 }
 
-func TestConsensusAddressChangedOnSubmitedClaims(t *testing.T) {
+func TestConsensusAddressChangedOnSubmittedClaims(t *testing.T) {
 	m, r, b := newServiceMock()
 	defer r.AssertExpectations(t)
 	defer b.AssertExpectations(t)

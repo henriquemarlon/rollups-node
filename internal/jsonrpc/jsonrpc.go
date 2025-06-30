@@ -135,7 +135,7 @@ func (s *Service) handleListApplications(w http.ResponseWriter, r *http.Request,
 	apps, total, err := s.repository.ListApplications(r.Context(), repository.ApplicationFilter{}, repository.Pagination{
 		Limit:  params.Limit,
 		Offset: params.Offset,
-	})
+	}, params.Descending)
 	if err != nil {
 		s.Logger.Error("Unable to retrieve applications from repository", "err", err)
 		writeRPCError(w, req.ID, JSONRPC_INTERNAL_ERROR, "Internal server error", nil)
@@ -238,7 +238,7 @@ func (s *Service) handleListEpochs(w http.ResponseWriter, r *http.Request, req R
 	epochs, total, err := s.repository.ListEpochs(r.Context(), params.Application, epochFilter, repository.Pagination{
 		Limit:  params.Limit,
 		Offset: params.Offset,
-	})
+	}, params.Descending)
 	if err != nil {
 		s.Logger.Error("Unable to retrieve epochs from repository", "err", err)
 		writeRPCError(w, req.ID, JSONRPC_INTERNAL_ERROR, "Internal server error", nil)
@@ -407,7 +407,7 @@ func (s *Service) handleListInputs(w http.ResponseWriter, r *http.Request, req R
 	inputs, total, err := s.repository.ListInputs(r.Context(), params.Application, inputFilter, repository.Pagination{
 		Limit:  params.Limit,
 		Offset: params.Offset,
-	})
+	}, params.Descending)
 	if err != nil {
 		s.Logger.Error("Unable to retrieve inputs from repository", "err", err)
 		writeRPCError(w, req.ID, JSONRPC_INTERNAL_ERROR, "Internal server error", nil)
@@ -609,7 +609,7 @@ func (s *Service) handleListOutputs(w http.ResponseWriter, r *http.Request, req 
 	outputs, total, err := s.repository.ListOutputs(r.Context(), params.Application, outputFilter, repository.Pagination{
 		Limit:  params.Limit,
 		Offset: params.Offset,
-	})
+	}, params.Descending)
 	if err != nil {
 		s.Logger.Error("Unable to retrieve outputs from repository", "err", err)
 		writeRPCError(w, req.ID, JSONRPC_INTERNAL_ERROR, "Internal server error", nil)
@@ -742,7 +742,7 @@ func (s *Service) handleListReports(w http.ResponseWriter, r *http.Request, req 
 	reports, total, err := s.repository.ListReports(r.Context(), params.Application, reportFilter, repository.Pagination{
 		Limit:  params.Limit,
 		Offset: params.Offset,
-	})
+	}, params.Descending)
 	if err != nil {
 		s.Logger.Error("Unable to retrieve reports from repository", "err", err)
 		writeRPCError(w, req.ID, JSONRPC_INTERNAL_ERROR, "Internal server error", nil)

@@ -99,8 +99,9 @@ type Pagination struct {
 
 // ListApplicationsParams aligns with the OpenRPC specification
 type ListApplicationsParams struct {
-	Limit  uint64 `json:"limit"`
-	Offset uint64 `json:"offset"`
+	Limit      uint64 `json:"limit"`
+	Offset     uint64 `json:"offset"`
+	Descending bool   `json:"descending,omitempty"`
 }
 
 // GetApplicationParams aligns with the OpenRPC specification
@@ -114,6 +115,7 @@ type ListEpochsParams struct {
 	Status      *string `json:"status,omitempty"`
 	Limit       uint64  `json:"limit"`
 	Offset      uint64  `json:"offset"`
+	Descending  bool    `json:"descending,omitempty"`
 }
 
 // GetEpochParams aligns with the OpenRPC specification
@@ -129,6 +131,7 @@ type ListInputsParams struct {
 	Sender      *string `json:"sender,omitempty"`
 	Limit       uint64  `json:"limit"`
 	Offset      uint64  `json:"offset"`
+	Descending  bool    `json:"descending,omitempty"`
 }
 
 // GetInputParams aligns with the OpenRPC specification
@@ -151,6 +154,7 @@ type ListOutputsParams struct {
 	VoucherAddress *string `json:"voucher_address,omitempty"`
 	Limit          uint64  `json:"limit"`
 	Offset         uint64  `json:"offset"`
+	Descending     bool    `json:"descending,omitempty"`
 }
 
 // GetOutputParams aligns with the OpenRPC specification
@@ -166,6 +170,7 @@ type ListReportsParams struct {
 	InputIndex  *string `json:"input_index,omitempty"`
 	Limit       uint64  `json:"limit"`
 	Offset      uint64  `json:"offset"`
+	Descending  bool    `json:"descending,omitempty"`
 }
 
 // GetReportParams aligns with the OpenRPC specification

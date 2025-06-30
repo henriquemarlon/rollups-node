@@ -31,6 +31,7 @@ func (s *EvmReaderSuite) TestOutputExecution() {
 		mock.Anything,
 		mock.Anything,
 		mock.Anything,
+		false,
 	).Return([]*Application{{
 		IApplicationAddress:  common.HexToAddress("0x2E663fe9aE92275242406A185AA4fC8174339D3E"),
 		IConsensusAddress:    common.HexToAddress("0xdeadbeef"),
@@ -45,6 +46,7 @@ func (s *EvmReaderSuite) TestOutputExecution() {
 		mock.Anything,
 		mock.Anything,
 		mock.Anything,
+		false,
 	).Return([]*Application{{
 		IApplicationAddress:  common.HexToAddress("0x2E663fe9aE92275242406A185AA4fC8174339D3E"),
 		IConsensusAddress:    common.HexToAddress("0xdeadbeef"),
@@ -172,6 +174,7 @@ func (s *EvmReaderSuite) TestReadOutputExecution() {
 		mock.Anything,
 		mock.Anything,
 		mock.Anything,
+		false,
 	).Return([]*Application{{
 		IApplicationAddress:  appAddress,
 		IConsensusAddress:    common.HexToAddress("0xdeadbeef"),
@@ -314,6 +317,7 @@ func (s *EvmReaderSuite) TestCheckOutputFails() {
 			mock.Anything,
 			mock.Anything,
 			mock.Anything,
+			false,
 		).Return([]*Application{{
 			IApplicationAddress:  appAddress,
 			IConsensusAddress:    common.HexToAddress("0xdeadbeef"),
@@ -432,6 +436,7 @@ func (s *EvmReaderSuite) TestCheckOutputFails() {
 			mock.Anything,
 			mock.Anything,
 			mock.Anything,
+			false,
 		).Return([]*Application{{
 			IApplicationAddress:  appAddress,
 			IConsensusAddress:    common.HexToAddress("0xdeadbeef"),
@@ -559,6 +564,7 @@ func (s *EvmReaderSuite) TestCheckOutputFails() {
 			mock.Anything,
 			mock.Anything,
 			mock.Anything,
+			false,
 		).Return([]*Application{{
 			IApplicationAddress:  appAddress,
 			IConsensusAddress:    common.HexToAddress("0xdeadbeef"),

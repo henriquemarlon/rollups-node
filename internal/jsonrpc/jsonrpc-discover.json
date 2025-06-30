@@ -30,6 +30,15 @@
 						"default": 0
 					},
 					"required": false
+				},
+				{
+					"name": "descending",
+					"description": "if true, the list will be sorted in descending order by application name.",
+					"schema": {
+						"type": "boolean",
+						"default": false
+					},
+					"required": false
 				}
 			],
 			"result": {
@@ -98,6 +107,15 @@
 						"type": "integer",
 						"minimum": 0,
 						"default": 0
+					},
+					"required": false
+				},
+				{
+					"name": "descending",
+					"description": "if true, the list will be sorted in descending order by epoch index.",
+					"schema": {
+						"type": "boolean",
+						"default": false
 					},
 					"required": false
 				}
@@ -205,6 +223,15 @@
 						"type": "integer",
 						"minimum": 0,
 						"default": 0
+					},
+					"required": false
+				},
+				{
+					"name": "descending",
+					"description": "if true, the list will be sorted in descending order by input index.",
+					"schema": {
+						"type": "boolean",
+						"default": false
 					},
 					"required": false
 				}
@@ -330,6 +357,15 @@
 						"default": 0
 					},
 					"required": false
+				},
+				{
+					"name": "descending",
+					"description": "if true, the list will be sorted in descending order by output index.",
+					"schema": {
+						"type": "boolean",
+						"default": false
+					},
+					"required": false
 				}
 			],
 			"result": {
@@ -412,6 +448,15 @@
 						"type": "integer",
 						"minimum": 0,
 						"default": 0
+					},
+					"required": false
+				},
+				{
+					"name": "descending",
+					"description": "if true, the list will be sorted in descending order by report index.",
+					"schema": {
+						"type": "boolean",
+						"default": false
 					},
 					"required": false
 				}

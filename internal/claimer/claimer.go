@@ -58,7 +58,7 @@ var (
 )
 
 type iclaimerRepository interface {
-	ListApplications(ctx context.Context, f repository.ApplicationFilter, p repository.Pagination) ([]*model.Application, uint64, error)
+	ListApplications(ctx context.Context, f repository.ApplicationFilter, p repository.Pagination, descending bool) ([]*model.Application, uint64, error)
 
 	// key is model.Application.ID
 	SelectSubmittedClaimPairsPerApp(ctx context.Context) (

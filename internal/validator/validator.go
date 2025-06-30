@@ -95,11 +95,11 @@ func (v *Service) String() string {
 const MAX_OUTPUT_TREE_HEIGHT = merkle.TREE_DEPTH
 
 type ValidatorRepository interface {
-	ListApplications(ctx context.Context, f repository.ApplicationFilter, p repository.Pagination) ([]*Application, uint64, error)
+	ListApplications(ctx context.Context, f repository.ApplicationFilter, p repository.Pagination, descending bool) ([]*Application, uint64, error)
 	UpdateApplicationState(ctx context.Context, appID int64, state ApplicationState, reason *string) error
-	ListOutputs(ctx context.Context, nameOrAddress string, f repository.OutputFilter, p repository.Pagination) ([]*Output, uint64, error)
+	ListOutputs(ctx context.Context, nameOrAddress string, f repository.OutputFilter, p repository.Pagination, descending bool) ([]*Output, uint64, error)
 	GetLastOutputBeforeBlock(ctx context.Context, nameOrAddress string, block uint64) (*Output, error)
-	ListEpochs(ctx context.Context, nameOrAddress string, f repository.EpochFilter, p repository.Pagination) ([]*Epoch, uint64, error)
+	ListEpochs(ctx context.Context, nameOrAddress string, f repository.EpochFilter, p repository.Pagination, descending bool) ([]*Epoch, uint64, error)
 	GetLastInput(ctx context.Context, appAddress string, epochIndex uint64) (*Input, error) // FIXME migrate to list
 	GetEpochByVirtualIndex(ctx context.Context, nameOrAddress string, index uint64) (*Epoch, error)
 	StoreClaimAndProofs(ctx context.Context, epoch *Epoch, outputs []*Output) error
@@ -107,12 +107,12 @@ type ValidatorRepository interface {
 
 func getAllRunningApplications(ctx context.Context, er ValidatorRepository) ([]*Application, uint64, error) {
 	f := repository.ApplicationFilter{State: Pointer(ApplicationState_Enabled)}
-	return er.ListApplications(ctx, f, repository.Pagination{})
+	return er.ListApplications(ctx, f, repository.Pagination{}, false)
 }
 
 func getProcessedEpochs(ctx context.Context, er ValidatorRepository, address string) ([]*Epoch, uint64, error) {
 	f := repository.EpochFilter{Status: Pointer(EpochStatus_InputsProcessed)}
-	return er.ListEpochs(ctx, address, f, repository.Pagination{})
+	return er.ListEpochs(ctx, address, f, repository.Pagination{}, false)
 }
 
 // setApplicationInoperable marks an application as inoperable with the given reason,
@@ -234,6 +234,7 @@ func (v *Service) createClaimAndProofs(
 			End:   epoch.LastBlock,
 		}},
 		repository.Pagination{},
+		false,
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf(

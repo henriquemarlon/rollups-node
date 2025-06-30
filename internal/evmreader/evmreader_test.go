@@ -433,6 +433,7 @@ func newMockRepository() *MockRepository {
 		mock.Anything,
 		mock.Anything,
 		mock.Anything,
+		false,
 	).Return([]*Epoch{}, uint64(0), nil)
 
 	repo.On("UpdateOutputsExecution",
@@ -482,8 +483,9 @@ func (m *MockRepository) ListApplications(
 	ctx context.Context,
 	f repository.ApplicationFilter,
 	pagination repository.Pagination,
+	descending bool,
 ) ([]*Application, uint64, error) {
-	args := m.Called(ctx, f, pagination)
+	args := m.Called(ctx, f, pagination, descending)
 	return args.Get(0).([]*Application), args.Get(1).(uint64), args.Error(2)
 }
 
@@ -515,8 +517,8 @@ func (m *MockRepository) GetEpoch(ctx context.Context, nameOrAddress string, ind
 }
 
 func (m *MockRepository) ListEpochs(ctx context.Context, nameOrAddress string,
-	f repository.EpochFilter, p repository.Pagination) ([]*Epoch, uint64, error) {
-	args := m.Called(ctx, nameOrAddress, f, p)
+	f repository.EpochFilter, p repository.Pagination, descending bool) ([]*Epoch, uint64, error) {
+	args := m.Called(ctx, nameOrAddress, f, p, descending)
 	return args.Get(0).([]*Epoch), args.Get(1).(uint64), args.Error(2)
 }
 

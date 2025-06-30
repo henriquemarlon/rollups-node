@@ -24,10 +24,10 @@ var (
 // MachineRepository defines the repository interface needed by the MachineManager
 type MachineRepository interface {
 	// ListApplications retrieves applications based on filter criteria
-	ListApplications(ctx context.Context, f repository.ApplicationFilter, p repository.Pagination) ([]*Application, uint64, error)
+	ListApplications(ctx context.Context, f repository.ApplicationFilter, p repository.Pagination, descending bool) ([]*Application, uint64, error)
 
 	// ListInputs retrieves inputs based on filter criteria
-	ListInputs(ctx context.Context, nameOrAddress string, f repository.InputFilter, p repository.Pagination) ([]*Input, uint64, error)
+	ListInputs(ctx context.Context, nameOrAddress string, f repository.InputFilter, p repository.Pagination, descending bool) ([]*Input, uint64, error)
 
 	// GetLastSnapshot retrieves the most recent input with a snapshot for the given application
 	GetLastSnapshot(ctx context.Context, nameOrAddress string) (*Input, error)
@@ -269,13 +269,13 @@ func (m *MachineManager) Close() error {
 // Helper function to get enabled applications
 func getEnabledApplications(ctx context.Context, repo MachineRepository) ([]*Application, uint64, error) {
 	f := repository.ApplicationFilter{State: Pointer(ApplicationState_Enabled)}
-	return repo.ListApplications(ctx, f, repository.Pagination{})
+	return repo.ListApplications(ctx, f, repository.Pagination{}, false)
 }
 
 // Helper function to get processed inputs
 func getProcessedInputs(ctx context.Context, repo MachineRepository, appAddress string) ([]*Input, uint64, error) {
 	f := repository.InputFilter{NotStatus: Pointer(InputCompletionStatus_None)}
-	return repo.ListInputs(ctx, appAddress, f, repository.Pagination{})
+	return repo.ListInputs(ctx, appAddress, f, repository.Pagination{}, false)
 }
 
 // Helper function to get inputs after a specific index

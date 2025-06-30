@@ -126,7 +126,7 @@ func run(cmd *cobra.Command, args []string) {
 		reports, total, err := repo.ListReports(ctx, nameOrAddress, filter, repository.Pagination{
 			Limit:  limit,
 			Offset: offset,
-		})
+		}, false)
 		cobra.CheckErr(err)
 
 		// Format response to match JSON-RPC API

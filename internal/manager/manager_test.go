@@ -53,11 +53,11 @@ func (s *MachineManagerSuite) TestUpdateMachines() {
 			},
 		}
 
-		repo.On("ListApplications", mock.Anything, mock.Anything, mock.Anything).
+		repo.On("ListApplications", mock.Anything, mock.Anything, mock.Anything, false).
 			Return([]*model.Application{app1}, uint64(1), nil)
 
 		// Empty inputs for synchronization
-		repo.On("ListInputs", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		repo.On("ListInputs", mock.Anything, mock.Anything, mock.Anything, mock.Anything, false).
 			Return([]*model.Input{}, uint64(0), nil)
 
 		// Mock GetLastSnapshot to return nil (no snapshot available)
@@ -84,7 +84,7 @@ func (s *MachineManagerSuite) TestUpdateMachines() {
 		err := manager.UpdateMachines(context.Background())
 		require.NoError(err)
 
-		repo.AssertCalled(s.T(), "ListApplications", mock.Anything, mock.Anything, mock.Anything)
+		repo.AssertCalled(s.T(), "ListApplications", mock.Anything, mock.Anything, mock.Anything, false)
 	})
 
 	s.Run("RemoveDisabledMachines", func() {
@@ -264,8 +264,10 @@ type MockMachineRepository struct {
 func (m *MockMachineRepository) ListApplications(
 	ctx context.Context,
 	f repository.ApplicationFilter,
-	p repository.Pagination) ([]*model.Application, uint64, error) {
-	args := m.Called(ctx, f, p)
+	p repository.Pagination,
+	descending bool,
+) ([]*model.Application, uint64, error) {
+	args := m.Called(ctx, f, p, descending)
 	return args.Get(0).([]*model.Application), args.Get(1).(uint64), args.Error(2)
 }
 
@@ -273,8 +275,10 @@ func (m *MockMachineRepository) ListInputs(
 	ctx context.Context,
 	nameOrAddress string,
 	f repository.InputFilter,
-	p repository.Pagination) ([]*model.Input, uint64, error) {
-	args := m.Called(ctx, nameOrAddress, f, p)
+	p repository.Pagination,
+	descending bool,
+) ([]*model.Input, uint64, error) {
+	args := m.Called(ctx, nameOrAddress, f, p, descending)
 	return args.Get(0).([]*model.Input), args.Get(1).(uint64), args.Error(2)
 }
 

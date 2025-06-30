@@ -159,7 +159,7 @@ func run(cmd *cobra.Command, args []string) {
 		outputList, total, err := repo.ListOutputs(ctx, nameOrAddress, filter, repository.Pagination{
 			Limit:  limit,
 			Offset: offset,
-		})
+		}, false)
 		cobra.CheckErr(err)
 
 		// Create decoded outputs

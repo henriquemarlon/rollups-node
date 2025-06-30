@@ -46,7 +46,7 @@ func run(cmd *cobra.Command, args []string) {
 	cobra.CheckErr(err)
 	defer repo.Close()
 
-	applications, _, err := repo.ListApplications(ctx, repository.ApplicationFilter{}, repository.Pagination{})
+	applications, _, err := repo.ListApplications(ctx, repository.ApplicationFilter{}, repository.Pagination{}, false)
 	cobra.CheckErr(err)
 
 	if applications == nil {

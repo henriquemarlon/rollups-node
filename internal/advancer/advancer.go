@@ -30,7 +30,7 @@ var (
 
 // AdvancerRepository defines the repository interface needed by the Advancer service
 type AdvancerRepository interface {
-	ListInputs(ctx context.Context, nameOrAddress string, f repository.InputFilter, p repository.Pagination) ([]*Input, uint64, error)
+	ListInputs(ctx context.Context, nameOrAddress string, f repository.InputFilter, p repository.Pagination, descending bool) ([]*Input, uint64, error)
 	GetLastInput(ctx context.Context, appAddress string, epochIndex uint64) (*Input, error)
 	StoreAdvanceResult(ctx context.Context, appID int64, ar *AdvanceResult) error
 	UpdateEpochsInputsProcessed(ctx context.Context, nameOrAddress string) (int64, error)
@@ -131,7 +131,7 @@ func (s *Service) String() string {
 // getUnprocessedInputs retrieves inputs that haven't been processed yet
 func getUnprocessedInputs(ctx context.Context, repo AdvancerRepository, appAddress string) ([]*Input, uint64, error) {
 	f := repository.InputFilter{Status: Pointer(InputCompletionStatus_None)}
-	return repo.ListInputs(ctx, appAddress, f, repository.Pagination{})
+	return repo.ListInputs(ctx, appAddress, f, repository.Pagination{}, false)
 }
 
 // Step performs one processing cycle of the advancer

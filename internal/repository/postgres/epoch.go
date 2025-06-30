@@ -469,6 +469,7 @@ func (r *PostgresRepository) ListEpochs(
 	nameOrAddress string,
 	f repository.EpochFilter,
 	p repository.Pagination,
+	descending bool,
 ) ([]*model.Epoch, uint64, error) {
 
 	whereClause, err := getWhereClauseFromNameOrAddress(nameOrAddress)
@@ -506,7 +507,13 @@ func (r *PostgresRepository) ListEpochs(
 		conditions = append(conditions, table.Epoch.LastBlock.LT(postgres.RawFloat(fmt.Sprintf("%d", *f.BeforeBlock))))
 	}
 
-	sel = sel.WHERE(postgres.AND(conditions...)).ORDER_BY(table.Epoch.Index.ASC())
+	sel = sel.WHERE(postgres.AND(conditions...))
+
+	if descending {
+		sel = sel.ORDER_BY(table.Epoch.Index.DESC())
+	} else {
+		sel = sel.ORDER_BY(table.Epoch.Index.ASC())
+	}
 
 	// pagination
 	if p.Limit > 0 {

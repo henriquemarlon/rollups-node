@@ -117,7 +117,7 @@ func run(cmd *cobra.Command, args []string) {
 		inputList, total, err := repo.ListInputs(ctx, nameOrAddress, filter, repository.Pagination{
 			Limit:  limit,
 			Offset: offset,
-		})
+		}, false)
 		cobra.CheckErr(err)
 
 		// Create decoded inputs

@@ -423,6 +423,7 @@ func (r *PostgresRepository) ListApplications(
 	ctx context.Context,
 	f repository.ApplicationFilter,
 	p repository.Pagination,
+	descending bool,
 ) ([]*model.Application, uint64, error) {
 
 	sel := table.Application.
@@ -484,7 +485,11 @@ func (r *PostgresRepository) ListApplications(
 		sel = sel.WHERE(postgres.AND(conditions...))
 	}
 
-	sel.ORDER_BY(table.Application.Name.ASC())
+	if descending {
+		sel = sel.ORDER_BY(table.Application.Name.DESC())
+	} else {
+		sel = sel.ORDER_BY(table.Application.Name.ASC())
+	}
 
 	// Apply pagination
 	if p.Limit > 0 {

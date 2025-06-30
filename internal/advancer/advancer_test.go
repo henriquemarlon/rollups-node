@@ -665,6 +665,7 @@ func (mock *MockRepository) ListInputs(
 	nameOrAddress string,
 	f repository.InputFilter,
 	p repository.Pagination,
+	descending bool,
 ) ([]*Input, uint64, error) {
 	// Check for context cancellation
 	if ctx.Err() != nil {

@@ -26,7 +26,7 @@ import (
 
 // Interface for the node repository
 type EvmReaderRepository interface {
-	ListApplications(ctx context.Context, f repository.ApplicationFilter, p repository.Pagination) ([]*Application, uint64, error)
+	ListApplications(ctx context.Context, f repository.ApplicationFilter, p repository.Pagination, descending bool) ([]*Application, uint64, error)
 	UpdateApplicationState(ctx context.Context, appID int64, state ApplicationState, reason *string) error
 	UpdateEventLastCheckBlock(ctx context.Context, appIDs []int64, event MonitoredEvent, blockNumber uint64) error
 
@@ -39,7 +39,7 @@ type EvmReaderRepository interface {
 		epochInputMap map[*Epoch][]*Input, blockNumber uint64,
 	) error
 	GetEpoch(ctx context.Context, nameOrAddress string, index uint64) (*Epoch, error)
-	ListEpochs(ctx context.Context, nameOrAddress string, f repository.EpochFilter, p repository.Pagination) ([]*Epoch, uint64, error)
+	ListEpochs(ctx context.Context, nameOrAddress string, f repository.EpochFilter, p repository.Pagination, descending bool) ([]*Epoch, uint64, error)
 
 	// Output execution monitor
 	GetOutput(ctx context.Context, nameOrAddress string, indexKey uint64) (*Output, error)
@@ -99,7 +99,7 @@ func getAllRunningApplications(ctx context.Context, er EvmReaderRepository) ([]*
 	f := repository.ApplicationFilter{
 		State: Pointer(ApplicationState_Enabled),
 	}
-	return er.ListApplications(ctx, f, repository.Pagination{})
+	return er.ListApplications(ctx, f, repository.Pagination{}, false)
 }
 
 // watchForNewBlocks watches for new blocks and reads new inputs based on the

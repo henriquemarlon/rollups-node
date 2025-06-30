@@ -29,6 +29,7 @@ func (s *EvmReaderSuite) TestItReadsInputsFromNewBlocksFilteredByDA() {
 		mock.Anything,
 		mock.Anything,
 		mock.Anything,
+		false,
 	).Return([]*Application{{
 		IApplicationAddress: common.HexToAddress("0x2E663fe9aE92275242406A185AA4fC8174339D3E"),
 		IConsensusAddress:   common.HexToAddress("0xdeadbeef"),
@@ -43,6 +44,7 @@ func (s *EvmReaderSuite) TestItReadsInputsFromNewBlocksFilteredByDA() {
 		mock.Anything,
 		mock.Anything,
 		mock.Anything,
+		false,
 	).Return([]*Application{{
 		IApplicationAddress: common.HexToAddress("0x2E663fe9aE92275242406A185AA4fC8174339D3E"),
 		IConsensusAddress:   common.HexToAddress("0xdeadbeef"),
@@ -166,6 +168,7 @@ func (s *EvmReaderSuite) TestItUpdatesLastInputCheckBlockWhenThereIsNoInputs() {
 		mock.Anything,
 		mock.Anything,
 		mock.Anything,
+		false,
 	).Return([]*Application{{
 		IApplicationAddress: common.HexToAddress("0x2E663fe9aE92275242406A185AA4fC8174339D3E"),
 		IConsensusAddress:   common.HexToAddress("0xdeadbeef"),
@@ -180,6 +183,7 @@ func (s *EvmReaderSuite) TestItUpdatesLastInputCheckBlockWhenThereIsNoInputs() {
 		mock.Anything,
 		mock.Anything,
 		mock.Anything,
+		false,
 	).Return([]*Application{{
 		IApplicationAddress: common.HexToAddress("0x2E663fe9aE92275242406A185AA4fC8174339D3E"),
 		IConsensusAddress:   common.HexToAddress("0xdeadbeef"),
@@ -353,6 +357,7 @@ func (s *EvmReaderSuite) TestItReadsMultipleInputsFromSingleNewBlock() {
 		mock.Anything,
 		mock.Anything,
 		mock.Anything,
+		false,
 	).Return([]*Application{{
 		IApplicationAddress: common.HexToAddress("0x2E663fe9aE92275242406A185AA4fC8174339D3E"),
 		IConsensusAddress:   common.HexToAddress("0xdeadbeef"),
@@ -436,6 +441,7 @@ func (s *EvmReaderSuite) TestItStartsWhenLasProcessedBlockIsTheMostRecentBlock()
 		mock.Anything,
 		mock.Anything,
 		mock.Anything,
+		false,
 	).Return([]*Application{{
 		IApplicationAddress: common.HexToAddress("0x2E663fe9aE92275242406A185AA4fC8174339D3E"),
 		IConsensusAddress:   common.HexToAddress("0xdeadbeef"),

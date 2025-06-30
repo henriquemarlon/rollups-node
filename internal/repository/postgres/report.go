@@ -79,6 +79,7 @@ func (r *PostgresRepository) ListReports(
 	nameOrAddress string,
 	f repository.ReportFilter,
 	p repository.Pagination,
+	descending bool,
 ) ([]*model.Report, uint64, error) {
 
 	whereClause, err := getWhereClauseFromNameOrAddress(nameOrAddress)
@@ -118,7 +119,13 @@ func (r *PostgresRepository) ListReports(
 		conditions = append(conditions, table.Input.Status.EQ(postgres.NewEnumValue(model.InputCompletionStatus_Accepted.String())))
 	}
 
-	sel = sel.WHERE(postgres.AND(conditions...)).ORDER_BY(table.Report.Index.ASC())
+	sel = sel.WHERE(postgres.AND(conditions...))
+
+	if descending {
+		sel = sel.ORDER_BY(table.Report.Index.DESC())
+	} else {
+		sel = sel.ORDER_BY(table.Report.Index.ASC())
+	}
 
 	if p.Limit > 0 {
 		sel = sel.LIMIT(int64(p.Limit))

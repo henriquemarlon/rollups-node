@@ -163,6 +163,7 @@ func (r *PostgresRepository) ListOutputs(
 	nameOrAddress string,
 	f repository.OutputFilter,
 	p repository.Pagination,
+	descending bool,
 ) ([]*model.Output, uint64, error) {
 
 	whereClause, err := getWhereClauseFromNameOrAddress(nameOrAddress)
@@ -225,7 +226,13 @@ func (r *PostgresRepository) ListOutputs(
 		)
 	}
 
-	sel = sel.WHERE(postgres.AND(conditions...)).ORDER_BY(table.Output.Index.ASC())
+	sel = sel.WHERE(postgres.AND(conditions...))
+
+	if descending {
+		sel = sel.ORDER_BY(table.Output.Index.DESC())
+	} else {
+		sel = sel.ORDER_BY(table.Output.Index.ASC())
+	}
 
 	if p.Limit > 0 {
 		sel = sel.LIMIT(int64(p.Limit))

@@ -76,7 +76,7 @@ func run(cmd *cobra.Command, args []string) {
 			Name:                 serviceName,
 			LogLevel:             cfg.LogLevel,
 			LogColor:             cfg.LogColor,
-			EnableSignalHandling: true,
+			EnableSignalHandling: false,
 			TelemetryCreate:      true,
 			TelemetryAddress:     cfg.TelemetryAddress,
 		},

@@ -119,8 +119,9 @@ func (s *Service) handleDiscover(w http.ResponseWriter, _ *http.Request, req RPC
 
 func (s *Service) handleListApplications(w http.ResponseWriter, r *http.Request, req RPCRequest) {
 	var params ListApplicationsParams
-	if err := json.Unmarshal(req.Params, &params); err != nil {
-		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, "Invalid params", nil)
+	if err := UnmarshalParams(req.Params, &params); err != nil {
+		s.Logger.Debug("Invalid parameters", "err", err)
+		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, "Invalid parameters", nil)
 		return
 	}
 	// Use default values if not provided
@@ -171,8 +172,9 @@ func (s *Service) handleListApplications(w http.ResponseWriter, r *http.Request,
 
 func (s *Service) handleGetApplication(w http.ResponseWriter, r *http.Request, req RPCRequest) {
 	var params GetApplicationParams
-	if err := json.Unmarshal(req.Params, &params); err != nil {
-		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, "Invalid params", nil)
+	if err := UnmarshalParams(req.Params, &params); err != nil {
+		s.Logger.Debug("Invalid parameters", "err", err)
+		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, "Invalid parameters", nil)
 		return
 	}
 
@@ -205,8 +207,9 @@ func (s *Service) handleGetApplication(w http.ResponseWriter, r *http.Request, r
 
 func (s *Service) handleListEpochs(w http.ResponseWriter, r *http.Request, req RPCRequest) {
 	var params ListEpochsParams
-	if err := json.Unmarshal(req.Params, &params); err != nil {
-		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, "Invalid params", nil)
+	if err := UnmarshalParams(req.Params, &params); err != nil {
+		s.Logger.Debug("Invalid parameters", "err", err)
+		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, "Invalid parameters", nil)
 		return
 	}
 
@@ -272,14 +275,11 @@ func (s *Service) handleListEpochs(w http.ResponseWriter, r *http.Request, req R
 	writeRPCResult(w, req.ID, result)
 }
 
-func parseIndex(indexString *string, field string) (uint64, error) {
-	if indexString == nil {
-		return 0, fmt.Errorf("missing required %s parameter", field)
-	}
-	if len(*indexString) < 3 || (!strings.HasPrefix(*indexString, "0x") && !strings.HasPrefix(*indexString, "0X")) {
+func parseIndex(indexString string, field string) (uint64, error) {
+	if len(indexString) < 3 || (!strings.HasPrefix(indexString, "0x") && !strings.HasPrefix(indexString, "0X")) {
 		return 0, fmt.Errorf("invalid %s: expected hex encoded value", field)
 	}
-	str := (*indexString)[2:]
+	str := indexString[2:]
 	index, err := strconv.ParseUint(str, 16, 64)
 	if err != nil {
 		return 0, fmt.Errorf("invalid %s: %v", field, "error parsing")
@@ -289,8 +289,9 @@ func parseIndex(indexString *string, field string) (uint64, error) {
 
 func (s *Service) handleGetEpoch(w http.ResponseWriter, r *http.Request, req RPCRequest) {
 	var params GetEpochParams
-	if err := json.Unmarshal(req.Params, &params); err != nil {
-		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, "Invalid params", nil)
+	if err := UnmarshalParams(req.Params, &params); err != nil {
+		s.Logger.Debug("Invalid parameters", "err", err)
+		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, "Invalid parameters", nil)
 		return
 	}
 
@@ -328,9 +329,10 @@ func (s *Service) handleGetEpoch(w http.ResponseWriter, r *http.Request, req RPC
 }
 
 func (s *Service) handleGetLastAcceptedEpochIndex(w http.ResponseWriter, r *http.Request, req RPCRequest) {
-	var params GetEpochParams
-	if err := json.Unmarshal(req.Params, &params); err != nil {
-		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, "Invalid params", nil)
+	var params GetLastAcceptedEpochIndexParams
+	if err := UnmarshalParams(req.Params, &params); err != nil {
+		s.Logger.Debug("Invalid parameters", "err", err)
+		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, "Invalid parameters", nil)
 		return
 	}
 
@@ -363,8 +365,9 @@ func (s *Service) handleGetLastAcceptedEpochIndex(w http.ResponseWriter, r *http
 
 func (s *Service) handleListInputs(w http.ResponseWriter, r *http.Request, req RPCRequest) {
 	var params ListInputsParams
-	if err := json.Unmarshal(req.Params, &params); err != nil {
-		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, "Invalid params", nil)
+	if err := UnmarshalParams(req.Params, &params); err != nil {
+		s.Logger.Debug("Invalid parameters", "err", err)
+		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, "Invalid parameters", nil)
 		return
 	}
 
@@ -386,7 +389,7 @@ func (s *Service) handleListInputs(w http.ResponseWriter, r *http.Request, req R
 	// Create input filter based on params
 	inputFilter := repository.InputFilter{}
 	if params.EpochIndex != nil {
-		epochIndex, err := parseIndex(params.EpochIndex, "epoch_index")
+		epochIndex, err := parseIndex(*params.EpochIndex, "epoch_index")
 		if err != nil {
 			writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, err.Error(), nil)
 			return
@@ -452,8 +455,9 @@ func (s *Service) handleListInputs(w http.ResponseWriter, r *http.Request, req R
 
 func (s *Service) handleGetInput(w http.ResponseWriter, r *http.Request, req RPCRequest) {
 	var params GetInputParams
-	if err := json.Unmarshal(req.Params, &params); err != nil {
-		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, "Invalid params", nil)
+	if err := UnmarshalParams(req.Params, &params); err != nil {
+		s.Logger.Debug("Invalid parameters", "err", err)
+		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, "Invalid parameters", nil)
 		return
 	}
 
@@ -497,8 +501,9 @@ func (s *Service) handleGetInput(w http.ResponseWriter, r *http.Request, req RPC
 
 func (s *Service) handleGetProcessedInputCount(w http.ResponseWriter, r *http.Request, req RPCRequest) {
 	var params GetApplicationParams
-	if err := json.Unmarshal(req.Params, &params); err != nil {
-		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, "Invalid params", nil)
+	if err := UnmarshalParams(req.Params, &params); err != nil {
+		s.Logger.Debug("Invalid parameters", "err", err)
+		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, "Invalid parameters", nil)
 		return
 	}
 
@@ -546,8 +551,9 @@ func ParseOutputType(s string) ([]byte, error) {
 
 func (s *Service) handleListOutputs(w http.ResponseWriter, r *http.Request, req RPCRequest) {
 	var params ListOutputsParams
-	if err := json.Unmarshal(req.Params, &params); err != nil {
-		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, "Invalid params", nil)
+	if err := UnmarshalParams(req.Params, &params); err != nil {
+		s.Logger.Debug("Invalid parameters", "err", err)
+		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, "Invalid parameters", nil)
 		return
 	}
 
@@ -569,7 +575,7 @@ func (s *Service) handleListOutputs(w http.ResponseWriter, r *http.Request, req 
 	// Create output filter based on params
 	outputFilter := repository.OutputFilter{}
 	if params.EpochIndex != nil {
-		epochIndex, err := parseIndex(params.EpochIndex, "epoch_index")
+		epochIndex, err := parseIndex(*params.EpochIndex, "epoch_index")
 		if err != nil {
 			writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, err.Error(), nil)
 			return
@@ -578,7 +584,7 @@ func (s *Service) handleListOutputs(w http.ResponseWriter, r *http.Request, req 
 	}
 
 	if params.InputIndex != nil {
-		inputIndex, err := parseIndex(params.InputIndex, "input_index")
+		inputIndex, err := parseIndex(*params.InputIndex, "input_index")
 		if err != nil {
 			writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, err.Error(), nil)
 			return
@@ -654,8 +660,9 @@ func (s *Service) handleListOutputs(w http.ResponseWriter, r *http.Request, req 
 
 func (s *Service) handleGetOutput(w http.ResponseWriter, r *http.Request, req RPCRequest) {
 	var params GetOutputParams
-	if err := json.Unmarshal(req.Params, &params); err != nil {
-		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, "Invalid params", nil)
+	if err := UnmarshalParams(req.Params, &params); err != nil {
+		s.Logger.Debug("Invalid parameters", "err", err)
+		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, "Invalid parameters", nil)
 		return
 	}
 
@@ -699,8 +706,9 @@ func (s *Service) handleGetOutput(w http.ResponseWriter, r *http.Request, req RP
 
 func (s *Service) handleListReports(w http.ResponseWriter, r *http.Request, req RPCRequest) {
 	var params ListReportsParams
-	if err := json.Unmarshal(req.Params, &params); err != nil {
-		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, "Invalid params", nil)
+	if err := UnmarshalParams(req.Params, &params); err != nil {
+		s.Logger.Debug("Invalid parameters", "err", err)
+		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, "Invalid parameters", nil)
 		return
 	}
 
@@ -722,7 +730,7 @@ func (s *Service) handleListReports(w http.ResponseWriter, r *http.Request, req 
 	// Create report filter based on params
 	reportFilter := repository.ReportFilter{}
 	if params.EpochIndex != nil {
-		epochIndex, err := parseIndex(params.EpochIndex, "epoch_index")
+		epochIndex, err := parseIndex(*params.EpochIndex, "epoch_index")
 		if err != nil {
 			writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, err.Error(), nil)
 			return
@@ -731,7 +739,7 @@ func (s *Service) handleListReports(w http.ResponseWriter, r *http.Request, req 
 	}
 
 	if params.InputIndex != nil {
-		inputIndex, err := parseIndex(params.InputIndex, "input_index")
+		inputIndex, err := parseIndex(*params.InputIndex, "input_index")
 		if err != nil {
 			writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, err.Error(), nil)
 			return
@@ -778,8 +786,9 @@ func (s *Service) handleListReports(w http.ResponseWriter, r *http.Request, req 
 
 func (s *Service) handleGetReport(w http.ResponseWriter, r *http.Request, req RPCRequest) {
 	var params GetReportParams
-	if err := json.Unmarshal(req.Params, &params); err != nil {
-		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, "Invalid params", nil)
+	if err := UnmarshalParams(req.Params, &params); err != nil {
+		s.Logger.Debug("Invalid parameters", "err", err)
+		writeRPCError(w, req.ID, JSONRPC_INVALID_PARAMS, "Invalid parameters", nil)
 		return
 	}
 

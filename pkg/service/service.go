@@ -61,12 +61,17 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
 
 	"github.com/cartesi/rollups-node/internal/version"
 	"github.com/lmittmann/tint"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 var (
@@ -107,19 +112,20 @@ type CreateInfo struct {
 
 // Service stores runtime information.
 type Service struct {
-	Running       atomic.Bool
-	Name          string
-	Impl          ServiceImpl
-	Logger        *slog.Logger
-	Ticker        *time.Ticker
-	PollInterval  time.Duration
-	Context       context.Context
-	Cancel        context.CancelFunc
-	Sighup        chan os.Signal // SIGHUP to reload
-	Sigint        chan os.Signal // SIGINT to exit gracefully
-	ServeMux      *http.ServeMux
-	Telemetry     *http.Server
-	TelemetryFunc func() error
+	Running        atomic.Bool
+	Name           string
+	Impl           ServiceImpl
+	Logger         *slog.Logger
+	Ticker         *time.Ticker
+	PollInterval   time.Duration
+	Context        context.Context
+	Cancel         context.CancelFunc
+	Sighup         chan os.Signal // SIGHUP to reload
+	Sigint         chan os.Signal // SIGINT to exit gracefully
+	ServeMux       *http.ServeMux
+	Telemetry      *http.Server
+	TelemetryFunc  func() error
+	ticksProcessed prometheus.Counter
 }
 
 // Create a service by:
@@ -175,6 +181,11 @@ func Create(ctx context.Context, c *CreateInfo, s *Service) error {
 		}
 	}
 
+	s.ticksProcessed = promauto.NewCounter(prometheus.CounterOpts{
+		Name: strings.Replace(c.Name, "-", "_", -1) + "_tick_processed_ops_total",
+		Help: "The total number of processed ticks",
+	})
+
 	// telemetry
 	if c.TelemetryCreate {
 		if s.ServeMux == nil {
@@ -222,6 +233,10 @@ func (s *Service) Reload() []error {
 }
 
 func (s *Service) Tick() []error {
+	if s.ticksProcessed != nil {
+		s.ticksProcessed.Inc()
+	}
+
 	start := time.Now()
 	errs := s.Impl.Tick()
 	elapsed := time.Since(start)
@@ -301,6 +316,7 @@ func (s *Service) CreateDefaultTelemetry(
 ) (*http.Server, func() error) {
 	s.ServeMux.Handle("/readyz", http.HandlerFunc(s.ReadyHandler))
 	s.ServeMux.Handle("/livez", http.HandlerFunc(s.AliveHandler))
+	s.ServeMux.Handle("/metrics", promhttp.Handler())
 
 	server := &http.Server{
 		Addr:     addr,

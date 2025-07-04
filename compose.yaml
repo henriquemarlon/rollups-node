@@ -64,6 +64,34 @@ services:
       - "10012:10012" # Inspect Service
     environment:
       <<: *env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:10000/readyz"]
+      interval: 2s
+      timeout: 60s
+      retries: 20
+  grafana:
+    image: grafana/grafana-enterprise
+    depends_on:
+      node:
+        condition: service_healthy
+    networks:
+      - devnet
+    ports:
+      - "3000:3000" # web UI
+
+  prometheus:
+    image: prom/prometheus
+    depends_on:
+      node:
+        condition: service_healthy
+    volumes:
+      - ${PWD}/dev/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - devnet
+    ports:
+      - "9090:9090" #
+
+
 
 volumes:
   node_data:

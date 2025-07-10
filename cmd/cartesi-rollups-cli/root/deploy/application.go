@@ -29,6 +29,8 @@ var (
 	applicationRegisterParam         bool
 	applicationTemplateHashParam     string
 	factoryAddressParam              string
+	prtFactoryAddressParam           string
+	deploymentTypePRT                bool
 )
 
 var applicationCmd = &cobra.Command{
@@ -49,7 +51,8 @@ Supported Environment Variables:
   CARTESI_BLOCKCHAIN_HTTP_ENDPOINT                           Blockchain HTTP endpoint
   CARTESI_CONTRACTS_INPUT_BOX_ADDRESS                        Input Box contract address
   CARTESI_CONTRACTS_APPLICATION_FACTORY_ADDRESS              Application Factory address
-  CARTESI_CONTRACTS_SELF_HOSTED_APPLICATION_FACTORY_ADDRESS  Self Hosted Application Factory address`,
+  CARTESI_CONTRACTS_SELF_HOSTED_APPLICATION_FACTORY_ADDRESS  Self Hosted Application Factory address
+  CARTESI_CONTRACTS_PRT_FACTORY_ADDRESS                      PRT Factory address`,
 }
 
 const applicationExamples = `
@@ -58,6 +61,9 @@ const applicationExamples = `
 
 # deploy an application contract using an existing consensus, then register the application
  - cli deploy application echo-dapp applications/echo-dapp/ --consensus=0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+
+# deploy an application contract with a PRT consensus, then register the application
+ - cli deploy application echo-dapp applications/echo-dapp/ --prt
 
 # deploy but don't register into the database
  - cli deploy application echo-dapp applications/echo-dapp/ --register=false
@@ -73,6 +79,8 @@ func init() {
 		"Consensus address. A new authority consensus will be created if this field is left empty.")
 	applicationCmd.Flags().StringVarP(&factoryAddressParam, "factory", "f", "",
 		"Application factory address. Default value is retrieved from configuration.")
+	applicationCmd.Flags().StringVarP(&prtFactoryAddressParam, "prt-factory", "", "",
+		"PRT Application factory address. Default value is retrieved from configuration.")
 	applicationCmd.Flags().StringVarP(&applicationOwnerAddressParam, "application-owner", "o", "",
 		"Application owner address. If not defined, it will be derived from the auth method.")
 	applicationCmd.Flags().StringVarP(&applicationDataAvailabilityParam, "data-availability", "d", "",
@@ -85,6 +93,8 @@ func init() {
 		"Start processing the application, requires 'register=true'.")
 	applicationCmd.Flags().StringVarP(&authorityOwnerAddressParam, "authority-owner", "O", "",
 		"Authority Owner address. If not defined, it will be derived from the auth method.")
+	applicationCmd.Flags().BoolVarP(&deploymentTypePRT, "prt", "", false,
+		"Deploy a PRT application.")
 
 	origHelpFunc := applicationCmd.HelpFunc()
 	applicationCmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
@@ -141,7 +151,9 @@ func runDeployApplication(cmd *cobra.Command, args []string) {
 	}
 
 	var deployment ethutil.IApplicationDeployment
-	if deploySelfhosted := !cmd.Flags().Changed("consensus"); deploySelfhosted {
+	if deploymentTypePRT {
+		deployment, err = buildPrtApplicationDeployment(cmd, args, client, txOpts)
+	} else if deploySelfhosted := !cmd.Flags().Changed("consensus"); deploySelfhosted {
 		deployment, err = buildSelfhostedApplicationDeployment(cmd, args, client, txOpts)
 	} else {
 		deployment, err = buildApplicationOnlyDeployment(cmd, args, client, txOpts)
@@ -210,6 +222,15 @@ func runDeployApplication(cmd *cobra.Command, args []string) {
 		application.EpochLength = res.Deployment.EpochLength
 		application.DataAvailability = res.Deployment.DataAvailability
 		application.IInputBoxBlock = res.Deployment.IInputBoxBlock
+
+	case *ethutil.PRTApplicationDeploymentResult:
+		application.IApplicationAddress = res.ApplicationResult.ApplicationAddress
+		application.IConsensusAddress = res.ApplicationResult.Deployment.Consensus
+		application.IInputBoxAddress = res.ApplicationResult.Deployment.InputBoxAddress
+		application.TemplateHash = res.ApplicationResult.Deployment.TemplateHash
+		application.EpochLength = res.ApplicationResult.Deployment.EpochLength
+		application.DataAvailability = res.ApplicationResult.Deployment.DataAvailability
+		application.IInputBoxBlock = res.ApplicationResult.Deployment.IInputBoxBlock
 	default:
 		panic("unimplemented deployment type\n")
 	}
@@ -339,7 +360,7 @@ func buildSelfhostedApplicationDeployment(
 	return request, nil
 }
 
-func buildApplicationOnlyDeployment(
+func buildApplicationOnlyDeploymentWithoutConsensus(
 	cmd *cobra.Command,
 	args []string,
 	client *ethclient.Client,
@@ -358,11 +379,6 @@ func buildApplicationOnlyDeployment(
 	}
 	if err != nil {
 		return nil, fmt.Errorf("error on parameter factory: %w", err)
-	}
-
-	request.Consensus, err = parseHexAddress(applicationConsensusAddressParam)
-	if err != nil {
-		return nil, fmt.Errorf("error on parameter consensus: %w", err)
 	}
 
 	if !cmd.Flags().Changed("template-hash") {
@@ -402,17 +418,64 @@ func buildApplicationOnlyDeployment(
 		return nil, fmt.Errorf("error on parameter data-availability: %w", err)
 	}
 
-	request.Consensus, request.EpochLength, err = customConsensus(client, applicationConsensusAddressParam)
-	if err != nil {
-		return nil, fmt.Errorf("error on parameter consensus: %w", err)
-	}
-
 	request.Salt, err = ethutil.ParseSalt(saltParam)
 	if err != nil {
 		return nil, fmt.Errorf("error on parameter salt: %w", err)
 	}
 
 	request.Verbose = verboseParam
+	return request, nil
+}
+
+func buildApplicationOnlyDeployment(
+	cmd *cobra.Command,
+	args []string,
+	client *ethclient.Client,
+	txOpts *bind.TransactOpts,
+) (
+	*ethutil.ApplicationDeployment,
+	error,
+) {
+	request, err := buildApplicationOnlyDeploymentWithoutConsensus(cmd, args, client, txOpts)
+
+	request.Consensus, err = parseHexAddress(applicationConsensusAddressParam)
+	if err != nil {
+		return nil, fmt.Errorf("error on parameter consensus: %w", err)
+	}
+
+	request.Consensus, request.EpochLength, err = customConsensus(client, applicationConsensusAddressParam)
+	if err != nil {
+		return nil, fmt.Errorf("error on parameter consensus: %w", err)
+	}
+
+	return request, nil
+}
+
+func buildPrtApplicationDeployment(
+	cmd *cobra.Command,
+	args []string,
+	client *ethclient.Client,
+	txOpts *bind.TransactOpts,
+) (
+	*ethutil.PRTApplicationDeployment,
+	error,
+) {
+	var err error
+	request := &ethutil.PRTApplicationDeployment{}
+	if !cmd.Flags().Changed("prt-factory") {
+		request.FactoryAddress, err = config.GetContractsPrtFactoryAddress()
+	} else {
+		request.FactoryAddress, err = parseHexAddress(factoryAddressParam)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("error on parameter factory: %w", err)
+	}
+
+	request.Application, err = buildApplicationOnlyDeploymentWithoutConsensus(cmd, args, client, txOpts)
+	if err != nil {
+		return nil, fmt.Errorf("error on application: %w", err)
+	}
+
 	return request, nil
 }
 

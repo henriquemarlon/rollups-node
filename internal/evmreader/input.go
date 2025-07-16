@@ -7,11 +7,151 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/big"
+	"sort"
 
 	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 )
+
+// readInputsOnMachingBlocks fetches the inputAdded events from matching the blocks
+// on the blockchain they appear instead of searching for a range.
+func (r *Service) readInputsOnMachingBlocks(
+	ctx context.Context,
+	app *appContracts,
+	blocks []uint64,
+	inputSource InputSourceAdapter,
+) ([]*Input, error) {
+	inputs := []*Input{}
+
+	for i, block := range blocks {
+		if (i > 0) && (blocks[i-1] == block) { // skip repetitions
+			continue
+		}
+		opts := bind.FilterOpts{
+			Context: ctx,
+			Start:   block,
+			End:     &block,
+		}
+		inputsEvents, err := inputSource.RetrieveInputs(
+			&opts,
+			[]common.Address{app.application.IApplicationAddress},
+			nil,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to retrieve inputs: %w", err)
+		}
+
+		// NOTE: there may be more than one input in the same block
+		for _, event := range inputsEvents {
+			r.Logger.Debug("Received input",
+				"address", event.AppContract,
+				"index", event.Index,
+				"block", event.Raw.BlockNumber)
+			input := &Input{
+				Index:                event.Index.Uint64(),
+				Status:               InputCompletionStatus_None,
+				RawData:              event.Input,
+				BlockNumber:          event.Raw.BlockNumber,
+				TransactionReference: common.BigToHash(event.Index),
+			}
+			inputs = append(inputs, input)
+		}
+	}
+
+	sort.Slice(inputs, func(i, j int) bool {
+		return inputs[i].Index < inputs[j].Index
+	})
+	return inputs, nil
+}
+
+// fastSyncInputs finds inputs via getNumberOfInputs instead of reading the logs
+// this is cheaper when the logs span many blocks, especially when the application
+// has no inputs. In case there are inputs, search for the block in which they
+// appear with a binary search.
+func (r *Service) fastSyncInputs(
+	ctx context.Context,
+	lastProcessedBlock uint64,
+	mostRecentBlockNumber uint64,
+	app *appContracts,
+) ([]*Input, error) {
+	r.Logger.Debug("Fast sync inputs",
+		"application", app.application.Name,
+	)
+
+	getNumberOfInputs := func(nr uint64) (uint64, error) {
+		n, err := app.inputSource.GetNumberOfInputs(&bind.CallOpts{
+			BlockNumber: new(big.Int).SetUint64(nr),
+		}, app.application.IApplicationAddress)
+		if err != nil {
+			return 0, fmt.Errorf("call to GetNumberOfInputs failed: %w", err)
+		}
+		return n.Uint64(), nil
+	}
+
+	noi, err := getNumberOfInputs(mostRecentBlockNumber)
+	if err != nil {
+		r.Logger.Debug("Fast sync failed, application will do a regular sync.",
+			"application", app.application.IApplicationAddress,
+			"error", err,
+		)
+		return nil, err
+	}
+
+	// application has no inputs, sync is done
+	if noi == 0 {
+		r.Logger.Info("No inputs, fast sync done",
+			"application", app.application.Name,
+		)
+		return nil, nil
+	}
+
+	// application has inputs, find their blocks and read them in
+	deployedAtBig, err := app.applicationContract.GetDeploymentBlockNumber(&bind.CallOpts{
+		BlockNumber: new(big.Int).SetUint64(mostRecentBlockNumber),
+	})
+	if err != nil {
+		r.Logger.Info("Fast sync failed, application will do a regular sync.",
+			"application", app.application.IApplicationAddress,
+			"error", err,
+		)
+		return nil, err
+	}
+
+	// assume that most inputs happen after this application deployment.
+	// Do the first range split according to it. Fallback to searching the whole
+	// range if the assumption is false.
+	applicationDeploymentBlock := deployedAtBig.Uint64()
+	noiOld, err := getNumberOfInputs(applicationDeploymentBlock)
+	if err != nil {
+		r.Logger.Debug("Fast sync failed, application will do a regular sync.",
+			"application", app.application.IApplicationAddress,
+			"error", err,
+		)
+		return nil, err
+	}
+
+	startSearchBlock := applicationDeploymentBlock
+	endSearchBlock := mostRecentBlockNumber
+	if noiOld == 0 { // all inputs are newer than application deployment
+		// use current values
+	} else if noi == noiOld { // all inputs are older than application deployment
+		startSearchBlock = app.application.IInputBoxBlock
+		endSearchBlock = applicationDeploymentBlock
+	} else { // there are both old and new inputs
+		startSearchBlock = app.application.IInputBoxBlock
+	}
+
+	inputsBlockNumbers, err := MBSearch(startSearchBlock, endSearchBlock, noi, getNumberOfInputs)
+	r.Logger.Info("Fast sync found inputs on the following blocks",
+		"application", app.application.Name,
+		"inputBlockNumbers", inputsBlockNumbers,
+	)
+
+	inputs, err := r.readInputsOnMachingBlocks(ctx, app, inputsBlockNumbers, app.inputSource)
+	return inputs, err
+}
 
 // checkForNewInputs checks if is there new Inputs for all running Applications
 func (r *Service) checkForNewInputs(
@@ -44,15 +184,7 @@ func (r *Service) checkForNewInputs(
 		for lastProcessedBlock, apps := range appsByLastInputCheckBlock {
 			appAddresses := appsToAddresses(apps)
 
-			// Only check blocks starting from the block where the InputBox
-			// contract was deployed as Inputs can be added to that same block
-			inputBoxDeploymentBlock := apps[0].application.IInputBoxBlock
-			if lastProcessedBlock < inputBoxDeploymentBlock {
-				lastProcessedBlock = inputBoxDeploymentBlock - 1
-			}
-
 			if mostRecentBlockNumber > lastProcessedBlock {
-
 				r.Logger.Debug("Checking inputs for applications",
 					"apps", appAddresses,
 					"last_processed_block", lastProcessedBlock,
@@ -107,12 +239,39 @@ func (r *Service) readAndStoreInputs(
 
 	// Retrieve Inputs from blockchain
 	nextSearchBlock := lastProcessedBlock + 1
-	appInputsMap, err := r.readInputsFromBlockchain(ctx, apps, nextSearchBlock, mostRecentBlockNumber)
-	if err != nil {
-		return fmt.Errorf("failed to read inputs from block %v to block %v. %w",
-			nextSearchBlock,
-			mostRecentBlockNumber,
-			err)
+	var appInputsMap = make(map[common.Address][]*Input)
+
+	// try to fast sync
+	if lastProcessedBlock == 0 {
+		for _, app := range apps {
+			inputs, err := r.fastSyncInputs(ctx, lastProcessedBlock, mostRecentBlockNumber, &app)
+			if err != nil {
+				return fmt.Errorf("failed to read inputs of application %v: %w",
+					app.application.IApplicationAddress,
+					err,
+				)
+			}
+			appInputsMap[app.application.IApplicationAddress] = inputs
+		}
+		lastProcessedBlock = mostRecentBlockNumber
+		nextSearchBlock = mostRecentBlockNumber + 1
+	} else {
+		var err error
+		// Only check blocks starting from the block where the InputBox
+		// contract was deployed as Inputs can be added to that same block
+		inputBoxDeploymentBlock := apps[0].application.IInputBoxBlock
+		if lastProcessedBlock < inputBoxDeploymentBlock {
+			lastProcessedBlock = inputBoxDeploymentBlock - 1
+		}
+		nextSearchBlock = lastProcessedBlock + 1 // update because we changed lastProcessedBlock
+
+		appInputsMap, err = r.readInputsFromBlockchain(ctx, apps, nextSearchBlock, mostRecentBlockNumber)
+		if err != nil {
+			return fmt.Errorf("failed to read inputs from block %v to block %v. %w",
+				nextSearchBlock,
+				mostRecentBlockNumber,
+				err)
+		}
 	}
 
 	addrToApp := mapAddressToApp(apps)

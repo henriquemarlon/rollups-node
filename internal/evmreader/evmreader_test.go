@@ -360,6 +360,11 @@ func newMockInputBox() *MockInputBox {
 	return inputSource
 }
 
+func (m *MockInputBox) GetNumberOfInputs(opts *bind.CallOpts, appContract common.Address) (*big.Int, error) {
+	args := m.Called(opts, appContract)
+	return args.Get(0).(*big.Int), args.Error(1)
+}
+
 func (m *MockInputBox) Unset(methodName string) {
 	for _, call := range m.ExpectedCalls {
 		if call.Method == methodName {
@@ -558,6 +563,11 @@ func (m *MockApplicationContract) Unset(methodName string) {
 			call.Unset()
 		}
 	}
+}
+
+func (m *MockApplicationContract) GetDeploymentBlockNumber(opts *bind.CallOpts) (*big.Int, error) {
+	args := m.Called(opts)
+	return args.Get(0).(*big.Int), args.Error(1)
 }
 
 func (m *MockApplicationContract) RetrieveOutputExecutionEvents(

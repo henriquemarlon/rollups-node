@@ -4,6 +4,7 @@
 package evmreader
 
 import (
+	"math/big"
 	"time"
 
 	. "github.com/cartesi/rollups-node/internal/model"
@@ -128,6 +129,24 @@ func (s *EvmReaderSuite) TestItReadsInputsFromNewBlocksFilteredByDA() {
 		mock.Anything,
 		mock.Anything,
 	).Return(events_1, nil)
+
+	inputBox.Unset("GetNumberOfInputs")
+	inputBox.On(
+		"GetNumberOfInputs",
+		mock.Anything,
+		mock.Anything,
+	).Return(new(big.Int).SetUint64(2), nil)
+
+	applicationContract.On(
+		"GetDeploymentBlockNumber",
+		mock.Anything,
+	).Return(new(big.Int).SetUint64(10), nil)
+
+	inputBox.On(
+		"GetNumberOfInputs",
+		mock.Anything,
+		mock.Anything,
+	).Return(new(big.Int).SetUint64(0), nil)
 
 	// Start service
 	ready := make(chan struct{}, 1)
@@ -266,6 +285,24 @@ func (s *EvmReaderSuite) TestItUpdatesLastInputCheckBlockWhenThereIsNoInputs() {
 		mock.Anything,
 		mock.Anything,
 	).Return(events_0, nil)
+
+	inputBox.Unset("GetNumberOfInputs")
+	inputBox.On(
+		"GetNumberOfInputs",
+		mock.Anything,
+		mock.Anything,
+	).Return(new(big.Int).SetUint64(1), nil)
+
+	applicationContract.On(
+		"GetDeploymentBlockNumber",
+		mock.Anything,
+	).Return(new(big.Int).SetUint64(10), nil)
+
+	inputBox.On(
+		"GetNumberOfInputs",
+		mock.Anything,
+		mock.Anything,
+	).Return(new(big.Int).SetUint64(0), nil)
 
 	events_1 := []iinputbox.IInputBoxInputAdded{}
 	mostRecentBlockNumber_1 := uint64(0x12)

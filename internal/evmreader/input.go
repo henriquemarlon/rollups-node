@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/big"
 
 	. "github.com/cartesi/rollups-node/internal/model"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -25,6 +26,51 @@ func (r *Service) checkForNewInputs(
 
 	r.Logger.Debug("Checking for new inputs")
 
+	mostRecentBlockNumberCallOpts := &bind.CallOpts{
+		BlockNumber: new(big.Int).SetUint64(mostRecentBlockNumber),
+	}
+
+	findSafeFirstInputBlockToScan := func(app *appContracts) uint64 {
+		var noiBig *big.Int
+		var err error
+
+		// find if the application has ever received any input. sync to present if not
+		noiBig, err = app.inputSource.GetNumberOfInputs(
+			mostRecentBlockNumberCallOpts,
+			app.application.IApplicationAddress,
+		)
+		if err != nil {
+			return app.application.LastInputCheckBlock
+		}
+		if noiBig.Uint64() == 0 {
+			return mostRecentBlockNumber
+		}
+
+		// find if the application has received an input since its deployment. sync to that block if not
+		// we'll need its deployment block number to do that
+		deploymentBlockNumberBig, err := app.applicationContract.GetDeploymentBlockNumber(mostRecentBlockNumberCallOpts)
+		if err != nil {
+			return app.application.LastInputCheckBlock
+		}
+
+		noiBig, err = app.inputSource.GetNumberOfInputs(&bind.CallOpts{
+			BlockNumber: deploymentBlockNumberBig,
+		},
+			app.application.IApplicationAddress,
+		)
+		if err != nil {
+			return app.application.LastInputCheckBlock
+		}
+		if noiBig.Uint64() == 0 {
+			return deploymentBlockNumberBig.Uint64()
+		}
+
+		// TODO(mpolitzer): Applicaiton has inputs previous to its deployment. We can reduce the number of blocks to scan by
+		// doing a binary search over GetNumberOfInputs and finding the block where 0 -> 1 transition happens. As a simpler,
+		// also correct implementation. We return the first possible block an input could appear on.
+		return app.application.IInputBoxBlock
+	}
+
 	appsByInputBox := map[common.Address][]appContracts{}
 	for _, app := range applications {
 		if !app.application.HasDataAvailabilitySelector(DataAvailability_InputBox) {
@@ -39,17 +85,23 @@ func (r *Service) checkForNewInputs(
 			"inputbox_address", inputBoxAddress,
 			"most recent block", mostRecentBlockNumber,
 		)
-		appsByLastInputCheckBlock := indexApps(byLastInputCheckBlock, inputBoxApps)
+
+		appsByLastInputCheckBlock := make(map[uint64][]appContracts)
+		for _, app := range inputBoxApps {
+			i := app.application.LastInputCheckBlock
+			if i == 0 { // New application. Find a safe start block to scan for inputs
+				i = findSafeFirstInputBlockToScan(&app) - 1
+				r.Logger.Info("Fast sync application inputs",
+					"application", app.application.Name,
+					"start_block", i,
+				)
+				app.application.LastInputCheckBlock = i
+			}
+			appsByLastInputCheckBlock[i] = append(appsByLastInputCheckBlock[i], app)
+		}
 
 		for lastProcessedBlock, apps := range appsByLastInputCheckBlock {
 			appAddresses := appsToAddresses(apps)
-
-			// Only check blocks starting from the block where the InputBox
-			// contract was deployed as Inputs can be added to that same block
-			inputBoxDeploymentBlock := apps[0].application.IInputBoxBlock
-			if lastProcessedBlock < inputBoxDeploymentBlock {
-				lastProcessedBlock = inputBoxDeploymentBlock - 1
-			}
 
 			if mostRecentBlockNumber > lastProcessedBlock {
 

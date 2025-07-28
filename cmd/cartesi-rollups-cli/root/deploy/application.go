@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strings"
 
 	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/internal/config/auth"
@@ -29,6 +30,7 @@ var (
 	applicationRegisterParam         bool
 	applicationTemplateHashParam     string
 	factoryAddressParam              string
+	executionParametersFileParam     string
 )
 
 var applicationCmd = &cobra.Command{
@@ -81,6 +83,8 @@ func init() {
 		"Template hash. If not provided, it will be read from the template path")
 	applicationCmd.Flags().BoolVarP(&applicationRegisterParam, "register", "r", true,
 		"Register the application into the database")
+	applicationCmd.Flags().StringVarP(&executionParametersFileParam, "execution-parameters-file", "", "",
+		"JSON encoded execution parameters of the application. Default values will be used if not defined.")
 	applicationCmd.Flags().BoolVarP(&applicationEnableParam, "enable", "e", true,
 		"Start processing the application, requires 'register=true'.")
 	applicationCmd.Flags().StringVarP(&authorityOwnerAddressParam, "authority-owner", "O", "",
@@ -153,6 +157,36 @@ func runDeployApplication(cmd *cobra.Command, args []string) {
 		fmt.Fprintln(os.Stderr, "\twallet address:       ", txOpts.From)
 	}
 
+	application := model.Application{}
+	executionParameters := model.ExecutionParameters{}
+
+	application.Name = applicationName
+	application.TemplateURI = templateURI
+	application.State = model.ApplicationState_Disabled
+	if applicationEnableParam {
+		application.State = model.ApplicationState_Enabled
+	}
+
+	if changed := cmd.Flags().Changed("execution-parameters-file"); changed {
+		filePath := executionParametersFileParam
+		if executionParametersFileParam == "-" {
+			filePath = os.Stdin.Name()
+		}
+		contents, err := os.ReadFile(filePath)
+		cobra.CheckErr(err)
+
+		// TODO: validateParameters after decoding
+		decoder := json.NewDecoder(strings.NewReader(string(contents)))
+		decoder.DisallowUnknownFields() // Prevent unexpected fields
+		err = decoder.Decode(&executionParameters)
+		cobra.CheckErr(err)
+		cobra.CheckErr(executionParameters.Validate())
+
+		if verboseParam {
+			fmt.Fprintln(os.Stderr, "loading execution parameters...success")
+		}
+	}
+
 	// factory check
 	if verboseParam {
 		fmt.Fprint(os.Stderr, "checking factory address...")
@@ -179,15 +213,6 @@ func runDeployApplication(cmd *cobra.Command, args []string) {
 	if verboseParam || !asJsonParam {
 		fmt.Fprint(os.Stderr, "success\n")
 		fmt.Fprint(os.Stderr, result)
-	}
-
-	application := model.Application{}
-
-	application.Name = applicationName
-	application.TemplateURI = templateURI
-	application.State = model.ApplicationState_Disabled
-	if applicationEnableParam {
-		application.State = model.ApplicationState_Enabled
 	}
 
 	// TODO(mpolitzer): can this be more concise?
@@ -242,6 +267,13 @@ func runDeployApplication(cmd *cobra.Command, args []string) {
 			} else {
 				application = *retrievedApplication
 				fmt.Fprint(os.Stderr, "success\n")
+			}
+		}
+		if changed := cmd.Flags().Changed("execution-parameters-file"); changed {
+			executionParameters.ApplicationID = application.ID
+			err = repo.UpdateExecutionParameters(ctx, &executionParameters)
+			if err != nil {
+				cobra.CheckErr(fmt.Errorf("failed to update execution parameters: %w", err))
 			}
 		}
 

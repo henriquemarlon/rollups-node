@@ -45,8 +45,6 @@ Note: Duration values can be set using time suffixes (e.g., "11s", "1m", "1h", o
 const maxJSONSize = 1 << 20 // 1MB limit
 const maxParamLength = 100
 const maxValueLength = 100
-const maxDuration = 24 * time.Hour
-const maxConcurrentInspects = 1000
 
 func setHelpFunc(cmd *cobra.Command) {
 	origHelpFunc := cmd.HelpFunc()
@@ -205,7 +203,7 @@ func runSet(cmd *cobra.Command, args []string) {
 	err = setParameterValue(params, parameter, value)
 	cobra.CheckErr(err)
 
-	err = validateParameters(params)
+	err = params.Validate()
 	cobra.CheckErr(err)
 
 	params.UpdatedAt = time.Now()
@@ -309,7 +307,7 @@ func runLoad(cmd *cobra.Command, args []string) {
 	cobra.CheckErr(err)
 
 	// Validate the loaded parameters
-	if err := validateParameters(&params); err != nil {
+	if err := params.Validate(); err != nil {
 		cobra.CheckErr(err)
 	}
 
@@ -447,56 +445,6 @@ func setParameterValue(params *model.ExecutionParameters, parameter, value strin
 	default:
 		return fmt.Errorf("unknown parameter: %s", parameter)
 	}
-	return nil
-}
-
-// validateParameters performs validation on the loaded parameters
-func validateParameters(params *model.ExecutionParameters) error {
-	// Validate durations are reasonable
-	if params.AdvanceIncDeadline < 0 || params.AdvanceIncDeadline > maxDuration {
-		return fmt.Errorf("advance_inc_deadline must be between 0 and 24h")
-	}
-
-	if params.AdvanceMaxDeadline < 0 || params.AdvanceMaxDeadline > maxDuration {
-		return fmt.Errorf("advance_max_deadline must be between 0 and 24h")
-	}
-
-	if params.InspectIncDeadline < 0 || params.InspectIncDeadline > maxDuration {
-		return fmt.Errorf("inspect_inc_deadline must be between 0 and 24h")
-	}
-
-	if params.InspectMaxDeadline < 0 || params.InspectMaxDeadline > maxDuration {
-		return fmt.Errorf("inspect_max_deadline must be between 0 and 24h")
-	}
-
-	if params.LoadDeadline < 0 || params.LoadDeadline > maxDuration {
-		return fmt.Errorf("load_deadline must be between 0 and 24h")
-	}
-
-	if params.StoreDeadline < 0 || params.StoreDeadline > maxDuration {
-		return fmt.Errorf("store_deadline must be between 0 and 24h")
-	}
-
-	if params.FastDeadline < 0 || params.FastDeadline > maxDuration {
-		return fmt.Errorf("fast_deadline must be between 0 and 24h")
-	}
-
-	// Validate max_concurrent_inspects
-	if params.MaxConcurrentInspects > maxConcurrentInspects {
-		return fmt.Errorf("max_concurrent_inspects must be between 0 and 1000")
-	}
-
-	// Validate snapshot policy
-	validPolicy := false
-	switch params.SnapshotPolicy {
-	case model.SnapshotPolicy_None, model.SnapshotPolicy_EveryInput, model.SnapshotPolicy_EveryEpoch:
-		validPolicy = true
-	}
-
-	if !validPolicy {
-		return fmt.Errorf("invalid snapshot policy: %s. Valid values are: NONE, EVERY_INPUT, EVERY_EPOCH", params.SnapshotPolicy)
-	}
-
 	return nil
 }
 

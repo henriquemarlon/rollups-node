@@ -365,6 +365,60 @@ func (e *ExecutionParameters) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// validateParameters constants
+const maxDuration = 24 * time.Hour
+const maxConcurrentInspects = 1000
+
+// validateParameters performs validation on the loaded parameters
+func (e *ExecutionParameters) Validate() error {
+	// Validate durations are reasonable
+	if e.AdvanceIncDeadline < 0 || e.AdvanceIncDeadline > maxDuration {
+		return fmt.Errorf("advance_inc_deadline must be between 0 and 24h")
+	}
+
+	if e.AdvanceMaxDeadline < 0 || e.AdvanceMaxDeadline > maxDuration {
+		return fmt.Errorf("advance_max_deadline must be between 0 and 24h")
+	}
+
+	if e.InspectIncDeadline < 0 || e.InspectIncDeadline > maxDuration {
+		return fmt.Errorf("inspect_inc_deadline must be between 0 and 24h")
+	}
+
+	if e.InspectMaxDeadline < 0 || e.InspectMaxDeadline > maxDuration {
+		return fmt.Errorf("inspect_max_deadline must be between 0 and 24h")
+	}
+
+	if e.LoadDeadline < 0 || e.LoadDeadline > maxDuration {
+		return fmt.Errorf("load_deadline must be between 0 and 24h")
+	}
+
+	if e.StoreDeadline < 0 || e.StoreDeadline > maxDuration {
+		return fmt.Errorf("store_deadline must be between 0 and 24h")
+	}
+
+	if e.FastDeadline < 0 || e.FastDeadline > maxDuration {
+		return fmt.Errorf("fast_deadline must be between 0 and 24h")
+	}
+
+	// Validate max_concurrent_inspects
+	if e.MaxConcurrentInspects > maxConcurrentInspects {
+		return fmt.Errorf("max_concurrent_inspects must be between 0 and 1000")
+	}
+
+	// Validate snapshot policy
+	validPolicy := false
+	switch e.SnapshotPolicy {
+	case SnapshotPolicy_None, SnapshotPolicy_EveryInput, SnapshotPolicy_EveryEpoch:
+		validPolicy = true
+	}
+
+	if !validPolicy {
+		return fmt.Errorf("invalid snapshot policy: %s. Valid values are: NONE, EVERY_INPUT, EVERY_EPOCH", e.SnapshotPolicy)
+	}
+
+	return nil
+}
+
 func ParseHexUint64(s string) (uint64, error) {
 	if s == "" || len(s) < 3 || (!strings.HasPrefix(s, "0x") && !strings.HasPrefix(s, "0X")) {
 		return 0, fmt.Errorf("invalid hex string: %s", s)

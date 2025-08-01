@@ -8,6 +8,8 @@ package config
 
 import (
 	"fmt"
+	"os"
+	"strings"
 
 	"github.com/spf13/viper"
 )
@@ -25,9 +27,7 @@ const (
 	AUTH_KIND                                         = "CARTESI_AUTH_KIND"
 	AUTH_MNEMONIC                                     = "CARTESI_AUTH_MNEMONIC"
 	AUTH_MNEMONIC_ACCOUNT_INDEX                       = "CARTESI_AUTH_MNEMONIC_ACCOUNT_INDEX"
-	AUTH_MNEMONIC_FILE                                = "CARTESI_AUTH_MNEMONIC_FILE"
 	AUTH_PRIVATE_KEY                                  = "CARTESI_AUTH_PRIVATE_KEY"
-	AUTH_PRIVATE_KEY_FILE                             = "CARTESI_AUTH_PRIVATE_KEY_FILE"
 	BLOCKCHAIN_DEFAULT_BLOCK                          = "CARTESI_BLOCKCHAIN_DEFAULT_BLOCK"
 	BLOCKCHAIN_HTTP_ENDPOINT                          = "CARTESI_BLOCKCHAIN_HTTP_ENDPOINT"
 	BLOCKCHAIN_ID                                     = "CARTESI_BLOCKCHAIN_ID"
@@ -59,6 +59,18 @@ const (
 	MAX_STARTUP_TIME                                  = "CARTESI_MAX_STARTUP_TIME"
 	VALIDATOR_POLLING_INTERVAL                        = "CARTESI_VALIDATOR_POLLING_INTERVAL"
 	SNAPSHOTS_DIR                                     = "CARTESI_SNAPSHOTS_DIR"
+
+	// File variants
+
+	AUTH_MNEMONIC_FILE = "CARTESI_AUTH_MNEMONIC_FILE"
+
+	AUTH_PRIVATE_KEY_FILE = "CARTESI_AUTH_PRIVATE_KEY_FILE"
+
+	BLOCKCHAIN_HTTP_ENDPOINT_FILE = "CARTESI_BLOCKCHAIN_HTTP_ENDPOINT_FILE"
+
+	BLOCKCHAIN_WS_ENDPOINT_FILE = "CARTESI_BLOCKCHAIN_WS_ENDPOINT_FILE"
+
+	DATABASE_CONNECTION_FILE = "CARTESI_DATABASE_CONNECTION_FILE"
 )
 
 func SetDefaults() {
@@ -74,11 +86,7 @@ func SetDefaults() {
 
 	viper.SetDefault(AUTH_MNEMONIC_ACCOUNT_INDEX, "0")
 
-	// no default for CARTESI_AUTH_MNEMONIC_FILE
-
 	// no default for CARTESI_AUTH_PRIVATE_KEY
-
-	// no default for CARTESI_AUTH_PRIVATE_KEY_FILE
 
 	viper.SetDefault(BLOCKCHAIN_DEFAULT_BLOCK, "finalized")
 
@@ -1219,6 +1227,7 @@ func (c *NodeConfig) ToValidatorConfig() *ValidatorConfig {
 // GetAuthAwsKmsKeyId returns the value for the environment variable CARTESI_AUTH_AWS_KMS_KEY_ID.
 func GetAuthAwsKmsKeyId() (RedactedString, error) {
 	s := viper.GetString(AUTH_AWS_KMS_KEY_ID)
+
 	if s != "" {
 		v, err := toRedactedString(s)
 		if err != nil {
@@ -1232,6 +1241,7 @@ func GetAuthAwsKmsKeyId() (RedactedString, error) {
 // GetAuthAwsKmsRegion returns the value for the environment variable CARTESI_AUTH_AWS_KMS_REGION.
 func GetAuthAwsKmsRegion() (RedactedString, error) {
 	s := viper.GetString(AUTH_AWS_KMS_REGION)
+
 	if s != "" {
 		v, err := toRedactedString(s)
 		if err != nil {
@@ -1245,6 +1255,7 @@ func GetAuthAwsKmsRegion() (RedactedString, error) {
 // GetAuthKind returns the value for the environment variable CARTESI_AUTH_KIND.
 func GetAuthKind() (AuthKind, error) {
 	s := viper.GetString(AUTH_KIND)
+
 	if s != "" {
 		v, err := toAuthKind(s)
 		if err != nil {
@@ -1258,6 +1269,14 @@ func GetAuthKind() (AuthKind, error) {
 // GetAuthMnemonic returns the value for the environment variable CARTESI_AUTH_MNEMONIC.
 func GetAuthMnemonic() (RedactedString, error) {
 	s := viper.GetString(AUTH_MNEMONIC)
+	if s == "" {
+		filename := viper.GetString(AUTH_MNEMONIC_FILE)
+		contents, err := os.ReadFile(filename)
+		if err != nil {
+			return notDefinedRedactedString(), fmt.Errorf("failed to parse %s: %w", AUTH_MNEMONIC_FILE, err)
+		}
+		s = strings.TrimSpace(string(contents))
+	}
 	if s != "" {
 		v, err := toRedactedString(s)
 		if err != nil {
@@ -1271,6 +1290,7 @@ func GetAuthMnemonic() (RedactedString, error) {
 // GetAuthMnemonicAccountIndex returns the value for the environment variable CARTESI_AUTH_MNEMONIC_ACCOUNT_INDEX.
 func GetAuthMnemonicAccountIndex() (RedactedUint, error) {
 	s := viper.GetString(AUTH_MNEMONIC_ACCOUNT_INDEX)
+
 	if s != "" {
 		v, err := toRedactedUint(s)
 		if err != nil {
@@ -1281,22 +1301,17 @@ func GetAuthMnemonicAccountIndex() (RedactedUint, error) {
 	return notDefinedRedactedUint(), fmt.Errorf("%s: %w", AUTH_MNEMONIC_ACCOUNT_INDEX, ErrNotDefined)
 }
 
-// GetAuthMnemonicFile returns the value for the environment variable CARTESI_AUTH_MNEMONIC_FILE.
-func GetAuthMnemonicFile() (string, error) {
-	s := viper.GetString(AUTH_MNEMONIC_FILE)
-	if s != "" {
-		v, err := toString(s)
-		if err != nil {
-			return v, fmt.Errorf("failed to parse %s: %w", AUTH_MNEMONIC_FILE, err)
-		}
-		return v, nil
-	}
-	return notDefinedstring(), fmt.Errorf("%s: %w", AUTH_MNEMONIC_FILE, ErrNotDefined)
-}
-
 // GetAuthPrivateKey returns the value for the environment variable CARTESI_AUTH_PRIVATE_KEY.
 func GetAuthPrivateKey() (RedactedString, error) {
 	s := viper.GetString(AUTH_PRIVATE_KEY)
+	if s == "" {
+		filename := viper.GetString(AUTH_PRIVATE_KEY_FILE)
+		contents, err := os.ReadFile(filename)
+		if err != nil {
+			return notDefinedRedactedString(), fmt.Errorf("failed to parse %s: %w", AUTH_PRIVATE_KEY_FILE, err)
+		}
+		s = strings.TrimSpace(string(contents))
+	}
 	if s != "" {
 		v, err := toRedactedString(s)
 		if err != nil {
@@ -1307,22 +1322,10 @@ func GetAuthPrivateKey() (RedactedString, error) {
 	return notDefinedRedactedString(), fmt.Errorf("%s: %w", AUTH_PRIVATE_KEY, ErrNotDefined)
 }
 
-// GetAuthPrivateKeyFile returns the value for the environment variable CARTESI_AUTH_PRIVATE_KEY_FILE.
-func GetAuthPrivateKeyFile() (string, error) {
-	s := viper.GetString(AUTH_PRIVATE_KEY_FILE)
-	if s != "" {
-		v, err := toString(s)
-		if err != nil {
-			return v, fmt.Errorf("failed to parse %s: %w", AUTH_PRIVATE_KEY_FILE, err)
-		}
-		return v, nil
-	}
-	return notDefinedstring(), fmt.Errorf("%s: %w", AUTH_PRIVATE_KEY_FILE, ErrNotDefined)
-}
-
 // GetBlockchainDefaultBlock returns the value for the environment variable CARTESI_BLOCKCHAIN_DEFAULT_BLOCK.
 func GetBlockchainDefaultBlock() (DefaultBlock, error) {
 	s := viper.GetString(BLOCKCHAIN_DEFAULT_BLOCK)
+
 	if s != "" {
 		v, err := toDefaultBlock(s)
 		if err != nil {
@@ -1336,6 +1339,14 @@ func GetBlockchainDefaultBlock() (DefaultBlock, error) {
 // GetBlockchainHttpEndpoint returns the value for the environment variable CARTESI_BLOCKCHAIN_HTTP_ENDPOINT.
 func GetBlockchainHttpEndpoint() (URL, error) {
 	s := viper.GetString(BLOCKCHAIN_HTTP_ENDPOINT)
+	if s == "" {
+		filename := viper.GetString(BLOCKCHAIN_HTTP_ENDPOINT_FILE)
+		contents, err := os.ReadFile(filename)
+		if err != nil {
+			return notDefinedURL(), fmt.Errorf("failed to parse %s: %w", BLOCKCHAIN_HTTP_ENDPOINT_FILE, err)
+		}
+		s = strings.TrimSpace(string(contents))
+	}
 	if s != "" {
 		v, err := toURL(s)
 		if err != nil {
@@ -1349,6 +1360,7 @@ func GetBlockchainHttpEndpoint() (URL, error) {
 // GetBlockchainId returns the value for the environment variable CARTESI_BLOCKCHAIN_ID.
 func GetBlockchainId() (uint64, error) {
 	s := viper.GetString(BLOCKCHAIN_ID)
+
 	if s != "" {
 		v, err := toUint64(s)
 		if err != nil {
@@ -1362,6 +1374,7 @@ func GetBlockchainId() (uint64, error) {
 // GetBlockchainLegacyEnabled returns the value for the environment variable CARTESI_BLOCKCHAIN_LEGACY_ENABLED.
 func GetBlockchainLegacyEnabled() (bool, error) {
 	s := viper.GetString(BLOCKCHAIN_LEGACY_ENABLED)
+
 	if s != "" {
 		v, err := toBool(s)
 		if err != nil {
@@ -1375,6 +1388,7 @@ func GetBlockchainLegacyEnabled() (bool, error) {
 // GetBlockchainSubscriptionTimeout returns the value for the environment variable CARTESI_BLOCKCHAIN_SUBSCRIPTION_TIMEOUT.
 func GetBlockchainSubscriptionTimeout() (uint64, error) {
 	s := viper.GetString(BLOCKCHAIN_SUBSCRIPTION_TIMEOUT)
+
 	if s != "" {
 		v, err := toUint64(s)
 		if err != nil {
@@ -1388,6 +1402,14 @@ func GetBlockchainSubscriptionTimeout() (uint64, error) {
 // GetBlockchainWsEndpoint returns the value for the environment variable CARTESI_BLOCKCHAIN_WS_ENDPOINT.
 func GetBlockchainWsEndpoint() (URL, error) {
 	s := viper.GetString(BLOCKCHAIN_WS_ENDPOINT)
+	if s == "" {
+		filename := viper.GetString(BLOCKCHAIN_WS_ENDPOINT_FILE)
+		contents, err := os.ReadFile(filename)
+		if err != nil {
+			return notDefinedURL(), fmt.Errorf("failed to parse %s: %w", BLOCKCHAIN_WS_ENDPOINT_FILE, err)
+		}
+		s = strings.TrimSpace(string(contents))
+	}
 	if s != "" {
 		v, err := toURL(s)
 		if err != nil {
@@ -1401,6 +1423,7 @@ func GetBlockchainWsEndpoint() (URL, error) {
 // GetContractsApplicationFactoryAddress returns the value for the environment variable CARTESI_CONTRACTS_APPLICATION_FACTORY_ADDRESS.
 func GetContractsApplicationFactoryAddress() (Address, error) {
 	s := viper.GetString(CONTRACTS_APPLICATION_FACTORY_ADDRESS)
+
 	if s != "" {
 		v, err := toAddress(s)
 		if err != nil {
@@ -1414,6 +1437,7 @@ func GetContractsApplicationFactoryAddress() (Address, error) {
 // GetContractsAuthorityFactoryAddress returns the value for the environment variable CARTESI_CONTRACTS_AUTHORITY_FACTORY_ADDRESS.
 func GetContractsAuthorityFactoryAddress() (Address, error) {
 	s := viper.GetString(CONTRACTS_AUTHORITY_FACTORY_ADDRESS)
+
 	if s != "" {
 		v, err := toAddress(s)
 		if err != nil {
@@ -1427,6 +1451,7 @@ func GetContractsAuthorityFactoryAddress() (Address, error) {
 // GetContractsInputBoxAddress returns the value for the environment variable CARTESI_CONTRACTS_INPUT_BOX_ADDRESS.
 func GetContractsInputBoxAddress() (Address, error) {
 	s := viper.GetString(CONTRACTS_INPUT_BOX_ADDRESS)
+
 	if s != "" {
 		v, err := toAddress(s)
 		if err != nil {
@@ -1440,6 +1465,7 @@ func GetContractsInputBoxAddress() (Address, error) {
 // GetContractsSelfHostedApplicationFactoryAddress returns the value for the environment variable CARTESI_CONTRACTS_SELF_HOSTED_APPLICATION_FACTORY_ADDRESS.
 func GetContractsSelfHostedApplicationFactoryAddress() (Address, error) {
 	s := viper.GetString(CONTRACTS_SELF_HOSTED_APPLICATION_FACTORY_ADDRESS)
+
 	if s != "" {
 		v, err := toAddress(s)
 		if err != nil {
@@ -1453,6 +1479,14 @@ func GetContractsSelfHostedApplicationFactoryAddress() (Address, error) {
 // GetDatabaseConnection returns the value for the environment variable CARTESI_DATABASE_CONNECTION.
 func GetDatabaseConnection() (URL, error) {
 	s := viper.GetString(DATABASE_CONNECTION)
+	if s == "" {
+		filename := viper.GetString(DATABASE_CONNECTION_FILE)
+		contents, err := os.ReadFile(filename)
+		if err != nil {
+			return notDefinedURL(), fmt.Errorf("failed to parse %s: %w", DATABASE_CONNECTION_FILE, err)
+		}
+		s = strings.TrimSpace(string(contents))
+	}
 	if s != "" {
 		v, err := toURL(s)
 		if err != nil {
@@ -1466,6 +1500,7 @@ func GetDatabaseConnection() (URL, error) {
 // GetFeatureClaimSubmissionEnabled returns the value for the environment variable CARTESI_FEATURE_CLAIM_SUBMISSION_ENABLED.
 func GetFeatureClaimSubmissionEnabled() (bool, error) {
 	s := viper.GetString(FEATURE_CLAIM_SUBMISSION_ENABLED)
+
 	if s != "" {
 		v, err := toBool(s)
 		if err != nil {
@@ -1479,6 +1514,7 @@ func GetFeatureClaimSubmissionEnabled() (bool, error) {
 // GetFeatureInputReaderEnabled returns the value for the environment variable CARTESI_FEATURE_INPUT_READER_ENABLED.
 func GetFeatureInputReaderEnabled() (bool, error) {
 	s := viper.GetString(FEATURE_INPUT_READER_ENABLED)
+
 	if s != "" {
 		v, err := toBool(s)
 		if err != nil {
@@ -1492,6 +1528,7 @@ func GetFeatureInputReaderEnabled() (bool, error) {
 // GetFeatureInspectEnabled returns the value for the environment variable CARTESI_FEATURE_INSPECT_ENABLED.
 func GetFeatureInspectEnabled() (bool, error) {
 	s := viper.GetString(FEATURE_INSPECT_ENABLED)
+
 	if s != "" {
 		v, err := toBool(s)
 		if err != nil {
@@ -1505,6 +1542,7 @@ func GetFeatureInspectEnabled() (bool, error) {
 // GetFeatureJsonrpcApiEnabled returns the value for the environment variable CARTESI_FEATURE_JSONRPC_API_ENABLED.
 func GetFeatureJsonrpcApiEnabled() (bool, error) {
 	s := viper.GetString(FEATURE_JSONRPC_API_ENABLED)
+
 	if s != "" {
 		v, err := toBool(s)
 		if err != nil {
@@ -1518,6 +1556,7 @@ func GetFeatureJsonrpcApiEnabled() (bool, error) {
 // GetFeatureMachineHashCheckEnabled returns the value for the environment variable CARTESI_FEATURE_MACHINE_HASH_CHECK_ENABLED.
 func GetFeatureMachineHashCheckEnabled() (bool, error) {
 	s := viper.GetString(FEATURE_MACHINE_HASH_CHECK_ENABLED)
+
 	if s != "" {
 		v, err := toBool(s)
 		if err != nil {
@@ -1531,6 +1570,7 @@ func GetFeatureMachineHashCheckEnabled() (bool, error) {
 // GetInspectAddress returns the value for the environment variable CARTESI_INSPECT_ADDRESS.
 func GetInspectAddress() (string, error) {
 	s := viper.GetString(INSPECT_ADDRESS)
+
 	if s != "" {
 		v, err := toString(s)
 		if err != nil {
@@ -1544,6 +1584,7 @@ func GetInspectAddress() (string, error) {
 // GetJsonrpcApiAddress returns the value for the environment variable CARTESI_JSONRPC_API_ADDRESS.
 func GetJsonrpcApiAddress() (string, error) {
 	s := viper.GetString(JSONRPC_API_ADDRESS)
+
 	if s != "" {
 		v, err := toString(s)
 		if err != nil {
@@ -1557,6 +1598,7 @@ func GetJsonrpcApiAddress() (string, error) {
 // GetTelemetryAddress returns the value for the environment variable CARTESI_TELEMETRY_ADDRESS.
 func GetTelemetryAddress() (string, error) {
 	s := viper.GetString(TELEMETRY_ADDRESS)
+
 	if s != "" {
 		v, err := toString(s)
 		if err != nil {
@@ -1570,6 +1612,7 @@ func GetTelemetryAddress() (string, error) {
 // GetLogColor returns the value for the environment variable CARTESI_LOG_COLOR.
 func GetLogColor() (bool, error) {
 	s := viper.GetString(LOG_COLOR)
+
 	if s != "" {
 		v, err := toBool(s)
 		if err != nil {
@@ -1583,6 +1626,7 @@ func GetLogColor() (bool, error) {
 // GetLogLevel returns the value for the environment variable CARTESI_LOG_LEVEL.
 func GetLogLevel() (LogLevel, error) {
 	s := viper.GetString(LOG_LEVEL)
+
 	if s != "" {
 		v, err := toLogLevel(s)
 		if err != nil {
@@ -1596,6 +1640,7 @@ func GetLogLevel() (LogLevel, error) {
 // GetRemoteMachineLogLevel returns the value for the environment variable CARTESI_REMOTE_MACHINE_LOG_LEVEL.
 func GetRemoteMachineLogLevel() (MachineLogLevel, error) {
 	s := viper.GetString(REMOTE_MACHINE_LOG_LEVEL)
+
 	if s != "" {
 		v, err := toMachineLogLevel(s)
 		if err != nil {
@@ -1609,6 +1654,7 @@ func GetRemoteMachineLogLevel() (MachineLogLevel, error) {
 // GetAdvancerPollingInterval returns the value for the environment variable CARTESI_ADVANCER_POLLING_INTERVAL.
 func GetAdvancerPollingInterval() (Duration, error) {
 	s := viper.GetString(ADVANCER_POLLING_INTERVAL)
+
 	if s != "" {
 		v, err := toDuration(s)
 		if err != nil {
@@ -1622,6 +1668,7 @@ func GetAdvancerPollingInterval() (Duration, error) {
 // GetBlockchainHttpMaxRetries returns the value for the environment variable CARTESI_BLOCKCHAIN_HTTP_MAX_RETRIES.
 func GetBlockchainHttpMaxRetries() (uint64, error) {
 	s := viper.GetString(BLOCKCHAIN_HTTP_MAX_RETRIES)
+
 	if s != "" {
 		v, err := toUint64(s)
 		if err != nil {
@@ -1635,6 +1682,7 @@ func GetBlockchainHttpMaxRetries() (uint64, error) {
 // GetBlockchainHttpRetryMaxWait returns the value for the environment variable CARTESI_BLOCKCHAIN_HTTP_RETRY_MAX_WAIT.
 func GetBlockchainHttpRetryMaxWait() (Duration, error) {
 	s := viper.GetString(BLOCKCHAIN_HTTP_RETRY_MAX_WAIT)
+
 	if s != "" {
 		v, err := toDuration(s)
 		if err != nil {
@@ -1648,6 +1696,7 @@ func GetBlockchainHttpRetryMaxWait() (Duration, error) {
 // GetBlockchainHttpRetryMinWait returns the value for the environment variable CARTESI_BLOCKCHAIN_HTTP_RETRY_MIN_WAIT.
 func GetBlockchainHttpRetryMinWait() (Duration, error) {
 	s := viper.GetString(BLOCKCHAIN_HTTP_RETRY_MIN_WAIT)
+
 	if s != "" {
 		v, err := toDuration(s)
 		if err != nil {
@@ -1661,6 +1710,7 @@ func GetBlockchainHttpRetryMinWait() (Duration, error) {
 // GetBlockchainMaxBlockRange returns the value for the environment variable CARTESI_BLOCKCHAIN_MAX_BLOCK_RANGE.
 func GetBlockchainMaxBlockRange() (uint64, error) {
 	s := viper.GetString(BLOCKCHAIN_MAX_BLOCK_RANGE)
+
 	if s != "" {
 		v, err := toUint64(s)
 		if err != nil {
@@ -1674,6 +1724,7 @@ func GetBlockchainMaxBlockRange() (uint64, error) {
 // GetClaimerPollingInterval returns the value for the environment variable CARTESI_CLAIMER_POLLING_INTERVAL.
 func GetClaimerPollingInterval() (Duration, error) {
 	s := viper.GetString(CLAIMER_POLLING_INTERVAL)
+
 	if s != "" {
 		v, err := toDuration(s)
 		if err != nil {
@@ -1687,6 +1738,7 @@ func GetClaimerPollingInterval() (Duration, error) {
 // GetMaxStartupTime returns the value for the environment variable CARTESI_MAX_STARTUP_TIME.
 func GetMaxStartupTime() (Duration, error) {
 	s := viper.GetString(MAX_STARTUP_TIME)
+
 	if s != "" {
 		v, err := toDuration(s)
 		if err != nil {
@@ -1700,6 +1752,7 @@ func GetMaxStartupTime() (Duration, error) {
 // GetValidatorPollingInterval returns the value for the environment variable CARTESI_VALIDATOR_POLLING_INTERVAL.
 func GetValidatorPollingInterval() (Duration, error) {
 	s := viper.GetString(VALIDATOR_POLLING_INTERVAL)
+
 	if s != "" {
 		v, err := toDuration(s)
 		if err != nil {
@@ -1713,6 +1766,7 @@ func GetValidatorPollingInterval() (Duration, error) {
 // GetSnapshotsDir returns the value for the environment variable CARTESI_SNAPSHOTS_DIR.
 func GetSnapshotsDir() (string, error) {
 	s := viper.GetString(SNAPSHOTS_DIR)
+
 	if s != "" {
 		v, err := toString(s)
 		if err != nil {

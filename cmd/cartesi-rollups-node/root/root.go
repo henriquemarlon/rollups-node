@@ -6,6 +6,7 @@ package root
 import (
 	"context"
 	"log/slog"
+	"net/http"
 
 	"github.com/cartesi/rollups-node/internal/config"
 	"github.com/cartesi/rollups-node/internal/node"
@@ -132,14 +133,22 @@ func init() {
 }
 
 func createEthClient(ctx context.Context, endpoint string, logger *slog.Logger) (*ethclient.Client, error) {
+	clientOptions := []rpc.ClientOption{}
 	rclient := retryablehttp.NewClient()
 	rclient.Logger = logger
 	rclient.RetryMax = int(cfg.BlockchainHttpMaxRetries)
 	rclient.RetryWaitMin = cfg.BlockchainHttpRetryMinWait
 	rclient.RetryWaitMax = cfg.BlockchainHttpRetryMaxWait
-	clientOption := rpc.WithHTTPClient(rclient.StandardClient())
+	clientOptions = append(clientOptions, rpc.WithHTTPClient(rclient.StandardClient()))
 
-	rpcClient, err := rpc.DialOptions(ctx, endpoint, clientOption)
+	if cfg.BlockchainHttpAuthorization.Value != "undefined" {
+		clientOptions = append(clientOptions, rpc.WithHTTPAuth(func(h http.Header) error {
+			h.Set("Authorization", cfg.BlockchainHttpAuthorization.Value)
+			return nil
+		}))
+	}
+
+	rpcClient, err := rpc.DialOptions(ctx, endpoint, clientOptions...)
 	if err != nil {
 		return nil, err
 	}

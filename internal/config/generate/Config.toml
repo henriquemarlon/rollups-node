@@ -106,6 +106,14 @@ description = """
 HTTP endpoint for the blockchain RPC provider."""
 used-by = ["evmreader", "claimer", "node"]
 
+[blockchain.CARTESI_BLOCKCHAIN_HTTP_AUTHORIZATION]
+file = true
+default = "undefined"
+go-type = "RedactedString"
+description = """
+HTTP Authorization header."""
+used-by = ["evmreader", "claimer", "node"]
+
 [blockchain.CARTESI_BLOCKCHAIN_WS_ENDPOINT]
 file = true
 go-type = "URL"

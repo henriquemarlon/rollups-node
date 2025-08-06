@@ -5,6 +5,7 @@ package root
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/cartesi/rollups-node/internal/claimer"
 	"github.com/cartesi/rollups-node/internal/config"
@@ -105,14 +106,22 @@ func run(cmd *cobra.Command, args []string) {
 		Config: *cfg,
 	}
 
+	clientOptions := []rpc.ClientOption{}
 	rclient := retryablehttp.NewClient()
 	rclient.Logger = service.NewLogger(cfg.LogLevel, cfg.LogColor).With("service", serviceName)
 	rclient.RetryMax = int(cfg.BlockchainHttpMaxRetries)
 	rclient.RetryWaitMin = cfg.BlockchainHttpRetryMinWait
 	rclient.RetryWaitMax = cfg.BlockchainHttpRetryMaxWait
+	clientOptions = append(clientOptions, rpc.WithHTTPClient(rclient.StandardClient()))
 
-	clientOption := rpc.WithHTTPClient(rclient.StandardClient())
-	rpcClient, err := rpc.DialOptions(ctx, cfg.BlockchainHttpEndpoint.String(), clientOption)
+	if cfg.BlockchainHttpAuthorization.Value != "undefined" {
+		clientOptions = append(clientOptions, rpc.WithHTTPAuth(func(h http.Header) error {
+			h.Set("Authorization", cfg.BlockchainHttpAuthorization.Value)
+			return nil
+		}))
+	}
+
+	rpcClient, err := rpc.DialOptions(ctx, cfg.BlockchainHttpEndpoint.String(), clientOptions...)
 	cobra.CheckErr(err)
 	createInfo.EthConn = ethclient.NewClient(rpcClient)
 

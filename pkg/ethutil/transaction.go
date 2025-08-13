@@ -22,18 +22,18 @@ const PollInterval = 100 * time.Millisecond
 func sendTransaction(
 	ctx context.Context,
 	client *ethclient.Client,
-	signer Signer,
+	txOpts *bind.TransactOpts,
 	txValue *big.Int,
 	gasLimit uint64,
 	doSend func(txOpts *bind.TransactOpts) (*types.Transaction, error),
 ) (*types.Receipt, error) {
-	txOpts, err := _prepareTransaction(ctx, client, signer, txValue, gasLimit)
+	txOpts, err := _prepareTransaction(ctx, client, txOpts, txValue, gasLimit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to prepare transaction: %v", err)
 	}
 	tx, err := doSend(txOpts)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send dapp address: %v", err)
+		return nil, fmt.Errorf("failed to send transaction: %v", err)
 	}
 	receipt, err := _waitForTransaction(ctx, client, tx)
 	if err != nil {
@@ -46,11 +46,11 @@ func sendTransaction(
 func _prepareTransaction(
 	ctx context.Context,
 	client *ethclient.Client,
-	signer Signer,
+	txOpts *bind.TransactOpts,
 	txValue *big.Int,
 	gasLimit uint64,
 ) (*bind.TransactOpts, error) {
-	nonce, err := client.PendingNonceAt(ctx, signer.Account())
+	nonce, err := client.PendingNonceAt(ctx, txOpts.From)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get nonce: %v", err)
 	}
@@ -58,15 +58,11 @@ func _prepareTransaction(
 	if err != nil {
 		return nil, fmt.Errorf("failed to get gas price: %v", err)
 	}
-	tx, err := signer.MakeTransactor()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create transactor: %v", err)
-	}
-	tx.Nonce = big.NewInt(int64(nonce))
-	tx.Value = txValue
-	tx.GasLimit = gasLimit
-	tx.GasPrice = gasPrice
-	return tx, nil
+	txOpts.Nonce = big.NewInt(int64(nonce))
+	txOpts.Value = txValue
+	txOpts.GasLimit = gasLimit
+	txOpts.GasPrice = gasPrice
+	return txOpts, nil
 }
 
 // Wait for transaction to be included in a block. Return the transaction receipt.
@@ -94,8 +90,8 @@ func _waitForTransaction(
 	if err != nil {
 		return nil, fmt.Errorf("failed to get receipt: %v", err)
 	}
-	if receipt.Status == 0 {
-		reason, err := _traceTransaction(ctx, client, tx.Hash())
+	if receipt.Status == types.ReceiptStatusFailed {
+		reason, err := _traceTransaction(client, tx.Hash())
 		if err != nil {
 			return nil, fmt.Errorf("transaction failed; failed to get reason: %v", err)
 		}
@@ -107,7 +103,6 @@ func _waitForTransaction(
 // Call the Ethereum node using the RPC client directly because the ethclient struct doesn't have a
 // binding for the trace API. More details in: https://github.com/ethereum/go-ethereum/issues/17341
 func _traceTransaction(
-	ctx context.Context,
 	client *ethclient.Client,
 	hash common.Hash,
 ) (string, error) {

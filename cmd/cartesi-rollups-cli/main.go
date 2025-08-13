@@ -5,20 +5,18 @@
 package main
 
 import (
-	"log/slog"
 	"os"
 
 	"github.com/cartesi/rollups-node/cmd/cartesi-rollups-cli/root"
-	"github.com/lmittmann/tint"
 )
 
 func main() {
-	opts := &tint.Options{
-		Level: slog.LevelInfo,
-	}
-	handler := tint.NewHandler(os.Stdout, opts)
-	logger := slog.New(handler)
-	slog.SetDefault(logger)
+	helpTemplate := `{{with .Short}}{{. | trimTrailingWhitespaces}}
+
+{{end}}{{if or .Runnable .HasSubCommands}}{{.UsageString}}{{end}}{{.Long | trimTrailingWhitespaces}}
+`
+
+	root.Cmd.SetHelpTemplate(helpTemplate)
 
 	err := root.Cmd.Execute()
 	if err != nil {

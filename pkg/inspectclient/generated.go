@@ -136,26 +136,11 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 // The interface specification for the client above.
 type ClientInterface interface {
 	// InspectPostWithBody request with any body
-	InspectPostWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// Inspect request
-	Inspect(ctx context.Context, payload string, reqEditors ...RequestEditorFn) (*http.Response, error)
+	InspectPostWithBody(ctx context.Context, dapp string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
-func (c *Client) InspectPostWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewInspectPostRequestWithBody(c.Server, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) Inspect(ctx context.Context, payload string, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewInspectRequest(c.Server, payload)
+func (c *Client) InspectPostWithBody(ctx context.Context, dapp string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewInspectPostRequestWithBody(c.Server, dapp, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -167,41 +152,12 @@ func (c *Client) Inspect(ctx context.Context, payload string, reqEditors ...Requ
 }
 
 // NewInspectPostRequestWithBody generates requests for InspectPost with any type of body
-func NewInspectPostRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("inspect")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewInspectRequest generates requests for Inspect
-func NewInspectRequest(server string, payload string) (*http.Request, error) {
+func NewInspectPostRequestWithBody(server string, dapp string, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
 
-	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "payload", runtime.ParamLocationPath, payload)
+	pathParam0, err = runtime.StyleParamWithLocation("simple", false, "dapp", runtime.ParamLocationPath, dapp)
 	if err != nil {
 		return nil, err
 	}
@@ -221,10 +177,12 @@ func NewInspectRequest(server string, payload string) (*http.Request, error) {
 		return nil, err
 	}
 
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	req, err := http.NewRequest("POST", queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -273,10 +231,7 @@ func WithBaseURL(baseURL string) ClientOption {
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
 	// InspectPostWithBodyWithResponse request with any body
-	InspectPostWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InspectPostResponse, error)
-
-	// InspectWithResponse request
-	InspectWithResponse(ctx context.Context, payload string, reqEditors ...RequestEditorFn) (*InspectResponse, error)
+	InspectPostWithBodyWithResponse(ctx context.Context, dapp string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InspectPostResponse, error)
 }
 
 type InspectPostResponse struct {
@@ -301,44 +256,13 @@ func (r InspectPostResponse) StatusCode() int {
 	return 0
 }
 
-type InspectResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *InspectResult
-}
-
-// Status returns HTTPResponse.Status
-func (r InspectResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r InspectResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
 // InspectPostWithBodyWithResponse request with arbitrary body returning *InspectPostResponse
-func (c *ClientWithResponses) InspectPostWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InspectPostResponse, error) {
-	rsp, err := c.InspectPostWithBody(ctx, contentType, body, reqEditors...)
+func (c *ClientWithResponses) InspectPostWithBodyWithResponse(ctx context.Context, dapp string, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*InspectPostResponse, error) {
+	rsp, err := c.InspectPostWithBody(ctx, dapp, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
 	return ParseInspectPostResponse(rsp)
-}
-
-// InspectWithResponse request returning *InspectResponse
-func (c *ClientWithResponses) InspectWithResponse(ctx context.Context, payload string, reqEditors ...RequestEditorFn) (*InspectResponse, error) {
-	rsp, err := c.Inspect(ctx, payload, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseInspectResponse(rsp)
 }
 
 // ParseInspectPostResponse parses an HTTP response from a InspectPostWithResponse call
@@ -350,32 +274,6 @@ func ParseInspectPostResponse(rsp *http.Response) (*InspectPostResponse, error) 
 	}
 
 	response := &InspectPostResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest InspectResult
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseInspectResponse parses an HTTP response from a InspectWithResponse call
-func ParseInspectResponse(rsp *http.Response) (*InspectResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &InspectResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}

@@ -1,14 +1,12 @@
 [
   {
-    "include": ["**/*.go", "**/*.rs"],
+    "include": [
+      "**/*.go"
+    ],
     "exclude": [
-      "offchain/grpc-interfaces/**",
-      "offchain/target/**",
-      "offchain/data/src/schema.rs",
-      "pkg/contracts/*.go",
-      "pkg/readerclient/generated.go",
-      "pkg/inspectclient/generated.go",
-      "rollups-contracts/**"
+      "internal/repository/postgres/db/**",
+      "pkg/contracts/**",
+      "pkg/inspectclient/generated.go"
     ],
     "license": ".github/license-check/header.txt"
   }

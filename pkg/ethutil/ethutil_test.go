@@ -5,13 +5,16 @@ package ethutil
 
 import (
 	"context"
-	"io"
+	"crypto/rand"
+	"net/url"
+	"os"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/cartesi/rollups-node/internal/deps"
-	"github.com/cartesi/rollups-node/pkg/addresses"
-	"github.com/cartesi/rollups-node/pkg/testutil"
+	"github.com/cartesi/rollups-node/internal/config"
+	"github.com/cartesi/rollups-node/pkg/contracts/inputs"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/stretchr/testify/suite"
@@ -23,105 +26,118 @@ const testTimeout = 300 * time.Second
 // and connects to it using go-ethereum's client.
 type EthUtilSuite struct {
 	suite.Suite
-	ctx      context.Context
-	cancel   context.CancelFunc
-	deps     *deps.DepsContainers
-	client   *ethclient.Client
-	endpoint string
-	signer   Signer
-	book     *addresses.Book
+	ctx                  context.Context
+	cancel               context.CancelFunc
+	client               *ethclient.Client
+	endpoint             *url.URL
+	txOpts               *bind.TransactOpts
+	inputBoxAddr         common.Address
+	selfHostedAppFactory common.Address
+	appAddr              common.Address
+	machineDir           string
+	cleanup              func()
 }
 
 func (s *EthUtilSuite) SetupTest() {
 	s.ctx, s.cancel = context.WithTimeout(context.Background(), testTimeout)
 
 	var err error
-	s.deps, err = newDevNetContainer(context.Background())
+	s.endpoint, err = config.GetBlockchainHttpEndpoint()
 	s.Require().Nil(err)
 
-	s.endpoint, err = s.deps.DevnetEndpoint(s.ctx, "ws")
+	s.client, err = ethclient.DialContext(s.ctx, s.endpoint.String())
 	s.Require().Nil(err)
 
-	s.client, err = ethclient.DialContext(s.ctx, s.endpoint)
+	chainId, err := s.client.ChainID(s.ctx)
 	s.Require().Nil(err)
 
-	s.signer, err = NewMnemonicSigner(s.ctx, s.client, FoundryMnemonic, 0)
+	privateKey, err := MnemonicToPrivateKey(FoundryMnemonic, 0)
 	s.Require().Nil(err)
 
-	s.book = addresses.GetTestBook()
+	s.txOpts, err = bind.NewKeyedTransactorWithChainID(privateKey, chainId)
+	s.Require().Nil(err)
+
+	s.selfHostedAppFactory, err = config.GetContractsSelfHostedApplicationFactoryAddress()
+	s.Require().Nil(err)
+
+	var templateHash common.Hash
+	_, err = rand.Read(templateHash[:])
+	s.Require().Nil(err)
+
+	s.inputBoxAddr, err = config.GetContractsInputBoxAddress()
+	s.Require().Nil(err)
+
+	_, _, encodedDA, err := DefaultDA(s.client, s.inputBoxAddr)
+	salt := "0000000000000000000000000000000000000000000000000000000000000000"
+	s.appAddr, s.cleanup, err = CreateAnvilSnapshotAndDeployApp(s.ctx, s.client, s.selfHostedAppFactory, templateHash, encodedDA, salt)
+	s.Require().Nil(err)
 }
 
 func (s *EthUtilSuite) TearDownTest() {
-	err := deps.Terminate(context.Background(), s.deps)
-	s.Nil(err)
+	os.RemoveAll(s.machineDir)
+	if s.cleanup != nil {
+		s.cleanup()
+	}
 	s.cancel()
 }
 
 func (s *EthUtilSuite) TestAddInput() {
-	sender := common.HexToAddress("f39fd6e51aad88f6f4ce6ab8827279cfffb92266")
+
+	sender := s.txOpts.From
 	payload := common.Hex2Bytes("deadbeef")
 
-	inputIndex, err := AddInput(s.ctx, s.client, s.book, s.signer, payload)
-	if !s.Nil(err) {
-		s.logDevnetOutput()
-		s.T().FailNow()
+	indexChan := make(chan uint64)
+	errChan := make(chan error)
+
+	waitGroup := sync.WaitGroup{}
+	waitGroup.Add(1)
+
+	go func() {
+		waitGroup.Done()
+		inputIndex, _, err := AddInput(s.ctx, s.client, s.txOpts, s.inputBoxAddr, s.appAddr, payload)
+		if err != nil {
+			errChan <- err
+			return
+		}
+		indexChan <- inputIndex
+	}()
+
+	waitGroup.Wait()
+	time.Sleep(1 * time.Second)
+	_, err := MineNewBlock(s.ctx, s.client)
+	s.Require().Nil(err)
+
+	select {
+	case err := <-errChan:
+		s.Require().FailNow("Unexpected Error", err)
+	case inputIndex := <-indexChan:
+		s.Require().Equal(uint64(0), inputIndex)
+
+		event, err := GetInputFromInputBox(s.client, s.inputBoxAddr, s.appAddr, inputIndex)
+		s.Require().Nil(err)
+
+		inputsABI, err := inputs.InputsMetaData.GetAbi()
+		s.Require().Nil(err)
+		advanceInputABI := inputsABI.Methods["EvmAdvance"]
+		inputArgs := map[string]interface{}{}
+		err = advanceInputABI.Inputs.UnpackIntoMap(inputArgs, event.Input[4:])
+		s.Require().Nil(err)
+
+		s.T().Log(inputArgs)
+		s.Require().Equal(sender, inputArgs["msgSender"])
+		s.Require().Equal(payload, inputArgs["payload"])
 	}
-
-	s.Require().Equal(0, inputIndex)
-
-	event, err := GetInputFromInputBox(s.client, s.book, inputIndex)
-	s.Require().Nil(err)
-	s.Require().Equal(sender, event.Sender)
-	s.Require().Equal(payload, event.Input)
 }
 
-func (s *EthUtilSuite) TestMineOneBlock() {
-	s.mineBlocks(1)
-}
-
-func (s *EthUtilSuite) TestMineAHundredBlocks() {
-	s.mineBlocks(100)
-}
-
-func (s *EthUtilSuite) mineBlocks(numBlocks uint64) {
-	lastBlockNumber, err := s.client.BlockNumber(s.ctx)
+func (s *EthUtilSuite) TestMineNewBlock() {
+	prevBlockNumber, err := s.client.BlockNumber(s.ctx)
 	s.Require().Nil(err)
-	expectedBlockNumber := lastBlockNumber + numBlocks
-
-	blockNumber, err := MineBlocks(s.ctx, s.endpoint, numBlocks, 1)
+	blockNumber, err := MineNewBlock(s.ctx, s.client)
 	s.Require().Nil(err)
-	s.Require().Equal(expectedBlockNumber, blockNumber)
-}
+	s.Require().Equal(prevBlockNumber+1, blockNumber)
 
-// Log the output of the given container
-func (s *EthUtilSuite) logDevnetOutput() {
-	reader, err := s.deps.DevnetLogs(s.ctx)
-	s.Require().Nil(err)
-	defer reader.Close()
-
-	bytes, err := io.ReadAll(reader)
-	s.Require().Nil(err)
-	s.T().Log(string(bytes))
 }
 
 func TestEthUtilSuite(t *testing.T) {
 	suite.Run(t, new(EthUtilSuite))
-}
-
-// We use the node devnet docker image to test the client.
-// This image starts an anvil node with the Rollups contracts already deployed.
-func newDevNetContainer(ctx context.Context) (*deps.DepsContainers, error) {
-
-	container, err := deps.Run(ctx, deps.DepsConfig{
-		Devnet: &deps.DevnetConfig{
-			DockerImage:             deps.DefaultDevnetDockerImage,
-			BlockTime:               deps.DefaultDevnetBlockTime,
-			BlockToWaitForOnStartup: deps.DefaultDevnetBlockToWaitForOnStartup,
-			Port:                    testutil.GetCartesiTestDepsPortRange(),
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-	return container, nil
 }

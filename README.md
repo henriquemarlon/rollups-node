@@ -1,127 +1,115 @@
 # Cartesi Rollups Node
 
-This page assumes the reader knows the concepts of Cartesi Rollups.
-The Cartesi Rollups [documentation page][rollups-docs] is an excellent place to learn these concepts.
-
-[rollups-docs]: https://docs.cartesi.io/cartesi-rollups/overview/
-
-## Introduction
-
-![Overview](docs/images/overview.svg)
-
-The diagram above presents the topology of the Cartesi Rollups framework.
-In this diagram, the white box is an EVM-compatible blockchain, such as Ethereum.
-The blue boxes are the major Cartesi components in the Cartesi Rollups framework.
-The black boxes are the components of the application built on top of Cartesi Rollups.
-
-The Cartesi Rollups Contracts run in the base layer and are responsible for settlement, consensus, and data availability.
-The Cartesi Machine is a deterministic execution environment that runs off-chain.
-These two components live in completely decoupled environments, so the Cartesi Rollups framework needs another component to handle the communication between them.
+[![Latest Release](https://img.shields.io/github/v/release/cartesi/rollups-node?label=version)](https://github.com/cartesi/rollups-node/releases)
+[![Build Status](https://img.shields.io/github/actions/workflow/status/cartesi/rollups-node/build.yml?branch=main)](https://github.com/cartesi/rollups-node/actions)
+[![License](https://img.shields.io/github/license/cartesi/rollups-node)](LICENSE)
 
 The Cartesi Rollups Node is the middleware that connects the Rollups smart contracts, the application back-end running inside the Cartesi Machine, and the front-end.
-As such, the Node reads the advance-state inputs from the smart contracts, sends those inputs to the Cartesi Machine, and stores the computation outputs in a database that the application front-end can later query.
-The Node also provides a consensus mechanism so users can validate outputs on-chain.
 
-## Features
+## Getting Started
 
-This section delves into the Node features in more detail.
+### Installation
 
-### Advance State
+We provide packages for debian (.deb) in **amd64** and **arm64** variants on the release page. Other systems can build from source.
 
-![Advance State](docs/images/advance.svg)
+#### From Sources
 
-The diagram above presents the data flow for advancing the rollup state.
-First, the application front-end adds an advance-state input to the `InputBox` smart contract in the base layer.
-The Node watches the events emitted by this contract, reads the input, and sends it to the application back-end running inside the Cartesi Machine.
-Once the application back-end processes the input, the Node obtains the outputs (vouchers, notices, and reports) and stores them in a database.
-Finally, the application front-end reads these outputs from the database.
+##### System Requirements
 
-The Node provides a GraphQL API to read the rollup state for the application front end.
-This API contains the advance-state inputs, the corresponding outputs, and the proofs necessary to validate the outputs on-chain.
-The [`reader.graphql`](api/graphql/reader.graphql) file contains the schema for this API.
+- Cartesi Machine emulator == 0.19.x
+- GNU Make >= 3.81
+- Go >= 1.24.1
 
-### Inspect State
+Follow the Cartesi Machine installation instructions [here](https://github.com/cartesi/machine-emulator?tab=readme-ov-file#installation).
 
-![Inspect State](docs/images/inspect.svg)
+##### Build
 
-Besides advance-state inputs, the Cartesi Machine can also process inspect-state inputs.
-By definition, these inputs don't alter the machine's state; instead, they are a mechanism to query the application back-end directly.
-The application front-end sends inspect-state inputs directly to the Rollups Node.
-The Node sends the inputs to the Cartesi Machine, obtains the reports, and returns them to the application front-end (note the inspect-state inputs do not return vouchers and notices).
+```sh
+# clone a stable branch of the emulator
+git clone --branch v2.0.0 https://github.com/cartesi/rollups-node.git
+cd rollups-node
 
-The Node provides a REST API for the application front-end to inspect the Cartesi Machine.
-The [`inspect.yaml`](api/openapi/inspect.yaml) file contains the schema for this API.
+# compile
+make
+```
 
-It is worth noting that the current version of the Rollups Node can only process one input at a time, be it advance-state or inspect-state.
-So, be cautious of using inspect-state inputs if your application has specific scalability requirements.
-We recommend benchmarking the application back-end before committing to an architecture that relies on inspect-state inputs.
+### Install
 
-### Validate
+Optionally setup `GO_INSTALL_PATH`, then:
 
-![Validate](docs/images/validate.svg)
+```sh
 
-The Rollups Node bundles multiple advance-state inputs into an epoch.
-Since the Node only supports the Authority consensus mechanism, it is up to the Node to decide when it should close an epoch.
-Once an epoch is closed, the Node computes a claim for the epoch and submits it to the rollups smart contracts.
-Then, the application front-end fetches the proof that a given output is within the closed epoch and uses this proof to validate the output.
-For instance, the front end may verify whether a notice is valid or execute a voucher.
+# install
+sudo make install
+```
 
-Only the validator can submit a claim to the Rollups smart contracts.
-The application developer decides who is the validator when deploying the application contract to the base layer.
-If you want to run the Node but aren't the application's validator, you may turn off the feature that submits the claims.
-The [configuration](#configuration) section describes how to do so.
+### Usage
 
-### Host Mode
+Once installed, the node requires configuration to run.
+Via either environment variables or execution arguments.
 
-The host mode allows the developer to run the application back-end in the host machine instead of the Cartesi Machine.
-[NoNodo][nonodo] replaces this feature, which will be deprecated in version 2.0 of the Rollups Node.
+As an **example**, the development values can be found with `make env`.
+Node operators should get familiar with those and customize to their specific setup.
+For more on this topic, consult the [wiki](https://github.com/cartesi/rollups-node/wiki/Configuration).
 
-[nonodo]: https://github.com/gligneul/nonodo#nonodo
+The node provides multiple binaries, one for each of its modules (advancer, claimer, evm-reader, validator, jsonrpc-api).
+They follow the naming convention `cartesi-rollups-<module>`.
+In addition, there is the `cli` tool that provides functionality to help develop and debug the Cartesi Rollups node and
+the `node` to run in standalone mode.
 
-## Running
+Each of these binaries has a help invokable with: `<binary> --help` for discoverability.
+For more on this topic, consult the [wiki](https://github.com/cartesi/rollups-node/wiki/Commands).
 
-We recommend application developers use [Sunodo][sunodo-docs] to run the Node.
-Advanced developers who want to modify the Node may check the [development](#development) section.
+## Use Cases
 
-[sunodo-docs]: https://docs.sunodo.io/
+The following projects have been using the rollups-node:
 
-### Configuration
+- [Cartesi CLI](https://github.com/cartesi/cli) - Uses the emulator's CLI in TypeScript for DApp development.
 
-The Rollups Node should be configured exclusively with environment variables, which are described at [Node Configuration](docs/config.md) page.
+## Related Projects
 
-## Dependencies
+TODO
 
-The Cartesi Rollups Node depends on the following Cartesi components:
+## Benchmarks
 
-| Component | Version |
-|---|---|
-| Cartesi Machine SDK | [v0.17.1](https://github.com/cartesi/machine-emulator-sdk/releases/tag/v0.17.1) |
-| Cartesi OpenAPI Interfaces | [v0.7.1](https://github.com/cartesi/openapi-interfaces/releases/tag/v0.7.1) |
-| Cartesi Rollups Contracts | [v1.2.0](https://github.com/cartesi/rollups-contracts/releases/tag/v1.2.0) |
-| Cartesi Server Manager | [v0.9.1](https://github.com/cartesi/server-manager/releases/tag/v0.9.1) |
+TODO
 
-## Development
+## Documentation
 
-Check the [development](docs/development.md) page for more information about developing the Rollups Node.
+The Cartesi Rollups node documentation is undergoing a comprehensive update.
+While the full documentation is being refreshed, you can find guides and tutorials in our [wiki](https://github.com/cartesi/rollups-node/wiki).
 
-### Internal architecture
+## Change Log
 
-This document covered the features of the Node and its external APIs in a high-level manner.
-Check the [architecture](docs/architecture.md) page for more details about the Node internal components.
+Changes between Cartesi Rollups node releases are documented in [CHANGELOG](CHANGELOG).
 
-## Releasing
+## Roadmap
 
-Check the [release](docs/release.md) page for more information about the steps to release a version of the Rollups Node.
+We are continually improving the Rollups node with new features and enhancements and ramping up the 2.0 version.
+Check out our roadmap at [GitHub Projects](https://github.com/cartesi/rollups-node/projects) to see what's coming in the future.
+
+## Community & Support
+
+- Join our [Discord](https://discord.gg/cartesi) `#node` channel to engage with users and developers.
+- Report issues on our [GitHub Issues](https://github.com/cartesi/rollups-node/issues).
+
+## Developing
+
+For information about developing the rollups node, including instructions for running tests, using the linter, and code formatting, please refer to our [development guide](https://github.com/cartesi/rollups-node/wiki/Development-Guide) in the wiki.
 
 ## Contributing
 
-Thank you for your interest in Cartesi!
-Head over to our [Contributing Guidelines](docs/contributing.md) for instructions on how to sign our Contributors Agreement and get started with Cartesi!
+Please see our [contributing guidelines](CONTRIBUTING.md) for instructions on how to start contributing to the project.
+Note we have a [code of conduct](CODE_OF_CONDUCT.md), please follow it in all your interactions with the project.
 
-Please note we have a [Code of Conduct](docs/code_of_conduct.md); please follow it in all your interactions with the project.
+## Authors
+
+The Cartesi Machine emulator is actively developed by [Cartesi](https://cartesi.io/)'s Machine Reference Unit, with significant contributions from many open-source developers.
+For a complete list of authors, see the [AUTHORS](AUTHORS) file.
 
 ## License
 
-Note: This component currently has dependencies licensed under the GNU GPL, version 3, so you should treat this component as a whole as being under the GPL version 3.
-But all Cartesi-written code in this component is licensed under the Apache License, version 2, or a compatible permissive license, and can be used independently under the Apache v2 license.
-After we rewrite this component, we will release it under the Apache v2 license.
+The repository and all contributions to it are licensed under the [Apache 2.0](https://www.apache.org/licenses/LICENSE-2.0), unless otherwise specified below or in subdirectory LICENSE / COPYING files.
+Please review our [LICENSE](LICENSE) file for the Apache 2.0 license and also the [third party licenses](THIRD_PARTY_LICENSES.md) file for information on third-party software licenses.
+
+Note: This component currently has dependencies licensed under the GNU LGPL, version 3, so you should treat this component as a whole as being under the LGPL version 3. But all Cartesi-written code in this component is licensed under the Apache License, version 2, and can be used independently under the Apache v2 license.

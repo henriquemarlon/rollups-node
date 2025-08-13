@@ -9,66 +9,69 @@
 package main
 
 import (
-	"archive/tar"
-	"compress/gzip"
 	"encoding/json"
-	"io"
+	"errors"
+	"io/fs"
 	"log"
-	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 )
 
-const rollupsContractsUrl = "https://registry.npmjs.org/@cartesi/rollups/-/rollups-1.2.0.tgz"
-const baseContractsPath = "package/export/artifacts/contracts/"
-const bindingPkg = "contracts"
+const baseContractsPath = "../../rollups-contracts/"
 
 type contractBinding struct {
 	jsonPath string
 	typeName string
-	outFile  string
 }
 
 var bindings = []contractBinding{
 	{
-		jsonPath: baseContractsPath + "inputs/InputBox.sol/InputBox.json",
-		typeName: "InputBox",
-		outFile:  "input_box.go",
+		jsonPath: baseContractsPath + "IAuthorityFactory.sol/IAuthorityFactory.json",
+		typeName: "IAuthorityFactory",
 	},
 	{
-		jsonPath: baseContractsPath + "dapp/CartesiDAppFactory.sol/CartesiDAppFactory.json",
-		typeName: "CartesiDAppFactory",
-		outFile:  "cartesi_dapp_factory.go",
+		jsonPath: baseContractsPath + "IConsensus.sol/IConsensus.json",
+		typeName: "IConsensus",
 	},
 	{
-		jsonPath: baseContractsPath + "dapp/CartesiDApp.sol/CartesiDApp.json",
-		typeName: "CartesiDApp",
-		outFile:  "cartesi_dapp.go",
+		jsonPath: baseContractsPath + "IApplication.sol/IApplication.json",
+		typeName: "IApplication",
 	},
 	{
-		jsonPath: baseContractsPath + "consensus/authority/Authority.sol/Authority.json",
-		typeName: "Authority",
-		outFile:  "authority.go",
+		jsonPath: baseContractsPath + "IApplicationFactory.sol/IApplicationFactory.json",
+		typeName: "IApplicationFactory",
 	},
 	{
-		jsonPath: baseContractsPath + "history/History.sol/History.json",
-		typeName: "History",
-		outFile:  "history.go",
+		jsonPath: baseContractsPath + "ISelfHostedApplicationFactory.sol/ISelfHostedApplicationFactory.json",
+		typeName: "ISelfHostedApplicationFactory",
+	},
+	{
+		jsonPath: baseContractsPath + "IInputBox.sol/IInputBox.json",
+		typeName: "IInputBox",
+	},
+	{
+		jsonPath: baseContractsPath + "Inputs.sol/Inputs.json",
+		typeName: "Inputs",
+	},
+	{
+		jsonPath: baseContractsPath + "Outputs.sol/Outputs.json",
+		typeName: "Outputs",
+	},
+	{
+		jsonPath: baseContractsPath + "DataAvailability.sol/DataAvailability.json",
+		typeName: "DataAvailability",
 	},
 }
 
 func main() {
-	contractsZip := downloadContracts(rollupsContractsUrl)
-	defer contractsZip.Close()
-	contractsTar := unzip(contractsZip)
-	defer contractsTar.Close()
-
 	files := make(map[string]bool)
 	for _, b := range bindings {
 		files[b.jsonPath] = true
 	}
-	contents := readFilesFromTar(contractsTar, files)
+	contents := readFilesFromDir(files)
 
 	for _, b := range bindings {
 		content := contents[b.jsonPath]
@@ -86,42 +89,18 @@ func checkErr(context string, err any) {
 	}
 }
 
-// Download the contracts from rollupsContractsUrl.
-// Return the buffer with the contracts.
-func downloadContracts(url string) io.ReadCloser {
-	log.Print("downloading contracts from ", url)
-	response, err := http.Get(url)
-	checkErr("download tgz", err)
-	if response.StatusCode != http.StatusOK {
-		response.Body.Close()
-		log.Fatal("invalid status: ", response.Status)
-	}
-	return response.Body
-}
-
-// Decompress the buffer with the contracts.
-func unzip(r io.Reader) io.ReadCloser {
-	log.Print("unziping contracts")
-	gzipReader, err := gzip.NewReader(r)
-	checkErr("unziping", err)
-	return gzipReader
-}
-
-// Read the required files from the tar.
+// Read the required files from the directory.
 // Return a map with the file contents.
-func readFilesFromTar(r io.Reader, files map[string]bool) map[string][]byte {
+func readFilesFromDir(files map[string]bool) map[string][]byte {
 	contents := make(map[string][]byte)
-	tarReader := tar.NewReader(r)
-	for {
-		header, err := tarReader.Next()
-		if err == io.EOF {
-			break // End of archive
+	for fileName := range files {
+		fileFullPath, err := filepath.Abs(fileName)
+		if err != nil {
+			log.Fatal(err)
 		}
-		checkErr("read tar", err)
-		if files[header.Name] {
-			contents[header.Name], err = io.ReadAll(tarReader)
-			checkErr("read tar", err)
-		}
+		data, err := os.ReadFile(fileFullPath)
+		checkErr("read file", err)
+		contents[fileName] = data
 	}
 	return contents
 }
@@ -136,9 +115,16 @@ func getAbi(rawJson []byte) []byte {
 	return contents.Abi
 }
 
+// Check whether file exists.
+func fileExists(filePath string) bool {
+	_, err := os.Stat(filePath)
+	return !errors.Is(err, fs.ErrNotExist)
+}
+
 // Generate the Go bindings for the contracts.
 func generateBinding(b contractBinding, content []byte) {
 	var (
+		pkg     = strings.ToLower(b.typeName)
 		sigs    []map[string]string
 		abis    = []string{string(getAbi(content))}
 		bins    = []string{""}
@@ -146,10 +132,22 @@ func generateBinding(b contractBinding, content []byte) {
 		libs    = make(map[string]string)
 		aliases = make(map[string]string)
 	)
-	code, err := bind.Bind(types, abis, bins, sigs, bindingPkg, bind.LangGo, libs, aliases)
+	code, err := bind.Bind(types, abis, bins, sigs, pkg, libs, aliases)
 	checkErr("generate binding", err)
+
+	if fileExists(pkg) {
+		err := os.RemoveAll(pkg)
+		checkErr("removing dir", err)
+	}
+
+	const dirMode = 0700
+	err = os.Mkdir(pkg, dirMode)
+	checkErr("creating dir", err)
+
 	const fileMode = 0600
-	err = os.WriteFile(b.outFile, []byte(code), fileMode)
+	filePath := pkg + "/" + pkg + ".go"
+	err = os.WriteFile(filePath, []byte(code), fileMode)
 	checkErr("write binding file", err)
-	log.Print("generated binding ", b.outFile)
+
+	log.Print("generated binding for ", filePath)
 }

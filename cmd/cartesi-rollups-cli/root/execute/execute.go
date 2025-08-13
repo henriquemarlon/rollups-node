@@ -4,108 +4,128 @@
 package execute
 
 import (
-	"log/slog"
+	"fmt"
 	"os"
+	"strings"
 
-	"github.com/Khan/genqlient/graphql"
-	"github.com/cartesi/rollups-node/pkg/addresses"
-	"github.com/cartesi/rollups-node/pkg/ethutil"
-	"github.com/cartesi/rollups-node/pkg/readerclient"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/spf13/cobra"
+
+	"github.com/cartesi/rollups-node/internal/config"
+	"github.com/cartesi/rollups-node/internal/config/auth"
+	"github.com/cartesi/rollups-node/internal/repository/factory"
+	"github.com/cartesi/rollups-node/pkg/ethutil"
 )
 
 var Cmd = &cobra.Command{
-	Use:     "execute",
+	Use:     "execute [app-name-or-address] [output-index]",
 	Short:   "Executes a voucher",
 	Example: examples,
+	Args:    cobra.ExactArgs(2), // nolint: mnd
 	Run:     run,
+	Long: `
+Supported Environment Variables:
+  CARTESI_DATABASE_CONNECTION                    Database connection string
+  CARTESI_BLOCKCHAIN_HTTP_ENDPOINT               Blockchain HTTP endpoint`,
 }
 
-const examples = `# Executes voucher 5 from input 6:
-cartesi-rollups-cli execute --voucher-index 5 --input-index 6`
+const examples = `# Executes voucher/output with index 5:
+cartesi-rollups-cli execute echo-dapp 5
+
+# Executes voucher/output with index 3 using application address:
+cartesi-rollups-cli execute 0x1234567890123456789012345678901234567890 3
+
+# Execute without confirmation prompt:
+cartesi-rollups-cli execute echo-dapp 5 --yes`
 
 var (
-	voucherIndex    int
-	inputIndex      int
-	graphqlEndpoint string
-	ethEndpoint     string
-	mnemonic        string
-	account         uint32
-	addressBookFile string
+	skipConfirmation bool
 )
 
 func init() {
-	Cmd.Flags().IntVar(&voucherIndex, "voucher-index", 0,
-		"index of the voucher")
+	Cmd.Flags().BoolVarP(&skipConfirmation, "yes", "y", false, "Skip confirmation prompt")
 
-	cobra.CheckErr(Cmd.MarkFlagRequired("voucher-index"))
-
-	Cmd.Flags().IntVar(&inputIndex, "input-index", 0,
-		"index of the input")
-
-	cobra.CheckErr(Cmd.MarkFlagRequired("input-index"))
-
-	Cmd.Flags().StringVar(&graphqlEndpoint, "graphql-endpoint", "http://localhost:10000/graphql",
-		"address used to connect to graphql")
-
-	Cmd.Flags().StringVar(&ethEndpoint, "eth-endpoint", "http://localhost:8545",
-		"ethereum node JSON-RPC endpoint")
-
-	Cmd.Flags().StringVar(&mnemonic, "mnemonic", ethutil.FoundryMnemonic,
-		"mnemonic used to sign the transaction")
-
-	Cmd.Flags().Uint32Var(&account, "account", 0,
-		"account index used to sign the transaction (default: 0)")
-
-	Cmd.Flags().StringVar(&addressBookFile, "address-book", "",
-		"if set, load the address book from the given file; else, use test addresses")
+	origHelpFunc := Cmd.HelpFunc()
+	Cmd.SetHelpFunc(func(command *cobra.Command, strings []string) {
+		command.Flags().Lookup("verbose").Hidden = false
+		command.Flags().Lookup("database-connection").Hidden = false
+		command.Flags().Lookup("blockchain-http-endpoint").Hidden = false
+		origHelpFunc(command, strings)
+	})
 }
 
 func run(cmd *cobra.Command, args []string) {
 	ctx := cmd.Context()
-	graphqlClient := graphql.NewClient(graphqlEndpoint, nil)
 
-	resp, err := readerclient.GetVoucher(ctx, graphqlClient, voucherIndex, inputIndex)
+	nameOrAddress, err := config.ToApplicationNameOrAddressFromString(args[0])
 	cobra.CheckErr(err)
 
-	if resp.Proof == nil {
-		slog.Warn("The voucher has no associated proof yet")
-		os.Exit(0)
+	outputIndex, err := config.ToUint64FromDecimalOrHexString(args[1])
+	cobra.CheckErr(err)
+
+	dsn, err := config.GetDatabaseConnection()
+	cobra.CheckErr(err)
+
+	ethEndpoint, err := config.GetBlockchainHttpEndpoint()
+	cobra.CheckErr(err)
+
+	repo, err := factory.NewRepositoryFromConnectionString(ctx, dsn.String())
+	cobra.CheckErr(err)
+	defer repo.Close()
+
+	output, err := repo.GetOutput(ctx, nameOrAddress, outputIndex)
+	cobra.CheckErr(err)
+
+	if output == nil {
+		fmt.Fprintf(os.Stderr, "The output with index %d was not found in the database\n", outputIndex)
+		os.Exit(1)
 	}
 
-	client, err := ethclient.DialContext(ctx, ethEndpoint)
-	cobra.CheckErr(err)
-	slog.Info("Connected", "eth-endpoint", ethEndpoint)
-
-	signer, err := ethutil.NewMnemonicSigner(ctx, client, mnemonic, account)
+	app, err := repo.GetApplication(ctx, nameOrAddress)
 	cobra.CheckErr(err)
 
-	var book *addresses.Book
-	if addressBookFile != "" {
-		book, err = addresses.GetBookFromFile(addressBookFile)
-		cobra.CheckErr(err)
-	} else {
-		book = addresses.GetTestBook()
+	if len(output.OutputHashesSiblings) == 0 {
+		fmt.Fprintf(os.Stderr, "The output with index %d has no associated proof yet\n", outputIndex)
+		os.Exit(1)
 	}
 
-	proof := readerclient.ConvertToContractProof(resp.Proof)
+	client, err := ethclient.DialContext(ctx, ethEndpoint.String())
+	cobra.CheckErr(err)
 
-	slog.Info("Executing voucher",
-		"voucher-index", voucherIndex,
-		"input-index", inputIndex,
-		"application-address", book.CartesiDApp,
-	)
-	txHash, err := ethutil.ExecuteVoucher(
+	chainId, err := client.ChainID(ctx)
+	cobra.CheckErr(err)
+
+	txOpts, err := auth.GetTransactOpts(chainId)
+	cobra.CheckErr(err)
+
+	if !skipConfirmation {
+		fmt.Printf("Preparing to execute application %v (%v) output index %v with account %v\n",
+			app.Name, app.IApplicationAddress, outputIndex, txOpts.From)
+
+		fmt.Print("Do you want to continue? [y/N]: ")
+		var response string
+		_, err = fmt.Scanln(&response)
+		if err != nil && err.Error() != "unexpected newline" {
+			cobra.CheckErr(err)
+		}
+
+		response = strings.ToLower(strings.TrimSpace(response))
+		if response != "y" && response != "yes" {
+			fmt.Println("Transaction cancelled")
+			os.Exit(0)
+		}
+	}
+
+	txHash, err := ethutil.ExecuteOutput(
 		ctx,
 		client,
-		book,
-		signer,
-		resp.Payload,
-		&resp.Destination,
-		proof,
+		txOpts,
+		app.IApplicationAddress,
+		outputIndex,
+		output.RawData,
+		output.OutputHashesSiblings,
 	)
 	cobra.CheckErr(err)
 
-	slog.Info("Voucher executed", "tx-hash", txHash)
+	fmt.Printf("Voucher executed tx-hash: %v\n", txHash)
 }

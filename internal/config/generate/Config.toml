@@ -1,0 +1,334 @@
+# (c) Cartesi and individual authors (see AUTHORS)
+# SPDX-License-Identifier: Apache-2.0 (see LICENSE)
+#
+# Logging
+#
+[logging.CARTESI_LOG_LEVEL]
+default = "info"
+go-type = "LogLevel"
+description = """
+One of "debug", "info", "warn", "error"."""
+used-by = ["advancer", "claimer", "evmreader", "validator", "jsonrpc", "node"]
+
+[logging.CARTESI_LOG_COLOR]
+default = "true"
+go-type = "bool"
+description = """
+If set to true, the node will add colors to its log output."""
+used-by = ["advancer", "claimer", "evmreader", "validator", "jsonrpc", "node"]
+
+#
+# Features
+#
+
+[features.CARTESI_FEATURE_INPUT_READER_ENABLED]
+default = "true"
+go-type = "bool"
+description = """
+If set to false, the node will not read inputs from the blockchain."""
+used-by = ["evmreader", "node"]
+
+[features.CARTESI_FEATURE_CLAIM_SUBMISSION_ENABLED]
+default = "true"
+go-type = "bool"
+description = """
+If set to false, the node will not submit claims (reader mode)."""
+used-by = ["claimer", "node"]
+
+[features.CARTESI_FEATURE_INSPECT_ENABLED]
+default = "true"
+go-type = "bool"
+description = """
+If set to false, the node will not start the inspect service."""
+used-by = ["advancer", "node"]
+
+[features.CARTESI_FEATURE_JSONRPC_API_ENABLED]
+default = "true"
+go-type = "bool"
+description = """
+If set to false, the node will not start the jsonrpc api service."""
+used-by = ["node"]
+
+[features.CARTESI_FEATURE_MACHINE_HASH_CHECK_ENABLED]
+default = "true"
+go-type = "bool"
+description = """
+If set to false, the node will *not* check whether the Cartesi machine hash from
+the snapshot matches the hash in the Application contract."""
+used-by = ["advancer", "node", "cli"]
+
+#
+# Rollups
+#
+
+[rollups.CARTESI_ADVANCER_POLLING_INTERVAL]
+default = "3"
+go-type = "Duration"
+description = """
+How many seconds the node will wait before querying the database for new inputs."""
+used-by = ["advancer", "node"]
+
+[rollups.CARTESI_VALIDATOR_POLLING_INTERVAL]
+default = "3"
+go-type = "Duration"
+description = """
+How many seconds the node will wait before trying to finish epochs for all applications."""
+used-by = ["validator", "node"]
+
+[rollups.CARTESI_CLAIMER_POLLING_INTERVAL]
+default = "3"
+go-type = "Duration"
+description = """
+How many seconds the node will wait before querying the database for new claims."""
+used-by = ["claimer", "node"]
+
+[rollups.CARTESI_MAX_STARTUP_TIME]
+default = "15"
+go-type = "Duration"
+description = """
+How many seconds the node expects services take initializing before aborting."""
+used-by = ["advancer", "claimer", "evmreader", "validator", "jsonrpc", "node"]
+
+#
+# Blockchain
+#
+
+[blockchain.CARTESI_BLOCKCHAIN_ID]
+go-type = "uint64"
+description = """
+An unique identifier representing a blockchain network."""
+used-by = ["evmreader", "claimer", "node"]
+
+[blockchain.CARTESI_BLOCKCHAIN_HTTP_ENDPOINT]
+go-type = "URL"
+description = """
+HTTP endpoint for the blockchain RPC provider."""
+used-by = ["evmreader", "claimer", "node"]
+
+[blockchain.CARTESI_BLOCKCHAIN_WS_ENDPOINT]
+go-type = "URL"
+description = """
+WebSocket endpoint for the blockchain RPC provider."""
+used-by = ["evmreader", "node"]
+
+[blockchain.CARTESI_BLOCKCHAIN_LEGACY_ENABLED]
+default = "false"
+go-type = "bool"
+description = """
+If set to true the node will send transactions using the legacy gas fee model
+(instead of EIP-1559)."""
+used-by = ["claimer", "node", "cli"]
+
+[blockchain.CARTESI_BLOCKCHAIN_DEFAULT_BLOCK]
+default = "finalized"
+go-type = "DefaultBlock"
+description = """
+The default block to be used by EVM Reader and Claimer when requesting new blocks.
+One of 'latest', 'pending', 'safe', 'finalized'"""
+used-by = ["evmreader", "claimer", "node"]
+
+[blockchain.CARTESI_BLOCKCHAIN_SUBSCRIPTION_TIMEOUT]
+default = "60"
+go-type = "uint64"
+description = """
+Block subscription timeout in seconds."""
+used-by = ["evmreader", "node"]
+
+[rollups.CARTESI_BLOCKCHAIN_HTTP_MAX_RETRIES]
+default = "4"
+go-type = "uint64"
+description = """
+Maximum number of retry attempts for HTTP blockchain requests after encountering an error."""
+used-by = ["evmreader", "claimer", "node"]
+
+[rollups.CARTESI_BLOCKCHAIN_HTTP_RETRY_MIN_WAIT]
+default = "1"
+go-type = "Duration"
+description = """
+Minimum wait time in seconds for the exponential backoff retry policy. This is the initial delay before the first retry for HTTP blockchain requests."""
+used-by = ["evmreader", "claimer", "node"]
+
+[rollups.CARTESI_BLOCKCHAIN_HTTP_RETRY_MAX_WAIT]
+default = "60"
+go-type = "Duration"
+description = """
+Maximum wait time in seconds for the exponential backoff retry policy. The delay between retries for HTTP blockchain requests will never exceed this value, regardless of the backoff calculation."""
+used-by = ["evmreader", "claimer", "node"]
+
+[rollups.CARTESI_BLOCKCHAIN_MAX_BLOCK_RANGE]
+default = "0"
+go-type = "uint64"
+description = """
+Maximum number of blocks in a single query to the provider. Queries with larger ranges will be broken into multiple smaller queries. Zero for unlimited."""
+used-by = ["evmreader", "claimer", "node"]
+
+#
+# Contracts
+#
+
+[contracts.CARTESI_CONTRACTS_INPUT_BOX_ADDRESS]
+go-type = "Address"
+description = """
+Address of the InputBox contract. Not required, used only by the CLI and tests"""
+omit = true
+used-by = ["cli"]
+
+[contracts.CARTESI_CONTRACTS_AUTHORITY_FACTORY_ADDRESS]
+go-type = "Address"
+description = """
+Address of the AuthorityFactory contract. Not required, used only by the CLI and tests"""
+omit = true
+used-by = ["cli"]
+
+[contracts.CARTESI_CONTRACTS_APPLICATION_FACTORY_ADDRESS]
+go-type = "Address"
+description = """
+Address of the ApplicationFactory contract. Not required, used only by the CLI and tests"""
+omit = true
+used-by = ["cli"]
+
+[contracts.CARTESI_CONTRACTS_SELF_HOSTED_APPLICATION_FACTORY_ADDRESS]
+go-type = "Address"
+description = """
+Address of the SelfHostedApplicationFactory contract. Not required, used only by the CLI and tests"""
+omit = true
+used-by = ["cli"]
+
+#
+# Snapshot
+#
+
+[snapshot.CARTESI_SNAPSHOTS_DIR]
+default = "/var/lib/cartesi-rollups-node/snapshots"
+go-type = "string"
+description = """
+Path to the directory where the snapshots will be written."""
+used-by = ["advancer", "node"]
+
+#
+# Auth
+#
+
+[auth.CARTESI_AUTH_KIND]
+default = "mnemonic"
+go-type = "AuthKind"
+description = """
+One of "private_key", "private_key_file", "mnemonic", "mnemonic_file", "aws".
+
+The auth variable for the kind defined here is required. Eg.: CARTESI_AUTH_MNEMONIC"""
+omit = true
+used-by = ["claimer", "node", "cli"]
+
+[auth.CARTESI_AUTH_PRIVATE_KEY]
+go-type = "RedactedString"
+description = """
+The node will use this private key to sign transactions."""
+omit = true
+used-by = ["claimer", "node", "cli"]
+
+[auth.CARTESI_AUTH_PRIVATE_KEY_FILE]
+go-type = "string"
+description = """
+The node will use the private key contained in this file to sign transactions."""
+omit = true
+used-by = ["claimer", "node", "cli"]
+
+[auth.CARTESI_AUTH_MNEMONIC]
+go-type = "RedactedString"
+description = """
+The node will use the private key generated from this mnemonic to sign transactions."""
+omit = true
+used-by = ["claimer", "node", "cli"]
+
+[auth.CARTESI_AUTH_MNEMONIC_FILE]
+go-type = "string"
+description = """
+The node will use the private key generated from the mnemonic contained in this file
+to sign transactions."""
+omit = true
+used-by = ["claimer", "node", "cli"]
+
+[auth.CARTESI_AUTH_MNEMONIC_ACCOUNT_INDEX]
+default = "0"
+go-type = "RedactedUint"
+description = """
+When using mnemonics to sign transactions,
+the node will use this account index to generate the private key."""
+omit = true
+used-by = ["claimer", "node", "cli"]
+
+[auth.CARTESI_AUTH_AWS_KMS_KEY_ID]
+go-type = "RedactedString"
+description = """
+If set, the node will use the AWS KMS service with this key ID to sign transactions.
+
+Must be set alongside `CARTESI_AUTH_AWS_KMS_REGION`."""
+omit = true
+used-by = ["claimer", "node", "cli"]
+
+[auth.CARTESI_AUTH_AWS_KMS_REGION]
+go-type = "RedactedString"
+description = """
+An AWS KMS Region.
+
+Must be set alongside `CARTESI_AUTH_AWS_KMS_KEY_ID`."""
+omit = true
+used-by = ["claimer", "node", "cli"]
+
+#
+# Database
+#
+
+[database.CARTESI_DATABASE_CONNECTION]
+default = ""
+go-type = "URL"
+description = """
+Postgres endpoint in the 'postgres://user:password@hostname:port/database' format (URL).
+
+If not set, or set to empty string, will defer the behaviour to the PG driver.
+See [this](https://www.postgresql.org/docs/current/libpq-envars.html) for more information.
+
+It is also possible to set the endpoint without a password and load it from Postgres' passfile.
+See [this](https://www.postgresql.org/docs/current/libpq-connect.html#LIBPQ-CONNECT-PASSFILE)
+for more information."""
+used-by = ["advancer", "claimer", "evmreader", "validator", "jsonrpc", "node", "cli"]
+
+#
+# Telemetry http address
+#
+
+[http.CARTESI_TELEMETRY_ADDRESS]
+go-type = "string"
+description = """
+HTTP address for telemetry service."""
+used-by = ["advancer", "claimer", "evmreader", "validator", "jsonrpc", "node", "cli"]
+
+#
+# HTTP
+#
+
+[http.CARTESI_JSONRPC_API_ADDRESS]
+default = ":10011"
+go-type = "string"
+description = """
+HTTP address for the jsonrpc api."""
+used-by = ["jsonrpc", "node", "cli"]
+
+[http.CARTESI_INSPECT_ADDRESS]
+default = ":10012"
+go-type = "string"
+description = """
+HTTP address for inspect."""
+used-by = ["advancer", "node", "cli"]
+
+#
+# Remote Cartesi Machine
+#
+
+[machine.CARTESI_REMOTE_MACHINE_LOG_LEVEL]
+default = "info"
+go-type = "MachineLogLevel"
+description = """
+Remote Cartesi Machine server log level.
+One of "trace", "debug", "info", "warning", "error", "fatal"."""
+used-by = ["advancer", "node"]

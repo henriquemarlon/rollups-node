@@ -9,15 +9,15 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"strings"
 
-	"github.com/cartesi/rollups-node/pkg/addresses"
-	"github.com/cartesi/rollups-node/pkg/contracts"
+	"github.com/cartesi/rollups-node/pkg/contracts/iapplication"
+	"github.com/cartesi/rollups-node/pkg/contracts/iconsensus"
+	"github.com/cartesi/rollups-node/pkg/contracts/iinputbox"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
-	"github.com/ethereum/go-ethereum/rpc"
 )
 
 // Gas limit when sending transactions.
@@ -26,14 +26,11 @@ const GasLimit = 30_000_000
 // Dev mnemonic used by Foundry/Anvil.
 const FoundryMnemonic = "test test test test test test test test test test test junk"
 
-// Interface that sign blockchain transactions.
-type Signer interface {
-
-	// Create the base transaction used in the contract bindings.
-	MakeTransactor() (*bind.TransactOpts, error)
-
-	// Get the account address of the signer.
-	Account() common.Address
+func TrimHex(s string) string {
+	s = strings.TrimPrefix(s, "0x")
+	s = strings.TrimPrefix(s, "0X")
+	s = strings.TrimSpace(s)
+	return s
 }
 
 // Add input to the input box for the given DApp address.
@@ -41,73 +38,58 @@ type Signer interface {
 func AddInput(
 	ctx context.Context,
 	client *ethclient.Client,
-	book *addresses.Book,
-	signer Signer,
+	transactionOpts *bind.TransactOpts,
+	inputBoxAddress common.Address,
+	application common.Address,
 	input []byte,
-) (int, error) {
-	inputBox, err := contracts.NewInputBox(book.InputBox, client)
+) (uint64, uint64, error) {
+	if client == nil {
+		return 0, 0, fmt.Errorf("AddInput: client is nil")
+	}
+	inputBox, err := iinputbox.NewIInputBox(inputBoxAddress, client)
 	if err != nil {
-		return 0, fmt.Errorf("failed to connect to InputBox contract: %v", err)
+		return 0, 0, fmt.Errorf("failed to connect to InputBox contract: %v", err)
 	}
 	receipt, err := sendTransaction(
-		ctx, client, signer, big.NewInt(0), GasLimit,
+		ctx, client, transactionOpts, big.NewInt(0), GasLimit,
 		func(txOpts *bind.TransactOpts) (*types.Transaction, error) {
-			return inputBox.AddInput(txOpts, book.CartesiDApp, input)
+			return inputBox.AddInput(txOpts, application, input)
 		},
 	)
 	if err != nil {
-		return 0, err
+		return 0, 0, err
 	}
-	return getInputIndex(ctx, client, book, inputBox, receipt)
+	index, err := getInputIndex(inputBoxAddress, inputBox, receipt)
+	return index, receipt.BlockNumber.Uint64(), nil
 }
 
-// Convenience function to add an input using Foundry Mnemonic
-// This function waits until the transaction is added to a block and return the input index.
-func AddInputUsingFoundryMnemonic(
-	ctx context.Context,
-	blockchainHttpEnpoint string,
-	payload string,
-) (int, error) {
-
-	// Send Input
-	client, err := ethclient.DialContext(ctx, blockchainHttpEnpoint)
+func CheckAddressForCode(ctx context.Context, client *ethclient.Client, address common.Address) error {
+	code, err := client.CodeAt(ctx, address, nil)
 	if err != nil {
-		return 0, err
+		return fmt.Errorf("failed to check address for code: %w", err)
 	}
-	defer client.Close()
-
-	signer, err := NewMnemonicSigner(ctx, client, FoundryMnemonic, 0)
-	if err != nil {
-		return 0, err
+	if len(code) == 0 {
+		return fmt.Errorf("No code at address: %v", address)
 	}
-	book := addresses.GetTestBook()
-
-	payloadBytes, err := hexutil.Decode(payload)
-	if err != nil {
-		panic(err)
-	}
-	return AddInput(ctx, client, book, signer, payloadBytes)
+	return nil
 }
 
 // Get input index in the transaction by looking at the event logs.
 func getInputIndex(
-	ctx context.Context,
-	client *ethclient.Client,
-	book *addresses.Book,
-	inputBox *contracts.InputBox,
+	inputBoxAddress common.Address,
+	inputBox *iinputbox.IInputBox,
 	receipt *types.Receipt,
-) (int, error) {
+) (uint64, error) {
 	for _, log := range receipt.Logs {
-		if log.Address != book.InputBox {
+		if log.Address != inputBoxAddress {
 			continue
 		}
 		inputAdded, err := inputBox.ParseInputAdded(*log)
 		if err != nil {
 			return 0, fmt.Errorf("failed to parse input added event: %v", err)
 		}
-		// We assume that int will fit all dapp inputs
-		inputIndex := int(inputAdded.InputIndex.Int64())
-		return inputIndex, nil
+		// We assume that uint64 will fit all dapp inputs for now
+		return inputAdded.Index.Uint64(), nil
 	}
 	return 0, fmt.Errorf("input index not found")
 }
@@ -116,17 +98,21 @@ func getInputIndex(
 // Return the event with the input sender and payload.
 func GetInputFromInputBox(
 	client *ethclient.Client,
-	book *addresses.Book,
-	inputIndex int,
-) (*contracts.InputBoxInputAdded, error) {
-	inputBox, err := contracts.NewInputBox(book.InputBox, client)
+	inputBoxAddress common.Address,
+	application common.Address,
+	inputIndex uint64,
+) (*iinputbox.IInputBoxInputAdded, error) {
+	if client == nil {
+		return nil, fmt.Errorf("GetInputFromInputBox: client is nil")
+	}
+	inputBox, err := iinputbox.NewIInputBox(inputBoxAddress, client)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to InputBox contract: %v", err)
 	}
 	it, err := inputBox.FilterInputAdded(
 		nil,
-		[]common.Address{book.CartesiDApp},
-		[]*big.Int{big.NewInt(int64(inputIndex))},
+		[]common.Address{application},
+		[]*big.Int{new(big.Int).SetUint64(inputIndex)},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter input added: %v", err)
@@ -140,47 +126,64 @@ func GetInputFromInputBox(
 
 // ValidateNotice validates the given notice for the specified Dapp.
 // It returns nil if the notice is valid and an execution-reverted error otherwise.
-func ValidateNotice(
+func ValidateOutput(
 	ctx context.Context,
 	client *ethclient.Client,
-	book *addresses.Book,
-	notice []byte,
-	proof *contracts.Proof,
+	appAddr common.Address,
+	index uint64,
+	output []byte,
+	outputHashesSiblings []common.Hash,
 ) error {
+	if client == nil {
+		return fmt.Errorf("ValidateOutput: client is nil")
+	}
+	proof := iapplication.OutputValidityProof{
+		OutputIndex:          index,
+		OutputHashesSiblings: make([][32]byte, len(outputHashesSiblings)),
+	}
 
-	dapp, err := contracts.NewCartesiDApp(book.CartesiDApp, client)
+	for i, hash := range outputHashesSiblings {
+		copy(proof.OutputHashesSiblings[i][:], hash[:])
+	}
+
+	app, err := iapplication.NewIApplication(appAddr, client)
 	if err != nil {
 		return fmt.Errorf("failed to connect to CartesiDapp contract: %v", err)
 	}
-
-	response, err := dapp.ValidateNotice(&bind.CallOpts{Context: ctx}, notice, *proof)
-	_ = response
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return app.ValidateOutput(&bind.CallOpts{Context: ctx}, output, proof)
 }
 
 // Executes a voucher given its payload, destination and proof.
 // This function waits until the transaction is added to a block and returns the transaction hash.
-func ExecuteVoucher(
+func ExecuteOutput(
 	ctx context.Context,
 	client *ethclient.Client,
-	book *addresses.Book,
-	signer Signer,
-	voucher []byte,
-	destination *common.Address,
-	proof *contracts.Proof,
+	transactionOpts *bind.TransactOpts,
+	appAddr common.Address,
+	index uint64,
+	output []byte,
+	outputHashesSiblings []common.Hash,
 ) (*common.Hash, error) {
-	dapp, err := contracts.NewCartesiDApp(book.CartesiDApp, client)
+	if client == nil {
+		return nil, fmt.Errorf("ExecuteOutput: client is nil")
+	}
+	proof := iapplication.OutputValidityProof{
+		OutputIndex:          index,
+		OutputHashesSiblings: make([][32]byte, len(outputHashesSiblings)),
+	}
+
+	for i, hash := range outputHashesSiblings {
+		copy(proof.OutputHashesSiblings[i][:], hash[:])
+	}
+
+	app, err := iapplication.NewIApplication(appAddr, client)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to CartesiDapp contract: %v", err)
 	}
 	receipt, err := sendTransaction(
-		ctx, client, signer, big.NewInt(0), GasLimit,
+		ctx, client, transactionOpts, big.NewInt(0), GasLimit,
 		func(txOpts *bind.TransactOpts) (*types.Transaction, error) {
-			return dapp.ExecuteVoucher(txOpts, *destination, voucher, *proof)
+			return app.ExecuteOutput(txOpts, output, proof)
 		},
 	)
 	if err != nil {
@@ -190,59 +193,102 @@ func ExecuteVoucher(
 	return &receipt.TxHash, nil
 }
 
-// Advances the Devnet timestamp
-func AdvanceDevnetTime(ctx context.Context,
-	blockchainHttpEnpoint string,
-	timeInSeconds int,
-) error {
-	client, err := rpc.DialContext(ctx, blockchainHttpEnpoint)
-	if err != nil {
-		return err
+// Retrieves the template hash from the application contract.
+func GetTemplateHash(
+	ctx context.Context,
+	client *ethclient.Client,
+	applicationAddress common.Address,
+) (*common.Hash, error) {
+	if client == nil {
+		return nil, fmt.Errorf("get template hash: client is nil")
 	}
-	defer client.Close()
-	return client.CallContext(ctx, nil, "evm_increaseTime", timeInSeconds)
-
+	cartesiApplication, err := iapplication.NewIApplicationCaller(
+		applicationAddress,
+		client,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get template hash failed to instantiate binding: %w", err)
+	}
+	var hash common.Hash
+	hash, err = cartesiApplication.GetTemplateHash(&bind.CallOpts{Context: ctx})
+	if err != nil {
+		return nil, fmt.Errorf("get template hash failed to call contract method: %w", err)
+	}
+	return &hash, nil
 }
 
-// Sets the timestamp for the next block at Devnet
-func SetNextDevnetBlockTimestamp(
+func GetConsensus(
 	ctx context.Context,
-	blockchainHttpEndpoint string,
-	timestamp int64,
-) error {
-
-	client, err := rpc.DialContext(ctx, blockchainHttpEndpoint)
-	if err != nil {
-		return err
+	client *ethclient.Client,
+	appAddress common.Address,
+) (common.Address, error) {
+	if client == nil {
+		return common.Address{}, fmt.Errorf("get consensus: client is nil")
 	}
-	defer client.Close()
-	return client.CallContext(ctx, nil, "evm_setNextBlockTimestamp", timestamp)
+	app, err := iapplication.NewIApplication(appAddress, client)
+	if err != nil {
+		return common.Address{}, fmt.Errorf("Failed to instantiate contract: %v", err)
+	}
+	consensus, err := app.GetOutputsMerkleRootValidator(&bind.CallOpts{Context: ctx})
+	if err != nil {
+		return common.Address{}, fmt.Errorf("error retrieving application epoch length: %v", err)
+	}
+	return consensus, nil
 }
 
-// Mine blocks.
-// Assumes the HTTP provider is anvil as the `rpc_modules` method cannot be
-// be relied upon to discover what modules are supported and decide what mine
-// method to use
-func MineBlocks(
+func GetDataAvailability(
 	ctx context.Context,
-	blockchainHttpEndpoint string,
-	numBlocks uint64,
-	blockInterval uint64,
+	client *ethclient.Client,
+	appAddress common.Address,
+) ([]byte, error) {
+	if client == nil {
+		return nil, fmt.Errorf("get dataAvailability: client is nil")
+	}
+	app, err := iapplication.NewIApplication(appAddress, client)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to instantiate contract: %v", err)
+	}
+	dataAvailability, err := app.GetDataAvailability(&bind.CallOpts{Context: ctx})
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving application epoch length: %v", err)
+	}
+	return dataAvailability, nil
+}
+
+func GetEpochLength(
+	ctx context.Context,
+	client *ethclient.Client,
+	consensusAddr common.Address,
 ) (uint64, error) {
-	client, err := rpc.DialContext(ctx, blockchainHttpEndpoint)
-	if err != nil {
-		return 0, err
+	if client == nil {
+		return 0, fmt.Errorf("get epoch length: client is nil")
 	}
-	defer client.Close()
+	consensus, err := iconsensus.NewIConsensus(consensusAddr, client)
+	if err != nil {
+		return 0, fmt.Errorf("Failed to instantiate contract: %v", err)
+	}
+	epochLengthRaw, err := consensus.GetEpochLength(&bind.CallOpts{Context: ctx})
+	if err != nil {
+		return 0, fmt.Errorf("error retrieving application epoch length: %v", err)
+	}
+	return epochLengthRaw.Uint64(), nil
+}
 
-	err = client.CallContext(ctx, nil, "anvil_mine", numBlocks, blockInterval)
-	if err != nil {
-		return 0, err
+func GetInputBoxDeploymentBlock(
+	ctx context.Context,
+	client *ethclient.Client,
+	inputBoxAddress common.Address,
+) (*big.Int, error) {
+	if client == nil {
+		return nil, fmt.Errorf("get epoch length: client is nil")
 	}
-	ethClient, err := ethclient.DialContext(ctx, blockchainHttpEndpoint)
+	inputbox, err := iinputbox.NewIInputBox(inputBoxAddress, client)
 	if err != nil {
-		return 0, err
+		return nil, fmt.Errorf("failed to create input box instance: %w", err)
 	}
-	defer ethClient.Close()
-	return ethClient.BlockNumber(ctx)
+	block, err := inputbox.GetDeploymentBlockNumber(&bind.CallOpts{Context: ctx})
+	if err != nil {
+		return nil, fmt.Errorf("error retrieving inputbox deployment block: %v", err)
+	}
+	return block, nil
 }

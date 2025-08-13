@@ -1,0 +1,1114 @@
+{
+	"openrpc": "1.0.0",
+	"info": {
+		"title": "Cartesi Rollups Node API",
+		"version": "2.0.0",
+		"description": "A JSON-RPC API for reading rollups data. It provides information about applications, epochs, inputs, outputs, and reports in a read-only fashion."
+	},
+	"methods": [
+		{
+			"name": "cartesi_listApplications",
+			"summary": "List all applications",
+			"description": "Returns a paginated list of all applications.",
+			"params": [
+				{
+					"name": "limit",
+					"description": "The maximum number of applications to return per page.",
+					"schema": {
+						"type": "integer",
+						"minimum": 1,
+						"default": 50
+					},
+					"required": false
+				},
+				{
+					"name": "offset",
+					"description": "The starting point for the list of applications to return.",
+					"schema": {
+						"type": "integer",
+						"minimum": 0,
+						"default": 0
+					},
+					"required": false
+				},
+				{
+					"name": "descending",
+					"description": "if true, the list will be sorted in descending order by application name.",
+					"schema": {
+						"type": "boolean",
+						"default": false
+					},
+					"required": false
+				}
+			],
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/ApplicationListResult"
+				}
+			}
+		},
+		{
+			"name": "cartesi_getApplication",
+			"summary": "Get an application",
+			"description": "Fetches a single application by its name or address.",
+			"params": [
+				{
+					"name": "application",
+					"description": "The application's name or hex encoded address.",
+					"schema": {
+						"$ref": "#/components/schemas/NameOrAddress"
+					},
+					"required": true
+				}
+			],
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/ApplicationGetResult"
+				}
+			}
+		},
+		{
+			"name": "cartesi_listEpochs",
+			"summary": "List epochs",
+			"description": "Returns a paginated list of epochs for the specified application. Can filter by epoch status.",
+			"params": [
+				{
+					"name": "application",
+					"description": "The application's name or hex encoded address.",
+					"schema": {
+						"$ref": "#/components/schemas/NameOrAddress"
+					},
+					"required": true
+				},
+				{
+					"name": "status",
+					"description": "Filter epochs by status.",
+					"schema": {
+						"$ref": "#/components/schemas/EpochStatus"
+					},
+					"required": false
+				},
+				{
+					"name": "limit",
+					"description": "The maximum number of epochs to return per page.",
+					"schema": {
+						"type": "integer",
+						"minimum": 1,
+						"default": 50
+					},
+					"required": false
+				},
+				{
+					"name": "offset",
+					"description": "The starting point for the list of epochs to return.",
+					"schema": {
+						"type": "integer",
+						"minimum": 0,
+						"default": 0
+					},
+					"required": false
+				},
+				{
+					"name": "descending",
+					"description": "if true, the list will be sorted in descending order by epoch index.",
+					"schema": {
+						"type": "boolean",
+						"default": false
+					},
+					"required": false
+				}
+			],
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/EpochListResult"
+				}
+			}
+		},
+		{
+			"name": "cartesi_getEpoch",
+			"summary": "Get a specific epoch",
+			"description": "Fetches a single epoch by application and index.",
+			"params": [
+				{
+					"name": "application",
+					"description": "The application's name or hex encoded address.",
+					"schema": {
+						"$ref": "#/components/schemas/NameOrAddress"
+					},
+					"required": true
+				},
+				{
+					"name": "epoch_index",
+					"description": "The index of the epoch to be retrieved (hex encoded).",
+					"schema": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"required": true
+				}
+			],
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/EpochGetResult"
+				}
+			}
+		},
+		{
+			"name": "cartesi_getLastAcceptedEpochIndex",
+			"summary": "Get the last accepted epoch index",
+			"description": "Fetches the latest accepted epoch index by application.",
+			"params": [
+				{
+					"name": "application",
+					"description": "The application's name or hex encoded address.",
+					"schema": {
+						"$ref": "#/components/schemas/NameOrAddress"
+					},
+					"required": true
+				}
+			],
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/LastAcceptedEpochIndexResult"
+				}
+			}
+		},
+		{
+			"name": "cartesi_listInputs",
+			"summary": "Retrieve a List of Inputs",
+			"description": "Returns a paginated list of inputs, with options to filter by epoch index or input sender.",
+			"params": [
+				{
+					"name": "application",
+					"description": "The application's name or hex encoded address.",
+					"schema": {
+						"$ref": "#/components/schemas/NameOrAddress"
+					},
+					"required": true
+				},
+				{
+					"name": "epoch_index",
+					"description": "Filter inputs by a specific epoch index (hex encoded).",
+					"schema": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"required": false
+				},
+				{
+					"name": "sender",
+					"description": "Filter inputs by the sender's address (hex encoded), extracted from raw data.",
+					"schema": {
+						"$ref": "#/components/schemas/EthereumAddress"
+					},
+					"required": false
+				},
+				{
+					"name": "limit",
+					"description": "The maximum number of inputs to return per page.",
+					"schema": {
+						"type": "integer",
+						"minimum": 1,
+						"default": 50
+					},
+					"required": false
+				},
+				{
+					"name": "offset",
+					"description": "The starting point for the list of inputs to return.",
+					"schema": {
+						"type": "integer",
+						"minimum": 0,
+						"default": 0
+					},
+					"required": false
+				},
+				{
+					"name": "descending",
+					"description": "if true, the list will be sorted in descending order by input index.",
+					"schema": {
+						"type": "boolean",
+						"default": false
+					},
+					"required": false
+				}
+			],
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/InputListResult"
+				}
+			}
+		},
+		{
+			"name": "cartesi_getInput",
+			"summary": "Retrieve a specific input",
+			"description": "Retrieves a single input from the application using the specified input_index.",
+			"params": [
+				{
+					"name": "application",
+					"description": "The application's name or hex encoded address.",
+					"schema": {
+						"$ref": "#/components/schemas/NameOrAddress"
+					},
+					"required": true
+				},
+				{
+					"name": "input_index",
+					"description": "The index of the input to be retrieved (hex encoded).",
+					"schema": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"required": true
+				}
+			],
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/InputGetResult"
+				}
+			}
+		},
+		{
+			"name": "cartesi_getProcessedInputCount",
+			"summary": "Retrieve the number of inputs processed by the application",
+			"description": "Return a integer with the amount of inputs already processed by the application.",
+			"params": [
+				{
+					"name": "application",
+					"description": "The application's name or hex encoded address.",
+					"schema": {
+						"$ref": "#/components/schemas/NameOrAddress"
+					},
+					"required": true
+				}
+			],
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/ProcessedInputCountResult"
+				}
+			}
+		},
+		{
+			"name": "cartesi_listOutputs",
+			"summary": "Retrieve a List of Outputs",
+			"description": "Returns a paginated list of outputs, with options to filter by epoch index, input index, output type and voucher address.",
+			"params": [
+				{
+					"name": "application",
+					"description": "The application's name or hex encoded address.",
+					"schema": {
+						"$ref": "#/components/schemas/NameOrAddress"
+					},
+					"required": true
+				},
+				{
+					"name": "epoch_index",
+					"description": "Filter outputs by a specific epoch index (hex encoded).",
+					"schema": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"required": false
+				},
+				{
+					"name": "input_index",
+					"description": "Filter outputs by a specific input index (hex encoded).",
+					"schema": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"required": false
+				},
+				{
+					"name": "output_type",
+					"description": "Filter outputs by output type (first 4 bytes of raw data hex encoded).",
+					"schema": {
+						"$ref": "#/components/schemas/FunctionSelector"
+					},
+					"required": false
+				},
+				{
+					"name": "voucher_address",
+					"description": "Filter outputs by the voucher address (hex encoded), extracted from raw data.",
+					"schema": {
+						"$ref": "#/components/schemas/EthereumAddress"
+					},
+					"required": false
+				},
+				{
+					"name": "limit",
+					"description": "The maximum number of outputs to return per page.",
+					"schema": {
+						"type": "integer",
+						"minimum": 1,
+						"default": 50
+					},
+					"required": false
+				},
+				{
+					"name": "offset",
+					"description": "The starting point for the list of outputs to return.",
+					"schema": {
+						"type": "integer",
+						"minimum": 0,
+						"default": 0
+					},
+					"required": false
+				},
+				{
+					"name": "descending",
+					"description": "if true, the list will be sorted in descending order by output index.",
+					"schema": {
+						"type": "boolean",
+						"default": false
+					},
+					"required": false
+				}
+			],
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/OutputListResult"
+				}
+			}
+		},
+		{
+			"name": "cartesi_getOutput",
+			"summary": "Retrieve a Specific Output",
+			"description": "Retrieves a single output from the application using the specified output_index.",
+			"params": [
+				{
+					"name": "application",
+					"description": "The application's name or hex encoded address.",
+					"schema": {
+						"$ref": "#/components/schemas/NameOrAddress"
+					},
+					"required": true
+				},
+				{
+					"name": "output_index",
+					"description": "The index of the output to be retrieved (hex encoded).",
+					"schema": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"required": true
+				}
+			],
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/OutputGetResult"
+				}
+			}
+		},
+		{
+			"name": "cartesi_listReports",
+			"summary": "List reports",
+			"description": "Returns a paginated list of reports for a given application. Optionally filters by epoch_index and input_index.",
+			"params": [
+				{
+					"name": "application",
+					"description": "The application's name or hex encoded address.",
+					"schema": {
+						"$ref": "#/components/schemas/NameOrAddress"
+					},
+					"required": true
+				},
+				{
+					"name": "epoch_index",
+					"description": "Optional filter by epoch index (hex encoded).",
+					"schema": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"required": false
+				},
+				{
+					"name": "input_index",
+					"description": "Optional filter by input index (hex encoded).",
+					"schema": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"required": false
+				},
+				{
+					"name": "limit",
+					"schema": {
+						"type": "integer",
+						"minimum": 1,
+						"default": 50
+					},
+					"required": false
+				},
+				{
+					"name": "offset",
+					"schema": {
+						"type": "integer",
+						"minimum": 0,
+						"default": 0
+					},
+					"required": false
+				},
+				{
+					"name": "descending",
+					"description": "if true, the list will be sorted in descending order by report index.",
+					"schema": {
+						"type": "boolean",
+						"default": false
+					},
+					"required": false
+				}
+			],
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/ReportListResult"
+				}
+			}
+		},
+		{
+			"name": "cartesi_getReport",
+			"summary": "Get a specific report",
+			"description": "Fetches a single report by application and report_index.",
+			"params": [
+				{
+					"name": "application",
+					"description": "The application's name or hex encoded address.",
+					"schema": {
+						"$ref": "#/components/schemas/NameOrAddress"
+					},
+					"required": true
+				},
+				{
+					"name": "report_index",
+					"description": "The index of the report to be retrieved (hex encoded).",
+					"schema": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"required": true
+				}
+			],
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/ReportGetResult"
+				}
+			}
+		},
+		{
+			"name": "cartesi_getChainId",
+			"summary": "Get node's chain ID",
+			"description": "Fetches the chain ID that node is operating on.",
+			"params": [],
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/ChainIdResult"
+				}
+			}
+		},
+		{
+			"name": "cartesi_getNodeVersion",
+			"summary": "Get node version",
+			"description": "Fetches the semantic version of the Cartesi rollups node.",
+			"params": [],
+			"result": {
+				"name": "result",
+				"schema": {
+					"$ref": "#/components/schemas/NodeVersionResult"
+				}
+			}
+		}
+	],
+	"components": {
+		"schemas": {
+			"Pagination": {
+				"type": "object",
+				"properties": {
+					"total_count": {
+						"type": "integer"
+					},
+					"limit": {
+						"type": "integer"
+					},
+					"offset": {
+						"type": "integer"
+					}
+				}
+			},
+			"Application": {
+				"type": "object",
+				"properties": {
+					"name": {
+						"$ref": "#/components/schemas/ApplicationName"
+					},
+					"iapplication_address": {
+						"$ref": "#/components/schemas/EthereumAddress"
+					},
+					"iconsensus_address": {
+						"$ref": "#/components/schemas/EthereumAddress"
+					},
+					"iinputbox_address": {
+						"$ref": "#/components/schemas/EthereumAddress"
+					},
+					"template_hash": {
+						"$ref": "#/components/schemas/Hash"
+					},
+					"epoch_length": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"data_availability": {
+						"$ref": "#/components/schemas/ByteArray"
+					},
+					"state": {
+						"$ref": "#/components/schemas/ApplicationState"
+					},
+					"reason": {
+						"type": "string"
+					},
+					"iinputbox_block": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"last_input_check_block": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"last_output_check_block": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"processed_inputs": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"execution_parameters": {
+						"$ref": "#/components/schemas/ExecutionParameters"
+					}
+				}
+			},
+			"ApplicationListResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/Application"
+						}
+					},
+					"pagination": {
+						"$ref": "#/components/schemas/Pagination"
+					}
+				}
+			},
+			"ApplicationGetResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"$ref": "#/components/schemas/Application"
+					}
+				}
+			},
+			"EpochStatus": {
+				"type": "string",
+				"enum": [
+					"OPEN",
+					"CLOSED",
+					"INPUTS_PROCESSED",
+					"CLAIM_COMPUTED",
+					"CLAIM_SUBMITTED",
+					"CLAIM_ACCEPTED",
+					"CLAIM_REJECTED"
+				]
+			},
+			"Epoch": {
+				"type": "object",
+				"properties": {
+					"index": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"first_block": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"last_block": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"claim_hash": {
+						"$ref": "#/components/schemas/Hash",
+						"nullable": true
+					},
+					"claim_transaction_hash": {
+						"$ref": "#/components/schemas/Hash",
+						"nullable": true
+					},
+					"status": {
+						"$ref": "#/components/schemas/EpochStatus"
+					},
+					"virtual_index": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time"
+					}
+				}
+			},
+			"EpochListResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/Epoch"
+						}
+					},
+					"pagination": {
+						"$ref": "#/components/schemas/Pagination"
+					}
+				}
+			},
+			"EpochGetResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"$ref": "#/components/schemas/Epoch"
+					}
+				}
+			},
+			"InputCompletionStatus": {
+				"type": "string",
+				"enum": [
+					"NONE",
+					"ACCEPTED",
+					"REJECTED",
+					"EXCEPTION",
+					"MACHINE_HALTED",
+					"OUTPUTS_LIMIT_EXCEEDED",
+					"CYCLE_LIMIT_EXCEEDED",
+					"TIME_LIMIT_EXCEEDED",
+					"PAYLOAD_LENGTH_LIMIT_EXCEEDED"
+				]
+			},
+			"Input": {
+				"type": "object",
+				"properties": {
+					"epoch_index": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"index": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"block_number": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"raw_data": {
+						"$ref": "#/components/schemas/ByteArray"
+					},
+					"decoded_data": {
+						"$ref": "#/components/schemas/EvmAdvance",
+						"nullable": true
+					},
+					"status": {
+						"$ref": "#/components/schemas/InputCompletionStatus"
+					},
+					"machine_hash": {
+						"$ref": "#/components/schemas/Hash",
+						"nullable": true
+					},
+					"outputs_hash": {
+						"$ref": "#/components/schemas/Hash",
+						"nullable": true
+					},
+					"transaction_reference": {
+						"$ref": "#/components/schemas/ByteArray"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time"
+					}
+				}
+			},
+			"EvmAdvance": {
+				"type": "object",
+				"properties": {
+					"chain_id": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"application_contract": {
+						"$ref": "#/components/schemas/EthereumAddress"
+					},
+					"sender": {
+						"$ref": "#/components/schemas/EthereumAddress"
+					},
+					"block_number": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"block_timestamp": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"prev_randao": {
+						"$ref": "#/components/schemas/ByteArray"
+					},
+					"index": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"payload": {
+						"$ref": "#/components/schemas/ByteArray"
+					}
+				}
+			},
+			"InputListResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/Input"
+						}
+					},
+					"pagination": {
+						"$ref": "#/components/schemas/Pagination"
+					}
+				}
+			},
+			"InputGetResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"$ref": "#/components/schemas/Input"
+					}
+				}
+			},
+			"LastAcceptedEpochIndexResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					}
+				}
+			},
+			"ProcessedInputCountResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					}
+				}
+			},
+			"Output": {
+				"type": "object",
+				"properties": {
+					"epoch_index": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"input_index": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"index": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"raw_data": {
+						"$ref": "#/components/schemas/ByteArray"
+					},
+					"decoded_data": {
+						"$ref": "#/components/schemas/DecodedOutput",
+						"nullable": true
+					},
+					"hash": {
+						"$ref": "#/components/schemas/Hash",
+						"nullable": true
+					},
+					"output_hashes_siblings": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/Hash"
+						},
+						"nullable": true
+					},
+					"execution_transaction_hash": {
+						"$ref": "#/components/schemas/Hash",
+						"nullable": true
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time"
+					}
+				}
+			},
+			"Notice": {
+				"type": "object",
+				"properties": {
+					"type": {
+						"$ref": "#/components/schemas/FunctionSelector"
+					},
+					"payload": {
+						"$ref": "#/components/schemas/ByteArray"
+					}
+				}
+			},
+			"Voucher": {
+				"type": "object",
+				"properties": {
+					"type": {
+						"$ref": "#/components/schemas/FunctionSelector"
+					},
+					"destination": {
+						"$ref": "#/components/schemas/EthereumAddress"
+					},
+					"value": {
+						"type": "string"
+					},
+					"payload": {
+						"$ref": "#/components/schemas/ByteArray"
+					}
+				}
+			},
+			"DelegateCallVoucher": {
+				"type": "object",
+				"properties": {
+					"type": {
+						"$ref": "#/components/schemas/FunctionSelector"
+					},
+					"destination": {
+						"$ref": "#/components/schemas/EthereumAddress"
+					},
+					"payload": {
+						"$ref": "#/components/schemas/ByteArray"
+					}
+				}
+			},
+			"DecodedOutput": {
+				"oneOf": [
+					{
+						"$ref": "#/components/schemas/Notice"
+					},
+					{
+						"$ref": "#/components/schemas/Voucher"
+					},
+					{
+						"$ref": "#/components/schemas/DelegateCallVoucher"
+					}
+				]
+			},
+			"OutputListResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/Output"
+						}
+					},
+					"pagination": {
+						"$ref": "#/components/schemas/Pagination"
+					}
+				}
+			},
+			"OutputGetResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"$ref": "#/components/schemas/Output"
+					}
+				}
+			},
+			"Report": {
+				"type": "object",
+				"properties": {
+					"epoch_index": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"input_index": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"index": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"raw_data": {
+						"$ref": "#/components/schemas/ByteArray"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time"
+					}
+				}
+			},
+			"ReportListResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"type": "array",
+						"items": {
+							"$ref": "#/components/schemas/Report"
+						}
+					},
+					"pagination": {
+						"$ref": "#/components/schemas/Pagination"
+					}
+				}
+			},
+			"ReportGetResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"$ref": "#/components/schemas/Report"
+					}
+				}
+			},
+			"SnapshotPolicy": {
+				"type": "string",
+				"enum": [
+					"NONE",
+					"EVERY_INPUT",
+					"EVERY_EPOCH"
+				]
+			},
+			"ExecutionParameters": {
+				"type": "object",
+				"properties": {
+					"snapshot_policy": {
+						"$ref": "#/components/schemas/SnapshotPolicy"
+					},
+					"advance_inc_cycles": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"advance_max_cycles": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"inspect_inc_cycles": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"inspect_max_cycles": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"advance_inc_deadline": {
+						"description": "Duration in nanoseconds",
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"advance_max_deadline": {
+						"description": "Duration in nanoseconds",
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"inspect_inc_deadline": {
+						"description": "Duration in nanoseconds",
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"inspect_max_deadline": {
+						"description": "Duration in nanoseconds",
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"load_deadline": {
+						"description": "Duration in nanoseconds",
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"store_deadline": {
+						"description": "Duration in nanoseconds",
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"fast_deadline": {
+						"description": "Duration in nanoseconds",
+						"$ref": "#/components/schemas/UnsignedInteger"
+					},
+					"max_concurrent_inspects": {
+						"type": "integer"
+					},
+					"created_at": {
+						"type": "string",
+						"format": "date-time"
+					},
+					"updated_at": {
+						"type": "string",
+						"format": "date-time"
+					}
+				}
+			},
+			"ChainIdResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"$ref": "#/components/schemas/UnsignedInteger"
+					}
+				}
+			},
+			"NodeVersionResult": {
+				"type": "object",
+				"properties": {
+					"data": {
+						"type": "string",
+						"format": "semver",
+						"pattern": "^[a-zA-Z0-9_-\\.]+$"
+					}
+				}
+			},
+			"ApplicationState": {
+				"type": "string",
+				"enum": [
+					"ENABLED",
+					"DISABLED",
+					"INOPERABLE"
+				]
+			},
+			"EthereumAddress": {
+				"type": "string",
+				"format": "hex-byte",
+				"pattern": "^0x[a-fA-F0-9]{40}$"
+			},
+			"Hash": {
+				"type": "string",
+				"format": "hex-byte",
+				"pattern": "^0x[a-fA-F0-9]{64}$"
+			},
+			"ByteArray": {
+				"type": "string",
+				"format": "hex-byte",
+				"pattern": "^0x[a-fA-F0-9]*$"
+			},
+			"UnsignedInteger": {
+				"type": "string",
+				"format": "hex-uint64",
+				"pattern": "^0x[a-fA-F0-9]{1,16}$"
+			},
+			"FunctionSelector": {
+				"type": "string",
+				"format": "hex-byte",
+				"pattern": "^0x[a-fA-F0-9]{8}$"
+			},
+			"ApplicationName": {
+				"type": "string",
+				"pattern": "^[a-z0-9_-]+$"
+			},
+			"NameOrAddress": {
+				"oneOf": [
+					{
+						"$ref": "#/components/schemas/ApplicationName"
+					},
+					{
+						"$ref": "#/components/schemas/EthereumAddress"
+					}
+				]
+			}
+		}
+	}
+}

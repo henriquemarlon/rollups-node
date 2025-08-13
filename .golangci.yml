@@ -1,16 +1,35 @@
+version: "2"
 linters:
   enable:
     - exhaustive
     - goconst
-    - godox
-    - gofmt
     - lll
-    - mnd
     - misspell
-linters-settings:
-  lll:
-    line-length: 100
-    tab-width: 4
-  mnd:
-    ignored-functions:
-      - "^make"
+    - mnd
+  settings:
+    lll:
+      line-length: 140
+      tab-width: 4
+    mnd:
+      ignored-functions:
+        - ^make
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
